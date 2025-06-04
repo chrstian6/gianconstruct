@@ -59,7 +59,7 @@ export default function SignUpModal() {
         : { general: "Registration failed" };
 
       // Display toasts for each error
-      Object.entries(errors).forEach(([_, message]) => {
+      Object.entries(errors).forEach(([, message]) => {
         toast.error(message as string, {
           className:
             "bg-red-50 text-red-700 border border-red-200 rounded-md shadow-sm py-2 px-4 text-sm font-medium",

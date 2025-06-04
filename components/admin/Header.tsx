@@ -1,12 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,8 +13,6 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 export function Header() {
-  const [date, setDate] = useState<Date | undefined>(new Date());
-
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -52,23 +44,6 @@ export function Header() {
         {/* Calendar and Sign-Out */}
         <div className="flex items-center gap-4">
           {/* Dynamic Island-like Calendar */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-[200px] justify-start text-left font-normal border-text-secondary text-text-secondary hover:bg-text-secondary hover:text-text-secondary-foreground rounded-full",
-                  !date && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date ? formatDate(date) : <span>Pick a date</span>}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar mode="single" selected={date} onSelect={setDate} />
-            </PopoverContent>
-          </Popover>
 
           {/* Sign-Out Button */}
           <Button

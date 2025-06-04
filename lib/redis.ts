@@ -2,22 +2,35 @@
 
 import { Redis } from "@upstash/redis";
 
-// Shared Redis instance
+interface SessionData {
+  userId: string;
+  email: string;
+  [key: string]: unknown;
+}
+
+interface VerificationData {
+  userId: string;
+  email: string;
+  user_id: string;
+}
+
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL as string,
   token: process.env.UPSTASH_REDIS_REST_TOKEN as string,
 });
 
-export async function getSession(sessionId: string): Promise<any> {
+export async function getSession(
+  sessionId: string
+): Promise<SessionData | null> {
   try {
     const keys = await redis.keys(`session:${sessionId}`);
     if (keys.length > 0) {
       const sessionData = await redis.get(keys[0]);
       if (!sessionData) return null;
       if (typeof sessionData === "string") {
-        return JSON.parse(sessionData);
+        return JSON.parse(sessionData) as SessionData;
       }
-      return sessionData;
+      return sessionData as SessionData;
     }
     return null;
   } catch (error) {
@@ -28,7 +41,7 @@ export async function getSession(sessionId: string): Promise<any> {
 
 export async function setSession(
   sessionId: string,
-  data: any,
+  data: SessionData,
   ttl: number = 24 * 60 * 60
 ): Promise<void> {
   try {
@@ -53,7 +66,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 export async function setVerificationToken(
   token: string,
-  data: any,
+  data: VerificationData,
   ttl: number = 24 * 60 * 60
 ): Promise<void> {
   try {

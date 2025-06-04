@@ -62,12 +62,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/?verified=true`
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Verification error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: `Verification failed: ${error.message || "Unknown error"}`,
+        error: `Verification failed: ${(error as Error).message || "Unknown error"}`,
       },
       { status: 500 }
     );

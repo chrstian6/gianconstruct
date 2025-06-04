@@ -48,7 +48,7 @@ export default function Loader() {
         initial="hidden"
         animate="visible"
       >
-        Hang tight, we're wrestling pixels into place!
+        Hang tight, we&apos;re wrestling pixels into place!
       </motion.p>
     </div>
   );
