@@ -18,7 +18,6 @@ export default function LoginModal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isEmailValid, setIsEmailValid] = useState(false);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [step, setStep] = useState("email");
   const router = useRouter();
@@ -45,7 +44,6 @@ export default function LoginModal() {
       console.log("Email check result:", result);
 
       if (result.success) {
-        setIsEmailValid(true);
         setStep("password");
       } else {
         const errorMessage =
@@ -298,7 +296,7 @@ export default function LoginModal() {
                   </Button>
                   <div className="text-center mt-2">
                     <p className="text-sm text-gray-600">
-                      Don’t have an account?{" "}
+                      Don’t have an account?
                       <button
                         type="button"
                         className="text-primary hover:underline"

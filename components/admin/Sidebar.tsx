@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -17,7 +16,6 @@ import {
   Folder,
   Home,
   MessageSquare,
-  Settings,
   User,
 } from "lucide-react";
 import Link from "next/link";
@@ -57,10 +55,7 @@ export function Sidebar() {
 
   return (
     <div
-      className={cn(
-        "flex flex-col h-screen bg-background border-r transition-all duration-300",
-        isCollapsed ? "w-16" : "w-64"
-      )}
+      className={`flex flex-col h-screen bg-background border-r transition-all duration-300 ${isCollapsed ? "w-16" : "w-64"}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4">
@@ -101,10 +96,7 @@ export function Sidebar() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md p-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground",
-                      isCollapsed && "justify-center"
-                    )}
+                    className={`flex items-center gap-2 rounded-md p-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground ${isCollapsed ? "justify-center" : ""}`}
                   >
                     <item.icon className="h-4 w-4" />
                     {!isCollapsed && <span>{item.name}</span>}

@@ -4,7 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
-import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface NavbarProps {
   isMenuOpen: boolean;
@@ -18,28 +18,28 @@ export function Navbar({ isMenuOpen, setIsMenuOpen }: NavbarProps) {
     { name: "Services", href: "#services" },
     { name: "Contacts", href: "#contact" },
     { name: "Design Catalog", href: "/design-catalog" },
-    { name: "Admin", href: "/admin/admindashboard" }, // Added Admin link
+    { name: "Admin", href: "/admin/admindashboard" },
   ];
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center px-4">
         {/* Logo */}
-        <a href="/" className="text-xl font-bold text-text-secondary">
+        <Link href="/" className="text-xl font-bold text-text-secondary">
           GianConstruct®
-        </a>
+        </Link>
 
         {/* Desktop Navigation */}
         <div className="flex-1 flex items-center justify-between">
           <nav className="hidden md:flex items-center justify-center space-x-6 flex-1">
             {navItems.map((item) => (
-              <a
+              <Link
                 key={item.name}
                 href={item.href}
                 className="text-sm font-medium text-muted-foreground hover:text-text-secondary transition-colors"
               >
                 {item.name}
-              </a>
+              </Link>
             ))}
           </nav>
           <Button
@@ -64,14 +64,14 @@ export function Navbar({ isMenuOpen, setIsMenuOpen }: NavbarProps) {
           >
             <nav className="flex flex-col gap-4 text-center">
               {navItems.map((item) => (
-                <a
+                <Link
                   key={item.name}
                   href={item.href}
                   className="text-sm font-medium text-foreground hover:text-text-secondary transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   {item.name}
-                </a>
+                </Link>
               ))}
             </nav>
             <div className="mt-6 border-t pt-4">

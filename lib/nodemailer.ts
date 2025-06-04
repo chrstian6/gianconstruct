@@ -1,4 +1,4 @@
-"use server"; // Ensure server-only execution
+"use server";
 
 import nodemailer from "nodemailer";
 
@@ -8,20 +8,18 @@ interface EmailOptions {
   html: string;
 }
 
-// Initialize Nodemailer transporter for Gmail SMTP
 const transporter = nodemailer.createTransport({
   service: "gmail",
   host: "smtp.gmail.com",
   port: 587,
-  secure: false, // Use TLS
+  secure: false,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 });
 
-// Verify transporter configuration
-transporter.verify((error, success) => {
+transporter.verify((error) => {
   if (error) {
     console.error("Nodemailer configuration error:", error);
   } else {
@@ -42,16 +40,16 @@ export async function sendEmail({
     }
 
     await transporter.sendMail({
-      from: `"GianConstruct" <${process.env.SMTP_USER}>`, // e.g., "GianConstruct" <yourname@gmail.com>
+      from: `"GianConstruct" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
     });
     console.log(`Email sent successfully to ${to}`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error sending email:", error);
     throw new Error(
-      `Failed to send email: ${error.message || "Unknown error"}`
+      `Failed to send email: ${(error as Error).message || "Unknown error"}`
     );
   }
 }

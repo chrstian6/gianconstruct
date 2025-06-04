@@ -1,4 +1,4 @@
-"use server"; // Ensure server-only execution
+"use server";
 
 import mongoose from "mongoose";
 
@@ -14,7 +14,7 @@ interface MongooseCache {
   promise: Promise<typeof mongoose> | null;
 }
 
-let mongooseCache: MongooseCache = { conn: null, promise: null };
+const mongooseCache: MongooseCache = { conn: null, promise: null };
 
 async function dbConnect(): Promise<typeof mongoose> {
   if (mongooseCache.conn) {
@@ -26,7 +26,7 @@ async function dbConnect(): Promise<typeof mongoose> {
     const opts = {
       bufferCommands: false,
       serverSelectionTimeoutMS: 15000,
-      dbName: "gianconstruct", // Specify the database name here
+      dbName: "gianconstruct",
     };
 
     mongooseCache.promise = mongoose
@@ -39,7 +39,6 @@ async function dbConnect(): Promise<typeof mongoose> {
 
   try {
     mongooseCache.conn = await mongooseCache.promise;
-    // Log available collections to verify
     if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
       const collections = await mongoose.connection.db
         .listCollections()
@@ -58,7 +57,6 @@ async function dbConnect(): Promise<typeof mongoose> {
   return mongooseCache.conn;
 }
 
-// Handle disconnection on process termination
 process.on("SIGINT", async () => {
   await mongoose.disconnect();
   console.log("MongoDB disconnected on app termination");

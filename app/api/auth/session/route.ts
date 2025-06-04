@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { manageSession } from "@/action/auth";
+import { cookies } from "next/headers";
+import { manageSession, endSession } from "@/action/auth";
 
 export async function GET() {
   try {
@@ -17,7 +18,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const result = await manageSession(data);
+    const result = await manageSession(data.userId, data.email, data.user_id);
     return NextResponse.json(result);
   } catch (error) {
     console.error("POST /api/auth/session error:", error);
@@ -30,12 +31,27 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   try {
-    const result = await manageSession({ user: null });
-    return NextResponse.json(result);
-  } catch (error) {
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get("sessionId")?.value;
+
+    if (!sessionId) {
+      return NextResponse.json(
+        { success: false, error: "No session found" },
+        { status: 400 }
+      );
+    }
+
+    await endSession(sessionId);
+    cookieStore.delete("sessionId");
+
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
     console.error("DELETE /api/auth/session error:", error);
     return NextResponse.json(
-      { error: "Internal server error", user: null },
+      {
+        success: false,
+        error: `Failed to delete session: ${(error as Error).message || "Unknown error"}`,
+      },
       { status: 500 }
     );
   }
