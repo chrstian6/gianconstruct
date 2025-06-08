@@ -8,6 +8,7 @@ import User, { IUserDocument } from "../models/User";
 import { setVerificationToken } from "../lib/redis";
 import { sendEmail } from "../lib/nodemailer";
 import { manageSession } from "./auth";
+import { cookies } from "next/headers";
 
 const loginSchema = z.object({
   email: z
@@ -165,6 +166,15 @@ export async function loginUser(formData: FormData) {
       user.email,
       user.user_id
     );
+
+    // Set sessionId cookie
+    const cookieStore = await cookies();
+    cookieStore.set("sessionId", sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60,
+      path: "/",
+    });
 
     console.log("Login successful, session created:", {
       sessionId,

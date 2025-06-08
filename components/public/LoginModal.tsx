@@ -24,7 +24,6 @@ export default function LoginModal() {
 
   useEffect(() => {
     console.log("Email state:", email);
-    // Reset password when switching to password step to clear any autofill
     if (step === "password") {
       setPassword("");
     }
@@ -94,8 +93,12 @@ export default function LoginModal() {
           position: "top-right",
         });
         setIsLoginOpen(false);
-        console.log("Attempting redirect to /admin/admindashboard");
-        router.push("/admin/admindashboard");
+        const redirectPath =
+          result.user.role === "admin"
+            ? "/admin/admindashboard"
+            : "/user/userdashboard";
+        console.log(`Attempting redirect to ${redirectPath}`);
+        router.replace(redirectPath);
         router.refresh();
       } else {
         const errorMessage =

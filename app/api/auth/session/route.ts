@@ -1,11 +1,31 @@
+// app/api/auth/session/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { manageSession, endSession } from "@/action/auth";
+import { getSession, setSession, deleteSession } from "@/lib/redis";
+import { nanoid } from "nanoid";
 
 export async function GET() {
   try {
-    const result = await manageSession();
-    return NextResponse.json(result);
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get("sessionId")?.value;
+    if (!sessionId) {
+      return NextResponse.json({ user: null }, { status: 200 });
+    }
+
+    const sessionData = await getSession(sessionId);
+    if (!sessionData) {
+      const cookieStore = await cookies();
+      cookieStore.delete("sessionId");
+      return NextResponse.json({ user: null }, { status: 200 });
+    }
+
+    return NextResponse.json({
+      user: {
+        user_id: sessionData.user_id,
+        email: sessionData.email,
+        role: sessionData.role,
+      },
+    });
   } catch (error) {
     console.error("GET /api/auth/session error:", error);
     return NextResponse.json(
@@ -17,13 +37,34 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const data = await request.json();
-    const result = await manageSession(data.userId, data.email, data.user_id);
-    return NextResponse.json(result);
+    const { user } = await request.json();
+    if (!user || !user.user_id || !user.email || !user.role) {
+      return NextResponse.json({ error: "Invalid user data" }, { status: 400 });
+    }
+
+    const sessionId = nanoid(32);
+    const sessionData = {
+      userId: user.user_id,
+      email: user.email,
+      user_id: user.user_id,
+      role: user.role,
+      createdAt: new Date().toISOString(),
+    };
+
+    await setSession(sessionId, sessionData);
+    const cookieStore = await cookies();
+    cookieStore.set("sessionId", sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60,
+      path: "/",
+    });
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("POST /api/auth/session error:", error);
     return NextResponse.json(
-      { error: "Internal server error", user: null },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -33,19 +74,15 @@ export async function DELETE() {
   try {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get("sessionId")?.value;
-
     if (!sessionId) {
-      return NextResponse.json(
-        { success: false, error: "No session found" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: true }, { status: 200 });
     }
 
-    await endSession(sessionId);
+    await deleteSession(sessionId);
     cookieStore.delete("sessionId");
 
     return NextResponse.json({ success: true });
-  } catch (error: unknown) {
+  } catch (error) {
     console.error("DELETE /api/auth/session error:", error);
     return NextResponse.json(
       {
