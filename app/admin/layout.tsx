@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/admin/Sidebar";
 import { Header } from "@/components/admin/Header";
+import { Toaster } from "sonner";
 
 export default function AdminLayout({
   children,
@@ -18,6 +19,7 @@ export default function AdminLayout({
         {/* Header */}
         <Header />
         {children}
+        <Toaster position="top-right" richColors />
       </div>
     </div>
   );

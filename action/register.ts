@@ -6,7 +6,6 @@ import dbConnect from "../lib/db";
 import User, { IUserDocument } from "../models/User";
 import { setVerificationToken, deleteVerificationToken } from "../lib/redis";
 import { sendEmail } from "../lib/nodemailer";
-import { timeStamp } from "console";
 
 const registerSchema = z
   .object({

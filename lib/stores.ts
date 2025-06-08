@@ -6,8 +6,11 @@ import { create } from "zustand";
 interface ModalStore {
   isLoginOpen: boolean;
   isCreateAccountOpen: boolean;
+  isDeleteDesignOpen: boolean;
+  designIdToDelete: string | null;
   setIsLoginOpen: (open: boolean) => void;
   setIsCreateAccountOpen: (open: boolean) => void;
+  setIsDeleteDesignOpen: (open: boolean, designId?: string) => void;
 }
 
 // Interface for AuthStore state
@@ -29,8 +32,15 @@ interface AuthStore {
 export const useModalStore = create<ModalStore>((set) => ({
   isLoginOpen: false,
   isCreateAccountOpen: false,
+  isDeleteDesignOpen: false,
+  designIdToDelete: null,
   setIsLoginOpen: (open: boolean) => set({ isLoginOpen: open }),
   setIsCreateAccountOpen: (open: boolean) => set({ isCreateAccountOpen: open }),
+  setIsDeleteDesignOpen: (open: boolean, designId?: string) =>
+    set({
+      isDeleteDesignOpen: open,
+      designIdToDelete: open ? (designId ?? null) : null,
+    }),
 }));
 
 export const useAuthStore = create<AuthStore>((set) => ({
