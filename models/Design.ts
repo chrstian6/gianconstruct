@@ -13,6 +13,16 @@ const DesignSchema: Schema = new Schema(
     square_meters: { type: Number, required: true, min: 0 },
     category: { type: String, required: true, trim: true },
     images: [{ type: String, required: true }],
+    createdBy: { type: String, required: true, trim: true, default: "Admin" },
+    isLoanOffer: { type: Boolean, required: true, default: false },
+    maxLoanYears: {
+      type: Number,
+      min: 1,
+      max: 30,
+      required: false,
+      default: null,
+    },
+    interestRate: { type: Number, min: 0, required: false, default: null },
   },
   { timestamps: true }
 );

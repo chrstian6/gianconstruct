@@ -8,8 +8,12 @@ export interface Design {
   square_meters: number;
   category: string;
   images: string[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdBy: string;
+  isLoanOffer: boolean;
+  maxLoanYears: number | null;
+  interestRate: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AddDesignResponse {
@@ -20,6 +24,12 @@ export interface AddDesignResponse {
 
 export interface DeleteDesignResponse {
   success: boolean;
+  error?: string;
+}
+
+export interface UpdateDesignResponse {
+  success: boolean;
+  design?: Design;
   error?: string;
 }
 

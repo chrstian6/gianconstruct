@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Upload, X } from "lucide-react";
 import { addDesign } from "@/action/designs";
 import { toast } from "sonner";
@@ -27,49 +28,64 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
   const [squareMeters, setSquareMeters] = useState<string>("");
   const [category, setCategory] = useState<string>("");
   const [customCategory, setCustomCategory] = useState<string>("");
+  const [createdBy, setCreatedBy] = useState<string>("Admin");
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [isLoanOffer, setIsLoanOffer] = useState<boolean>(false);
+  const [maxLoanYears, setMaxLoanYears] = useState<string>("");
+  const [interestRate, setInterestRate] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Format number with commas
   const formatNumberWithCommas = (value: string): string => {
     const numeric = value.replace(/[^0-9]/g, "");
     return numeric.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  // Handle estimated cost input
   const handleEstimatedCostChange = (
     e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  ): void => {
     const value = e.target.value.replace(/[^0-9]/g, "");
     setEstimatedCost(formatNumberWithCommas(value));
   };
 
-  // Handle number of rooms input (2 digits max)
   const handleNumberOfRoomsChange = (
     e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  ): void => {
     const value = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
     setNumberOfRooms(value);
   };
 
-  // Handle square meters input (integers only, commas)
-  const handleSquareMetersChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSquareMetersChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ): void => {
     const value = e.target.value.replace(/[^0-9]/g, "");
     setSquareMeters(formatNumberWithCommas(value));
   };
 
-  // Handle category selection
-  const handleCategoryChange = (value: string) => {
+  const handleMaxLoanYearsChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ): void => {
+    const value = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
+    setMaxLoanYears(value);
+  };
+
+  const handleInterestRateChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ): void => {
+    const value = e.target.value.replace(/[^0-9.]/g, "");
+    const parts = value.split(".");
+    if (parts[1] && parts[1].length > 2) return;
+    setInterestRate(value);
+  };
+
+  const handleCategoryChange = (value: string): void => {
     setCategory(value);
     if (value !== "custom") {
       setCustomCategory("");
     }
-    console.log("Category selected:", value);
   };
 
-  // Handle image selection
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const files: File[] = Array.from(e.target.files || []);
     setImages((prev) => [...prev, ...files]);
     const newPreviews: string[] = files.map((file: File) =>
@@ -78,8 +94,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
     setPreviews((prev) => [...prev, ...newPreviews]);
   };
 
-  // Remove image
-  const removeImage = (index: number) => {
+  const removeImage = (index: number): void => {
     setImages((prev) => prev.filter((_, i) => i !== index));
     setPreviews((prev) => {
       const newPreviews = prev.filter((_, i) => i !== index);
@@ -88,16 +103,16 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
     });
   };
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ): Promise<void> => {
     e.preventDefault();
     setIsSubmitting(true);
 
     const finalCategory =
       category === "custom" && customCategory
-        ? `Custom: ${customCategory}`
+        ? `Custom:${customCategory}`
         : category;
-    console.log("Final category:", finalCategory);
 
     if (!finalCategory) {
       toast.error("Please select or enter a category");
@@ -105,13 +120,25 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
       return;
     }
 
-    const formData: FormData = new FormData();
+    if (isLoanOffer && (!maxLoanYears || !interestRate)) {
+      toast.error("Please provide loan term and interest rate");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const formData = new FormData();
     formData.append("name", name);
     formData.append("description", description);
     formData.append("price", estimatedCost.replace(/,/g, ""));
     formData.append("number_of_rooms", numberOfRooms);
     formData.append("square_meters", squareMeters.replace(/,/g, ""));
     formData.append("category", finalCategory);
+    formData.append("isLoanOffer", isLoanOffer.toString());
+    formData.append("createdBy", createdBy);
+    if (isLoanOffer) {
+      formData.append("maxLoanYears", maxLoanYears);
+      formData.append("interestRate", interestRate);
+    }
     images.forEach((image: File) => formData.append("images", image));
 
     const result = await addDesign(formData);
@@ -125,8 +152,12 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
       setSquareMeters("");
       setCategory("");
       setCustomCategory("");
+      setCreatedBy("Admin");
       setImages([]);
       setPreviews([]);
+      setIsLoanOffer(false);
+      setMaxLoanYears("");
+      setInterestRate("");
       toast.success("Design added successfully!");
     } else {
       toast.error(result.error || "Failed to add design");
@@ -136,11 +167,11 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
   };
 
   return (
-    <div className="mb-8 overflow-y-auto max-h-[calc(100vh-200px)] w-full">
-      <h2 className="text-xl font-semibold text-text-secondary mb-6 sticky top-0 bg-white z-10 py-4">
+    <div className="mb-8 w-full">
+      <h2 className="text-xl font-semibold mb-6 text-gray-800 bg-white z-10 py-4">
         Add New Design
       </h2>
-      <form onSubmit={handleSubmit} className="space-y-6 p-6 bg-white w-full">
+      <form onSubmit={handleSubmit} className="space-y-6 p-4 bg-white">
         <div>
           <Label htmlFor="name" className="mb-2 block">
             Name
@@ -148,9 +179,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
           <Input
             id="name"
             value={name}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setName(e.target.value)
-            }
+            onChange={(e) => setName(e.target.value)}
             placeholder="Enter design name"
             className="rounded-none"
             required
@@ -163,10 +192,21 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
           <Textarea
             id="description"
             value={description}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-              setDescription(e.target.value)
-            }
-            placeholder="Enter design description"
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Enter description"
+            className="rounded-none"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="createdBy" className="mb-2 block">
+            Created By
+          </Label>
+          <Input
+            id="createdBy"
+            value={createdBy}
+            onChange={(e) => setCreatedBy(e.target.value)}
+            placeholder="Enter creator's name"
             className="rounded-none"
             required
           />
@@ -191,9 +231,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
             <Input
               id="custom_category"
               value={customCategory}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setCustomCategory(e.target.value)
-              }
+              onChange={(e) => setCustomCategory(e.target.value)}
               placeholder="Enter custom category"
               className="mt-2 rounded-none"
               required
@@ -243,6 +281,49 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
             required
           />
         </div>
+        <div className="flex items-center gap-4">
+          <Label htmlFor="isLoanOffer" className="mb-2 block">
+            Offer Loan
+          </Label>
+          <Switch
+            id="isLoanOffer"
+            checked={isLoanOffer}
+            onCheckedChange={setIsLoanOffer}
+          />
+        </div>
+        {isLoanOffer && (
+          <>
+            <div>
+              <Label htmlFor="maxLoanYears" className="mb-2 block">
+                Max Loan Term (Years)
+              </Label>
+              <Input
+                id="maxLoanYears"
+                type="text"
+                value={maxLoanYears}
+                onChange={handleMaxLoanYearsChange}
+                placeholder="Enter loan term (1-30)"
+                className="rounded-none"
+                maxLength={2}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="interestRate" className="mb-2 block">
+                Interest Rate (% per year)
+              </Label>
+              <Input
+                id="interestRate"
+                type="text"
+                value={interestRate}
+                onChange={handleInterestRateChange}
+                placeholder="Enter interest rate (e.g., 5.5)"
+                className="rounded-none"
+                required
+              />
+            </div>
+          </>
+        )}
         <div>
           <Label htmlFor="images" className="mb-2 block">
             Images
@@ -253,16 +334,16 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
             accept="image/*"
             multiple
             onChange={handleImageChange}
-            className="mb-4 rounded-none"
+            className="rounded-none"
           />
           {previews.length > 0 && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 mt-4">
               {previews.map((preview: string, index: number) => (
                 <div key={index} className="relative">
                   <img
                     src={preview}
                     alt={`Preview ${index}`}
-                    className="w-full h-32 object-cover rounded"
+                    className="h-32 w-full object-cover rounded"
                   />
                   <Button
                     variant="destructive"
@@ -280,7 +361,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="bg-text-secondary text-white hover:bg-text-secondary/90 rounded-none"
+          className="mt-6 bg-gray-800 text-white rounded-none hover:bg-gray-700"
         >
           {isSubmitting ? "Adding..." : "Add Design"}
           <Upload className="ml-2 h-4 w-4" />

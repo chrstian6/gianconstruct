@@ -29,7 +29,7 @@ export default function CatalogPage() {
   // Handle design addition
   const handleAddDesign = (design: Design) => {
     setDesigns([...designs, design]);
-    setActiveTab("list"); // Switch to Catalog List after adding
+    setActiveTab("list");
   };
 
   // Handle design deletion
@@ -37,8 +37,17 @@ export default function CatalogPage() {
     setDesigns(designs.filter((design: Design) => design._id !== id));
   };
 
+  // Handle design update
+  const handleUpdate = (updatedDesign: Design) => {
+    setDesigns(
+      designs.map((design) =>
+        design._id === updatedDesign._id ? updatedDesign : design
+      )
+    );
+  };
+
   return (
-    <div className="p-6 max-w-7xl">
+    <div className="p-8 max-w-7xl overflow-y-auto">
       <Toaster />
       <h1 className="text-2xl font-bold text-text-secondary mb-6">
         Design Catalog
@@ -56,6 +65,7 @@ export default function CatalogPage() {
             designs={designs}
             onDelete={handleDelete}
             onAddTemplate={() => setActiveTab("add")}
+            onUpdate={handleUpdate}
           />
         </TabsContent>
         <TabsContent value="add">
