@@ -1,316 +1,160 @@
 "use server";
 
+// Import revalidatePath with proper typing
 import { revalidatePath } from "next/cache";
 import dbConnect from "@/lib/db";
 import DesignModel from "@/models/Design";
 import { supabase } from "@/lib/supabase";
 import { nanoid } from "nanoid";
+import mongoose from "mongoose";
 import {
   AddDesignResponse,
   DeleteDesignResponse,
   GetDesignsResponse,
   UpdateDesignResponse,
   Design,
+  RevalidatePath,
 } from "@/types/design";
+
+// Helper type aligned with Design interface
+type LeanDesign = {
+  design_id: string;
+  name: string;
+  description: string;
+  price: number;
+  number_of_rooms: number;
+  square_meters: number;
+  category: string;
+  images: string[];
+  createdBy: string;
+  isLoanOffer: boolean;
+  maxLoanTerm?: number | null;
+  loanTermType?: "months" | "years" | null;
+  interestRate?: number | null;
+  interestRateType?: "monthly" | "yearly" | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const ADMIN_CATALOG_PATH: RevalidatePath = "/admin/catalog";
 
 export async function addDesign(
   formData: FormData
 ): Promise<AddDesignResponse> {
   try {
     await dbConnect();
-    const name = formData.get("name");
-    const description = formData.get("description");
-    const price = formData.get("price");
-    const number_of_rooms = formData.get("number_of_rooms");
-    const square_meters = formData.get("square_meters");
-    const category = formData.get("category");
-    const images = formData.getAll("images");
-    const createdBy = formData.get("createdBy");
-    const isLoanOffer = formData.get("isLoanOffer");
-    const maxLoanYears = formData.get("maxLoanYears");
-    const interestRate = formData.get("interestRate");
 
-    if (
-      typeof name !== "string" ||
-      typeof description !== "string" ||
-      typeof price !== "string" ||
-      typeof number_of_rooms !== "string" ||
-      typeof square_meters !== "string" ||
-      typeof category !== "string" ||
-      typeof createdBy !== "string" ||
-      typeof isLoanOffer !== "string" ||
-      (maxLoanYears && typeof maxLoanYears !== "string") ||
-      (interestRate && typeof interestRate !== "string") ||
-      !images.every((image) => image instanceof File)
-    ) {
-      console.error("Invalid field types:", {
-        name: typeof name,
-        description: typeof description,
-        price: typeof price,
-        number_of_rooms: typeof number_of_rooms,
-        square_meters: typeof square_meters,
-        category: typeof category,
-        createdBy: typeof createdBy,
-        isLoanOffer: typeof isLoanOffer,
-        maxLoanYears: typeof maxLoanYears,
-        interestRate: typeof interestRate,
-        images: images.map((img) =>
-          img instanceof File ? "File" : typeof img
-        ),
-      });
-      return { success: false, error: "Invalid field types" };
+    const name = formData.get("name") as string;
+    const description = formData.get("description") as string;
+    const price = parseFloat(formData.get("price") as string);
+    const number_of_rooms = parseInt(formData.get("number_of_rooms") as string);
+    const square_meters = parseInt(formData.get("square_meters") as string);
+    const category = formData.get("category") as string;
+    const images = formData.getAll("images") as File[];
+    const createdBy = (formData.get("createdBy") as string) || "Admin";
+    const isLoanOffer = formData.get("isLoanOffer") === "true";
+    const maxLoanTermInput = formData.get("maxLoanTerm") as string | null;
+    const loanTermType =
+      (formData.get("loanTermType") as "months" | "years" | null) || "years";
+    const interestRate = formData.get("interestRate")
+      ? parseFloat(formData.get("interestRate") as string)
+      : null;
+    const interestRateType =
+      (formData.get("interestRateType") as "monthly" | "yearly" | null) ||
+      "yearly";
+
+    // FIXED: Convert maxLoanTerm based on loanTermType - ALWAYS store in months
+    let maxLoanTerm: number | null = null;
+    if (maxLoanTermInput && maxLoanTermInput !== "null") {
+      const term = parseInt(maxLoanTermInput);
+      // Convert years to months for consistent storage
+      maxLoanTerm = loanTermType === "years" ? term * 12 : term;
     }
 
-    console.log("FormData received:", {
+    if (isLoanOffer) {
+      if (maxLoanTerm === null || maxLoanTerm < 1 || maxLoanTerm > 360) {
+        throw new Error(
+          "maxLoanTerm must be between 1 and 360 months when loan is offered"
+        );
+      }
+      if (interestRate === null || interestRate < 0) {
+        throw new Error(
+          "interestRate must be a non-negative number when loan is offered"
+        );
+      }
+    }
+
+    const imageUrls: string[] = [];
+    for (const image of images) {
+      const fileName = `${nanoid(10)}-${image.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("gianconstructimage")
+        .upload(fileName, image, { cacheControl: "3600", upsert: false });
+
+      if (uploadError)
+        throw new Error(`Image upload failed: ${uploadError.message}`);
+
+      const { data: publicUrlData } = supabase.storage
+        .from("gianconstructimage")
+        .getPublicUrl(fileName);
+
+      if (!publicUrlData?.publicUrl) throw new Error("Couldn't get image URL");
+      imageUrls.push(publicUrlData.publicUrl);
+    }
+
+    const designData = {
       name,
       description,
       price,
       number_of_rooms,
       square_meters,
       category,
-      createdBy,
-      isLoanOffer,
-      maxLoanYears,
-      interestRate,
-      images: images.length,
-    });
-
-    const parsedPrice = parseFloat(price);
-    const parsedNumberOfRooms = parseInt(number_of_rooms, 10);
-    const parsedSquareMeters = parseInt(square_meters, 10);
-    const parsedIsLoanOffer = isLoanOffer === "true";
-    const parsedMaxLoanYears = maxLoanYears ? parseInt(maxLoanYears, 10) : null;
-    const parsedInterestRate = interestRate ? parseFloat(interestRate) : null;
-
-    if (
-      !name ||
-      !description ||
-      isNaN(parsedPrice) ||
-      isNaN(parsedNumberOfRooms) ||
-      isNaN(parsedSquareMeters) ||
-      !category ||
-      !createdBy ||
-      images.length === 0 ||
-      (parsedIsLoanOffer && (!parsedMaxLoanYears || !parsedInterestRate))
-    ) {
-      console.error("Missing or invalid fields:", {
-        name,
-        description,
-        price: parsedPrice,
-        number_of_rooms: parsedNumberOfRooms,
-        square_meters: parsedSquareMeters,
-        category,
-        createdBy,
-        isLoanOffer: parsedIsLoanOffer,
-        maxLoanYears: parsedMaxLoanYears,
-        interestRate: parsedInterestRate,
-        images,
-      });
-      return {
-        success: false,
-        error: "All fields are required, including loan details if offered",
-      };
-    }
-
-    if (parsedPrice < 0) {
-      return { success: false, error: "Invalid price" };
-    }
-
-    if (parsedNumberOfRooms < 1) {
-      return { success: false, error: "Number of rooms must be at least 1" };
-    }
-
-    if (parsedSquareMeters < 0) {
-      return { success: false, error: "Square meters must be non-negative" };
-    }
-
-    if (parsedIsLoanOffer) {
-      if (
-        parsedMaxLoanYears &&
-        (parsedMaxLoanYears < 1 || parsedMaxLoanYears > 30)
-      ) {
-        return {
-          success: false,
-          error: "Loan term must be between 1 and 30 years",
-        };
-      }
-      if (parsedInterestRate && parsedInterestRate < 0) {
-        return { success: false, error: "Interest rate must be non-negative" };
-      }
-    }
-
-    const design_id: string = nanoid(10);
-    const imageUrls: string[] = [];
-    for (const image of images) {
-      const fileName: string = `${nanoid(10)}-${image.name}`;
-      const { data, error: uploadError } = await supabase.storage
-        .from("gianconstructimage")
-        .upload(fileName, image, { cacheControl: "3600", upsert: false });
-
-      if (uploadError) {
-        console.error("Supabase upload error:", {
-          bucket: "gianconstructimage",
-          fileName,
-          error: JSON.stringify(uploadError, null, 2),
-        });
-        return {
-          success: false,
-          error: `Failed to upload image: ${uploadError.message}`,
-        };
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("gianconstructimage")
-        .getPublicUrl(fileName);
-
-      if (!publicUrlData.publicUrl) {
-        console.error("Public URL error:", {
-          bucket: "gianconstructimage",
-          fileName,
-        });
-        return {
-          success: false,
-          error: "Failed to get image URL",
-        };
-      }
-
-      imageUrls.push(publicUrlData.publicUrl);
-    }
-
-    const designData = {
-      design_id,
-      name,
-      description,
-      price: parsedPrice,
-      number_of_rooms: parsedNumberOfRooms,
-      square_meters: parsedSquareMeters,
-      category,
       images: imageUrls,
       createdBy,
-      isLoanOffer: parsedIsLoanOffer,
-      maxLoanYears: parsedIsLoanOffer ? parsedMaxLoanYears : null,
-      interestRate: parsedIsLoanOffer ? parsedInterestRate : null,
-    };
-    console.log("Design data before save:", designData);
-
-    const design = new DesignModel(designData);
-    const validationError = design.validateSync();
-    if (validationError) {
-      console.error("Validation error:", validationError.errors);
-      return {
-        success: false,
-        error: `Validation failed: ${validationError.message}`,
-      };
-    }
-
-    console.log("Saving design to database:", designData);
-    const savedDesign = await design.save();
-    console.log("Raw saved design:", savedDesign.toObject());
-
-    const savedDesignDoc = (await DesignModel.findById(
-      savedDesign._id
-    ).lean()) as unknown as {
-      _id: any;
-      design_id: string;
-      name: string;
-      description: string;
-      price: number;
-      number_of_rooms: number;
-      square_meters: number;
-      category: string;
-      images: string[];
-      createdBy: string;
-      isLoanOffer: boolean;
-      maxLoanYears: number | null;
-      interestRate: number | null;
-      createdAt: Date;
-      updatedAt: Date;
+      isLoanOffer,
+      maxLoanTerm: isLoanOffer ? maxLoanTerm : null,
+      loanTermType: isLoanOffer ? loanTermType : null,
+      interestRate: isLoanOffer ? interestRate : null,
+      interestRateType: isLoanOffer ? interestRateType : null,
+      design_id: nanoid(10),
     };
 
-    if (!savedDesignDoc) {
-      console.error(
-        "Failed to retrieve saved design with ID:",
-        savedDesign._id
-      );
-      return { success: false, error: "Failed to retrieve saved design" };
-    }
+    // Create the design without _id by using the raw data
+    const savedDesign = await DesignModel.create(designData);
 
-    const plainDesign: Design = {
-      _id: savedDesignDoc._id.toString(),
-      design_id: savedDesignDoc.design_id,
-      name: savedDesignDoc.name,
-      description: savedDesignDoc.description,
-      price: savedDesignDoc.price,
-      number_of_rooms: savedDesignDoc.number_of_rooms,
-      square_meters: savedDesignDoc.square_meters,
-      category: savedDesignDoc.category,
-      images: savedDesignDoc.images,
-      createdBy: savedDesignDoc.createdBy,
-      isLoanOffer: savedDesignDoc.isLoanOffer,
-      maxLoanYears: savedDesignDoc.maxLoanYears,
-      interestRate: savedDesignDoc.interestRate,
-      createdAt: savedDesignDoc.createdAt.toISOString(),
-      updatedAt: savedDesignDoc.updatedAt.toISOString(),
+    // Convert to plain object and remove _id
+    const designObject = savedDesign.toObject();
+    const { _id, __v, ...cleanDesign } = designObject;
+
+    const resultDesign: Design = {
+      design_id: cleanDesign.design_id,
+      name: cleanDesign.name,
+      description: cleanDesign.description,
+      price: cleanDesign.price,
+      number_of_rooms: cleanDesign.number_of_rooms,
+      square_meters: cleanDesign.square_meters,
+      category: cleanDesign.category,
+      images: cleanDesign.images,
+      createdBy: cleanDesign.createdBy,
+      isLoanOffer: cleanDesign.isLoanOffer,
+      maxLoanTerm: cleanDesign.maxLoanTerm ?? null,
+      loanTermType: cleanDesign.loanTermType ?? null,
+      interestRate: cleanDesign.interestRate ?? null,
+      interestRateType: cleanDesign.interestRateType ?? null,
+      createdAt: cleanDesign.createdAt?.toISOString(),
+      updatedAt: cleanDesign.updatedAt?.toISOString(),
     };
 
-    console.log("Design saved:", plainDesign);
-
-    revalidatePath("/admin/catalog");
+    revalidatePath("/admin/catalog" as const);
     return {
       success: true,
-      design: plainDesign,
+      design: resultDesign,
     };
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    console.error("Add design error:", errorMessage);
+  } catch (error) {
+    console.error("Add design error:", error);
     return {
       success: false,
-      error: `Failed to add design: ${errorMessage}`,
-    };
-  }
-}
-
-export async function deleteDesign(id: string): Promise<DeleteDesignResponse> {
-  try {
-    await dbConnect();
-    const design = await DesignModel.findById(id);
-    if (!design) {
-      return { success: false, error: "Design not found" };
-    }
-
-    const imagePaths: string[] = design.images
-      .map((url: string) => url.split("/").pop() || "")
-      .filter((path: string) => !!path);
-
-    if (imagePaths.length > 0) {
-      const { error: deleteError } = await supabase.storage
-        .from("gianconstructimage")
-        .remove(imagePaths);
-
-      if (deleteError) {
-        console.error("Supabase delete error:", {
-          bucket: "gianconstructimage",
-          imagePaths,
-          error: JSON.stringify(deleteError, null, 2),
-        });
-        return {
-          success: false,
-          error: `Failed to delete images: ${deleteError.message}`,
-        };
-      }
-    }
-
-    await DesignModel.findByIdAndDelete(id);
-    revalidatePath("/admin/catalog");
-    return { success: true };
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    console.error("Delete design error:", errorMessage);
-    return {
-      success: false,
-      error: `Failed to delete design: ${errorMessage}`,
+      error: error instanceof Error ? error.message : "Failed to add design",
     };
   }
 }
@@ -321,267 +165,183 @@ export async function updateDesign(
 ): Promise<UpdateDesignResponse> {
   try {
     await dbConnect();
-    const design = await DesignModel.findById(id);
-    if (!design) {
+
+    const existingDesign = await DesignModel.findOne({ design_id: id });
+    if (!existingDesign) {
       return { success: false, error: "Design not found" };
     }
 
-    const name = formData.get("name");
-    const description = formData.get("description");
-    const price = formData.get("price");
-    const number_of_rooms = formData.get("number_of_rooms");
-    const square_meters = formData.get("square_meters");
-    const category = formData.get("category");
-    const images = formData.getAll("images");
-    const existingImages = formData.get("existingImages");
-    const createdBy = formData.get("createdBy");
-    const isLoanOffer = formData.get("isLoanOffer");
-    const maxLoanYears = formData.get("maxLoanYears");
-    const interestRate = formData.get("interestRate");
+    const name = formData.get("name") as string;
+    const description = formData.get("description") as string;
+    const price = parseFloat(formData.get("price") as string);
+    const number_of_rooms = parseInt(formData.get("number_of_rooms") as string);
+    const square_meters = parseInt(formData.get("square_meters") as string);
+    const category = formData.get("category") as string;
+    const existingImages = JSON.parse(
+      formData.get("existingImages") as string
+    ) as string[];
+    const newImages = formData.getAll("images") as File[];
+    const createdBy = (formData.get("createdBy") as string) || "Admin";
+    const isLoanOffer = formData.get("isLoanOffer") === "true";
+    const maxLoanTermInput = formData.get("maxLoanTerm") as string | null;
+    const loanTermType =
+      (formData.get("loanTermType") as "months" | "years" | null) || "years";
+    const interestRate = formData.get("interestRate")
+      ? parseFloat(formData.get("interestRate") as string)
+      : null;
+    const interestRateType =
+      (formData.get("interestRateType") as "monthly" | "yearly" | null) ||
+      "yearly";
 
-    if (
-      typeof name !== "string" ||
-      typeof description !== "string" ||
-      typeof price !== "string" ||
-      typeof number_of_rooms !== "string" ||
-      typeof square_meters !== "string" ||
-      typeof category !== "string" ||
-      typeof createdBy !== "string" ||
-      typeof existingImages !== "string" ||
-      typeof isLoanOffer !== "string" ||
-      (maxLoanYears && typeof maxLoanYears !== "string") ||
-      (interestRate && typeof interestRate !== "string") ||
-      !images.every((image) => image instanceof File || image === "")
-    ) {
-      console.error("Invalid field types:", {
-        name: typeof name,
-        description: typeof description,
-        price: typeof price,
-        number_of_rooms: typeof number_of_rooms,
-        square_meters: typeof square_meters,
-        category: typeof category,
-        createdBy: typeof createdBy,
-        existingImages: typeof existingImages,
-        isLoanOffer: typeof isLoanOffer,
-        maxLoanYears: typeof maxLoanYears,
-        interestRate: typeof interestRate,
-        images: images.map((img) =>
-          img instanceof File ? "File" : typeof img
-        ),
-      });
-      return { success: false, error: "Invalid field types" };
+    // FIXED: Convert maxLoanTerm based on loanTermType - ALWAYS store in months
+    let maxLoanTerm: number | null = null;
+    if (maxLoanTermInput && maxLoanTermInput !== "null") {
+      const term = parseInt(maxLoanTermInput);
+      // Convert years to months for consistent storage
+      maxLoanTerm = loanTermType === "years" ? term * 12 : term;
     }
 
-    const parsedPrice = parseFloat(price);
-    const parsedNumberOfRooms = parseInt(number_of_rooms, 10);
-    const parsedSquareMeters = parseInt(square_meters, 10);
-    const parsedIsLoanOffer = isLoanOffer === "true";
-    const parsedMaxLoanYears = maxLoanYears ? parseInt(maxLoanYears, 10) : null;
-    const parsedInterestRate = interestRate ? parseFloat(interestRate) : null;
-    const parsedExistingImages: string[] = JSON.parse(existingImages || "[]");
-
-    console.log("Update FormData received:", {
-      id,
-      name,
-      description,
-      price: parsedPrice,
-      number_of_rooms: parsedNumberOfRooms,
-      square_meters: parsedSquareMeters,
-      category,
-      createdBy,
-      isLoanOffer: parsedIsLoanOffer,
-      maxLoanYears: parsedMaxLoanYears,
-      interestRate: parsedInterestRate,
-      newImages: images.length,
-      existingImages: parsedExistingImages,
-    });
-
-    if (
-      !name ||
-      !description ||
-      isNaN(parsedPrice) ||
-      isNaN(parsedNumberOfRooms) ||
-      isNaN(parsedSquareMeters) ||
-      !category ||
-      !createdBy ||
-      (parsedIsLoanOffer && (!parsedMaxLoanYears || !parsedInterestRate))
-    ) {
-      console.error("Missing fields:", {
-        name,
-        description,
-        price: parsedPrice,
-        number_of_rooms: parsedNumberOfRooms,
-        square_meters: parsedSquareMeters,
-        category,
-        createdBy,
-        isLoanOffer: parsedIsLoanOffer,
-        maxLoanYears: parsedMaxLoanYears,
-        interestRate: parsedInterestRate,
-      });
-      return { success: false, error: "All fields are required" };
-    }
-
-    if (parsedPrice < 0) {
-      return { success: false, error: "Invalid price" };
-    }
-
-    if (parsedNumberOfRooms < 1) {
-      return { success: false, error: "Number of rooms must be at least 1" };
-    }
-
-    if (parsedSquareMeters < 0) {
-      return { success: false, error: "Square meters must be non-negative" };
-    }
-
-    if (parsedIsLoanOffer) {
-      if (
-        parsedMaxLoanYears &&
-        (parsedMaxLoanYears < 1 || parsedMaxLoanYears > 30)
-      ) {
-        return {
-          success: false,
-          error: "Loan term must be between 1 and 30 years",
-        };
+    if (isLoanOffer) {
+      if (maxLoanTerm === null || maxLoanTerm < 1 || maxLoanTerm > 360) {
+        throw new Error(
+          "maxLoanTerm must be between 1 and 360 months when loan is offered"
+        );
       }
-      if (parsedInterestRate && parsedInterestRate < 0) {
-        return { success: false, error: "Interest rate must be non-negative" };
-      }
-    }
-
-    const imagesToDelete: string[] = design.images
-      .map((url: string) => url.split("/").pop() || "")
-      .filter((path: string) => !!path);
-
-    if (imagesToDelete.length > 0) {
-      const { error: deleteError } = await supabase.storage
-        .from("gianconstructimage")
-        .remove(imagesToDelete);
-
-      if (deleteError) {
-        console.error("Supabase delete error:", {
-          bucket: "gianconstructimage",
-          imagesToDelete,
-          error: JSON.stringify(deleteError, null, 2),
-        });
-        return {
-          success: false,
-          error: `Failed to delete images: ${deleteError.message}`,
-        };
+      if (interestRate === null || interestRate < 0) {
+        throw new Error(
+          "interestRate must be a non-negative number when loan is offered"
+        );
       }
     }
 
     const newImageUrls: string[] = [];
-    for (const image of images) {
-      if (!(image instanceof File)) continue;
-      const fileName: string = `${nanoid(10)}-${image.name}`;
-      const { data, error: uploadError } = await supabase.storage
+    for (const image of newImages) {
+      const fileName = `${nanoid(10)}-${image.name}`;
+      const { error: uploadError } = await supabase.storage
         .from("gianconstructimage")
         .upload(fileName, image, { cacheControl: "3600", upsert: false });
 
-      if (uploadError) {
-        console.error("Supabase upload error:", {
-          bucket: "gianconstructimage",
-          fileName,
-          error: JSON.stringify(uploadError, null, 2),
-        });
-        return {
-          success: false,
-          error: `Failed to upload image: ${uploadError.message}`,
-        };
-      }
+      if (uploadError)
+        throw new Error(`Image upload failed: ${uploadError.message}`);
 
       const { data: publicUrlData } = supabase.storage
         .from("gianconstructimage")
         .getPublicUrl(fileName);
 
-      if (!publicUrlData?.publicUrl) {
-        console.error("Public URL error:", {
-          bucket: "gianconstructimage",
-          fileName,
-        });
-        return {
-          success: false,
-          error: "Failed to get image URL",
-        };
-      }
-
+      if (!publicUrlData?.publicUrl) throw new Error("Couldn't get image URL");
       newImageUrls.push(publicUrlData.publicUrl);
     }
 
-    const updatedImages: string[] = [...parsedExistingImages, ...newImageUrls];
-
-    const updatedDesignData = {
+    const updateData = {
       name,
       description,
-      price: parsedPrice,
-      number_of_rooms: parsedNumberOfRooms,
-      square_meters: parsedSquareMeters,
+      price,
+      number_of_rooms,
+      square_meters,
       category,
-      images: updatedImages,
+      images: [...existingImages, ...newImageUrls],
       createdBy,
-      isLoanOffer: parsedIsLoanOffer,
-      maxLoanYears: parsedIsLoanOffer ? parsedMaxLoanYears : null,
-      interestRate: parsedIsLoanOffer ? parsedInterestRate : null,
+      isLoanOffer,
+      maxLoanTerm: isLoanOffer ? maxLoanTerm : null,
+      loanTermType: isLoanOffer ? loanTermType : null,
+      interestRate: isLoanOffer ? interestRate : null,
+      interestRateType: isLoanOffer ? interestRateType : null,
     };
 
-    console.log("Updating design with ID:", { id, updatedDesignData });
-
-    const savedDesign = await DesignModel.findByIdAndUpdate(
-      id,
-      updatedDesignData,
-      { new: true, runValidators: true }
+    const updatedDesign = await DesignModel.findOneAndUpdate(
+      { design_id: id },
+      updateData,
+      { new: true }
     );
-    if (!savedDesign) {
-      console.error("Failed to update design with ID:", id);
-      return { success: false, error: "Failed to update design" };
+
+    if (!updatedDesign) {
+      throw new Error("Failed to update design");
     }
 
-    console.log("Raw updated design:", savedDesign.toObject());
+    // Convert to plain object and remove _id
+    const designObject = updatedDesign.toObject();
+    const { _id, __v, ...cleanDesign } = designObject;
 
-    const savedDesignDoc = (await DesignModel.findById(
-      savedDesign._id
-    ).lean()) as any;
-
-    if (!savedDesignDoc) {
-      console.error(
-        "Failed to retrieve updated design with ID:",
-        savedDesign._id
-      );
-      return { success: false, error: "Failed to retrieve updated design" };
-    }
-
-    const plainDesign: Design = {
-      _id: savedDesignDoc._id.toString(),
-      design_id: savedDesignDoc.design_id,
-      name: savedDesignDoc.name,
-      description: savedDesignDoc.description,
-      price: savedDesignDoc.price,
-      number_of_rooms: savedDesignDoc.number_of_rooms,
-      square_meters: savedDesignDoc.square_meters,
-      category: savedDesignDoc.category,
-      images: savedDesignDoc.images,
-      createdBy: savedDesignDoc.createdBy,
-      isLoanOffer: savedDesignDoc.isLoanOffer,
-      maxLoanYears: savedDesignDoc.maxLoanYears,
-      interestRate: savedDesignDoc.interestRate,
-      createdAt: savedDesignDoc.createdAt.toISOString(),
-      updatedAt: savedDesignDoc.updatedAt.toISOString(),
+    const resultDesign: Design = {
+      design_id: cleanDesign.design_id,
+      name: cleanDesign.name,
+      description: cleanDesign.description,
+      price: cleanDesign.price,
+      number_of_rooms: cleanDesign.number_of_rooms,
+      square_meters: cleanDesign.square_meters,
+      category: cleanDesign.category,
+      images: cleanDesign.images,
+      createdBy: cleanDesign.createdBy,
+      isLoanOffer: cleanDesign.isLoanOffer,
+      maxLoanTerm: cleanDesign.maxLoanTerm ?? null,
+      loanTermType: cleanDesign.loanTermType ?? null,
+      interestRate: cleanDesign.interestRate ?? null,
+      interestRateType: cleanDesign.interestRateType ?? null,
+      createdAt: cleanDesign.createdAt?.toISOString(),
+      updatedAt: cleanDesign.updatedAt?.toISOString(),
     };
 
-    console.log("Design updated:", plainDesign);
-
-    revalidatePath("/admin/catalog");
+    revalidatePath("/admin/catalog" as const);
     return {
       success: true,
-      design: plainDesign,
+      design: resultDesign,
     };
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    console.error("Update design error:", errorMessage);
+  } catch (error) {
+    console.error("Update design error:", error);
     return {
       success: false,
-      error: `Failed to update design: ${errorMessage}`,
+      error: error instanceof Error ? error.message : "Failed to update design",
+    };
+  }
+}
+
+export async function deleteDesign(id: string): Promise<DeleteDesignResponse> {
+  try {
+    await dbConnect();
+
+    const design = await DesignModel.findOne({ design_id: id });
+    if (!design) {
+      return {
+        success: false,
+        error: "Design not found",
+      };
+    }
+
+    const imagePaths = design.images
+      .map((url: string) => url.split("/").pop())
+      .filter((path: string | undefined): path is string => path !== undefined);
+
+    if (imagePaths.length > 0) {
+      const { error } = await supabase.storage
+        .from("gianconstructimage")
+        .remove(imagePaths);
+
+      if (error) {
+        return {
+          success: false,
+          error: `Image deletion failed: ${error.message}`,
+        };
+      }
+    }
+
+    const { deletedCount } = await DesignModel.deleteOne({ design_id: id });
+
+    if (deletedCount === 0) {
+      return {
+        success: false,
+        error: "No design was deleted",
+      };
+    }
+
+    revalidatePath(ADMIN_CATALOG_PATH);
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Delete design error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to delete design",
     };
   }
 }
@@ -590,52 +350,35 @@ export async function getDesigns(): Promise<GetDesignsResponse> {
   try {
     await dbConnect();
     const designs = await DesignModel.find().lean().exec();
-    const mappedDesigns: Design[] = designs.map((d: any) => ({
-      _id: d._id.toString(),
-      design_id: d.design_id,
-      name: d.name,
-      description: d.description,
-      price: d.price,
-      number_of_rooms: d.number_of_rooms,
-      square_meters: d.square_meters,
-      category: d.category || "Unknown",
-      images: d.images || [],
-      createdBy: d.createdBy || "Admin",
-      isLoanOffer: d.isLoanOffer ?? false,
-      maxLoanYears: d.maxLoanYears ?? null,
-      interestRate: d.interestRate ?? null,
-      createdAt: d.createdAt.toISOString(),
-      updatedAt: d.updatedAt.toISOString(),
+
+    const resultDesigns: Design[] = designs.map((design: any) => ({
+      design_id: design.design_id,
+      name: design.name,
+      description: design.description,
+      price: design.price,
+      number_of_rooms: design.number_of_rooms,
+      square_meters: design.square_meters,
+      category: design.category,
+      images: design.images,
+      createdBy: design.createdBy,
+      isLoanOffer: design.isLoanOffer,
+      maxLoanTerm: design.maxLoanTerm ?? null,
+      loanTermType: design.loanTermType ?? null,
+      interestRate: design.interestRate ?? null,
+      interestRateType: design.interestRateType ?? null,
+      createdAt: design.createdAt,
+      updatedAt: design.updatedAt,
     }));
 
-    console.log(
-      "Fetched designs:",
-      mappedDesigns.map((d) => ({
-        _id: d._id,
-        design_id: d.design_id,
-        name: d.name,
-        description: d.description,
-        price: d.price,
-        number_of_rooms: d.number_of_rooms,
-        square_meters: d.square_meters,
-        category: d.category,
-        images: d.images,
-        createdBy: d.createdBy,
-        isLoanOffer: d.isLoanOffer,
-        maxLoanYears: d.maxLoanYears,
-        interestRate: d.interestRate,
-        createdAt: d.createdAt,
-        updatedAt: d.updatedAt,
-      }))
-    );
-    return { success: true, designs: mappedDesigns };
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    console.error("Get designs error:", errorMessage);
+    return {
+      success: true,
+      designs: resultDesigns,
+    };
+  } catch (error) {
+    console.error("Get designs error:", error);
     return {
       success: false,
-      error: `Failed to fetch designs: ${errorMessage}`,
+      error: error instanceof Error ? error.message : "Failed to fetch designs",
     };
   }
 }

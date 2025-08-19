@@ -8,28 +8,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from "@/components/ui/alert-dialog";
-import {
   ChevronLeft,
-  ChevronRight,
   Trash2,
   Pencil,
   MoreHorizontal,
   DollarSign,
+  ChevronRight,
+  ChevronLeftIcon,
 } from "lucide-react";
 import { Design } from "@/types/design";
 import { useModalStore } from "@/lib/stores";
 import { deleteDesign } from "@/action/designs";
 import { toast } from "sonner";
 import { calculatePaymentSchedule, formatCurrency } from "@/lib/amortization";
+import ConfirmationModal from "@/components/ConfirmationModal";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface DesignDetailsProps {
   design: Design;
@@ -45,9 +45,13 @@ export default function DesignDetails({
   onEdit,
 }: DesignDetailsProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [showLoanDetails, setShowLoanDetails] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const { isDeleteDesignOpen, setIsDeleteDesignOpen } = useModalStore();
 
-  // Capitalize first letter of each word and lowercase the rest
+  const ITEMS_PER_PAGE = 12;
+
   const capitalizeWords = (str: string | undefined): string => {
     if (!str) return "Unknown";
     return str
@@ -61,77 +65,132 @@ export default function DesignDetails({
   };
 
   const handlePrevImage = () => {
+    setIsAnimating(true);
     setCurrentImageIndex((prev) =>
       prev === 0 ? design.images.length - 1 : prev - 1
     );
+    setTimeout(() => setIsAnimating(false), 300);
   };
 
   const handleNextImage = () => {
+    setIsAnimating(true);
     setCurrentImageIndex((prev) =>
       prev === design.images.length - 1 ? 0 : prev + 1
     );
+    setTimeout(() => setIsAnimating(false), 300);
+  };
+
+  const handleThumbnailClick = (index: number) => {
+    setIsAnimating(true);
+    setCurrentImageIndex(index);
+    setTimeout(() => setIsAnimating(false), 300);
   };
 
   const handleConfirmDelete = async () => {
-    const result = await deleteDesign(design._id);
-    if (result.success) {
-      onDelete(design._id);
+    const result = await deleteDesign(design.design_id);
+    if (result?.success) {
+      onDelete(design.design_id);
       toast.success("Design deleted successfully!");
       setIsDeleteDesignOpen(false);
       onBack();
     } else {
-      toast.error(result.error || "Failed to delete design");
+      toast.error(result?.error || "Failed to delete design");
       setIsDeleteDesignOpen(false);
     }
   };
 
-  // Calculate payment schedule
+  // Calculate payment schedule with proper validation and null checks
   const paymentSchedule =
-    design.isLoanOffer && design.maxLoanYears && design.interestRate
+    design.isLoanOffer &&
+    design.maxLoanTerm !== undefined &&
+    design.maxLoanTerm !== null &&
+    design.maxLoanTerm > 0 &&
+    design.interestRate !== undefined &&
+    design.interestRate !== null &&
+    design.interestRate >= 0
       ? calculatePaymentSchedule(
           design.price,
-          design.maxLoanYears,
-          design.interestRate
+          design.maxLoanTerm, // Already stored as months in database
+          design.interestRate,
+          design.interestRateType || "yearly",
+          "months" // Always use months since we store in months
         )
       : [];
 
-  // Calculate total interest and total amount paid
-  const totalInterest = paymentSchedule.reduce(
-    (sum, row) => sum + row.interest,
-    0
-  );
-  const totalAmountPaid = design.price + totalInterest;
+  // Calculate loan summary with null checks
+  const loanSummary =
+    paymentSchedule.length > 0
+      ? {
+          totalInterest: paymentSchedule.reduce(
+            (sum, row) => sum + row.interest,
+            0
+          ),
+          totalAmountPaid:
+            design.price +
+            paymentSchedule.reduce((sum, row) => sum + row.interest, 0),
+          monthlyPayment: paymentSchedule[0]?.payment || 0,
+        }
+      : null;
+
+  // Calculate display term for UI (convert months back to years if needed)
+  const displayTerm =
+    design.maxLoanTerm !== undefined && design.maxLoanTerm !== null
+      ? design.loanTermType === "years"
+        ? `${Math.round(design.maxLoanTerm / 12)} years`
+        : `${design.maxLoanTerm} months`
+      : "N/A";
+
+  // Pagination logic for payment schedule
+  const totalPages = Math.ceil(paymentSchedule.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPayments = paymentSchedule.slice(startIndex, endIndex);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handlePageClick = (page: number) => {
+    setCurrentPage(page);
+  };
 
   return (
-    <div className="p-4 max-w-full mx-auto">
-      <div className="bg-white py-4 relative">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
         <Button
           variant="ghost"
           onClick={onBack}
-          className="mb-6 text-sm flex items-center"
+          className="flex items-center gap-2 text-[var(--orange)] hover:bg-orange-50"
         >
-          <ChevronLeft className="h-4 w-4 mr-2" />
+          <ChevronLeft className="h-4 w-4" />
           Back to Catalog
         </Button>
-        <h2 className="text-2xl font-semibold text-center">{design.name}</h2>
+        <h2 className="text-2xl font-bold text-gray-800">{design.name}</h2>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-4 right-4 h-8 w-8"
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8">
               <MoreHorizontal className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit} className="text-sm">
+            <DropdownMenuItem
+              onClick={onEdit}
+              className="text-sm cursor-pointer"
+            >
               <Pencil className="h-4 w-4 mr-2" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setIsDeleteDesignOpen(true, design._id)}
-              className="text-sm text-red-600"
+              onClick={() => setIsDeleteDesignOpen(true)}
+              className="text-sm text-red-600 cursor-pointer"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete
@@ -139,260 +198,354 @@ export default function DesignDetails({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <hr className="my-6 border-t border-gray-200" />
-      <div className="flex flex-col gap-6 p-4">
-        <p className="text-sm text-muted-foreground text-center">
+
+      <div className="space-y-6">
+        <p className="text-sm text-gray-500 text-center">
           Design ID: {design.design_id}
         </p>
-        <div>
-          <Label className="text-sm font-semibold">Created By:</Label>
-          <p className="text-xl">{capitalizeWords(design.createdBy)}</p>
-        </div>
+
         {design.images.length > 0 ? (
-          <div className="relative w-full">
-            <div className="overflow-hidden rounded-md">
+          <div className="grid gap-4">
+            <div className="relative">
               <img
                 src={design.images[currentImageIndex]}
                 alt={`${design.name} ${currentImageIndex + 1}`}
-                className="w-full max-h-[500px] object-contain rounded-md"
+                className={`h-auto w-full max-h-96 object-contain rounded-lg ${
+                  isAnimating
+                    ? "opacity-0 transition-opacity duration-300"
+                    : "opacity-100 transition-opacity duration-300"
+                }`}
               />
+              {design.images.length > 1 && (
+                <>
+                  <button
+                    onClick={handlePrevImage}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    onClick={handleNextImage}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:black/70"
+                  >
+                    &gt;
+                  </button>
+                </>
+              )}
             </div>
             {design.images.length > 1 && (
-              <>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute left-2 top-1/2 transform -translate-y-1/2 h-10 w-10 rounded-full bg-white/80 hover:bg-white/90"
-                  onClick={handlePrevImage}
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-10 w-10 rounded-full bg-white/80 hover:bg-white/90"
-                  onClick={handleNextImage}
-                >
-                  <ChevronRight className="h-6 w-6" />
-                </Button>
-                <div className="flex justify-center gap-2 mt-2">
-                  {design.images.map((_, index) => (
-                    <div
-                      key={index}
-                      className={`h-2 w-2 rounded-full ${
-                        index === currentImageIndex
-                          ? "bg-gray-800"
-                          : "bg-gray-300"
-                      }`}
+              <div className="flex gap-2 overflow-x-auto py-2">
+                {design.images.map((image, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleThumbnailClick(index)}
+                    className={`flex-shrink-0 ${
+                      index === currentImageIndex
+                        ? "ring-2 ring-[var(--orange)]"
+                        : ""
+                    }`}
+                  >
+                    <img
+                      src={image}
+                      alt={`${design.name} thumbnail ${index + 1}`}
+                      className="h-16 w-16 object-cover rounded"
                     />
-                  ))}
-                </div>
-              </>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         ) : (
-          <p className="text-sm text-center text-muted-foreground">
-            No images available
-          </p>
+          <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
+            <p className="text-gray-500">No images available</p>
+          </div>
         )}
-        <hr className="my-6 border-t border-gray-200" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Description:
-            </Label>
-            <p className="text-base">{capitalizeWords(design.description)}</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Description:
+              </Label>
+              <p className="text-base">{capitalizeWords(design.description)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Category:
+              </Label>
+              <p className="text-base">{capitalizeWords(design.category)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Price:
+              </Label>
+              <p className="text-base font-semibold">
+                {formatCurrency(design.price)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Number of Rooms:
+              </Label>
+              <p className="text-base">{design.number_of_rooms}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Category:
-            </Label>
-            <p className="text-base">{capitalizeWords(design.category)}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Price:
-            </Label>
-            <p className="text-base">{formatCurrency(design.price)}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Number of Rooms:
-            </Label>
-            <p className="text-base">{design.number_of_rooms}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">Area:</Label>
-            <p className="text-base">
-              {formatSquareMeters(design.square_meters)}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Loan Offered:
-            </Label>
-            <p className="text-base">{design.isLoanOffer ? "Yes" : "No"}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Created At:
-            </Label>
-            <p className="text-base">
-              {new Date(design.createdAt).toLocaleString()}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold min-w-[120px]">
-              Updated At:
-            </Label>
-            <p className="text-base">
-              {new Date(design.updatedAt).toLocaleString()}
-            </p>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Area:
+              </Label>
+              <p className="text-base">
+                {formatSquareMeters(design.square_meters)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Loan Offered:
+              </Label>
+              <p className="text-base">{design.isLoanOffer ? "Yes" : "No"}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Created At:
+              </Label>
+              <p className="text-base">
+                {design.createdAt
+                  ? new Date(design.createdAt).toLocaleDateString()
+                  : "N/A"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
+                Updated At:
+              </Label>
+              <p className="text-base">
+                {design.updatedAt
+                  ? new Date(design.updatedAt).toLocaleDateString()
+                  : "N/A"}
+              </p>
+            </div>
           </div>
         </div>
-        {design.isLoanOffer && design.maxLoanYears && design.interestRate && (
-          <div className="mt-6 bg-gray-50 border border-gray-200 rounded-md shadow-sm">
-            <div className="bg-gray-900 text-white rounded-t-md px-4 py-2 flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              <h3 className="text-lg font-semibold">Loan Payment Details</h3>
+
+        {design.isLoanOffer && (
+          <div className="mt-8 bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
+            <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-[var(--orange)]" />
+              <h3 className="text-lg font-bold text-gray-800">
+                Financing Options
+              </h3>
             </div>
             <div className="p-4">
-              <p className="text-sm text-gray-600 mb-4">
-                This design is eligible for a tailored financing plan, allowing
-                you to spread the cost of {formatCurrency(design.price)} over a
-                maximum term of {design.maxLoanYears} years at a fixed annual
-                interest rate of {design.interestRate}%. The following
-                amortization schedule outlines monthly payments, covering both
-                principal and interest, for the full loan term.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Total Loan Amount:
-                  </Label>
-                  <p className="text-sm font-semibold">
-                    {formatCurrency(design.price)}
+              {loanSummary ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <Label className="text-sm font-medium text-gray-600 block mb-1">
+                        Loan Amount
+                      </Label>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {formatCurrency(design.price)}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <Label className="text-sm font-medium text-gray-600 block mb-1">
+                        Term
+                      </Label>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {displayTerm}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <Label className="text-sm font-medium text-gray-600 block mb-1">
+                        Interest Rate
+                      </Label>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {design.interestRate !== undefined &&
+                        design.interestRate !== null
+                          ? `${design.interestRate}%`
+                          : "N/A"}{" "}
+                        <span className="text-sm text-gray-500">
+                          ({design.interestRateType || "yearly"})
+                        </span>
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <Label className="text-sm font-medium text-gray-600 block mb-1">
+                        Monthly Payment
+                      </Label>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {formatCurrency(loanSummary.monthlyPayment)}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <Label className="text-sm font-medium text-gray-600 block mb-1">
+                        Total Interest
+                      </Label>
+                      <p className="text-xl font-semibold text-gray-900">
+                        {formatCurrency(loanSummary.totalInterest)}
+                      </p>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                      <Label className="text-sm font-medium text-orange-700 block mb-1">
+                        Total Cost
+                      </Label>
+                      <p className="text-2xl font-bold text-[var(--orange)]">
+                        {formatCurrency(loanSummary.totalAmountPaid)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowLoanDetails(!showLoanDetails);
+                        setCurrentPage(1); // Reset to first page when showing details
+                      }}
+                      className="text-[var(--orange)] border-[var(--orange)] hover:bg-orange-50"
+                    >
+                      {showLoanDetails
+                        ? "Hide Payment Schedule"
+                        : "Show Payment Schedule"}
+                    </Button>
+
+                    {showLoanDetails && (
+                      <div className="mt-6 border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-gray-50">
+                            <TableRow>
+                              <TableHead className="font-semibold">
+                                Month
+                              </TableHead>
+                              <TableHead className="font-semibold">
+                                Payment
+                              </TableHead>
+                              <TableHead className="font-semibold">
+                                Principal
+                              </TableHead>
+                              <TableHead className="font-semibold">
+                                Interest
+                              </TableHead>
+                              <TableHead className="font-semibold">
+                                Balance
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {currentPayments.map((row) => (
+                              <TableRow key={row.month}>
+                                <TableCell>{row.month}</TableCell>
+                                <TableCell>
+                                  {formatCurrency(row.payment)}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(row.principal)}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(row.interest)}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(row.balance)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between p-4 bg-gray-50 border-t">
+                            <div className="text-sm text-[var(--orange)]">
+                              Showing {startIndex + 1}-
+                              {Math.min(endIndex, paymentSchedule.length)} of{" "}
+                              {paymentSchedule.length} payments
+                            </div>
+                            <div className="flex items-center gap-2 ">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handlePrevPage}
+                                disabled={currentPage === 1}
+                                className="h-8 w-8 p-0"
+                              >
+                                <ChevronLeftIcon className="h-4 w-4" />
+                              </Button>
+
+                              {Array.from(
+                                { length: Math.min(5, totalPages) },
+                                (_, i) => {
+                                  let pageNum;
+                                  if (totalPages <= 5) {
+                                    pageNum = i + 1;
+                                  } else if (currentPage <= 3) {
+                                    pageNum = i + 1;
+                                  } else if (currentPage >= totalPages - 2) {
+                                    pageNum = totalPages - 4 + i;
+                                  } else {
+                                    pageNum = currentPage - 2 + i;
+                                  }
+
+                                  return (
+                                    <Button
+                                      key={pageNum}
+                                      variant={
+                                        currentPage === pageNum
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      size="sm"
+                                      onClick={() => handlePageClick(pageNum)}
+                                      className="h-8 w-8 p-0 "
+                                    >
+                                      {pageNum}
+                                    </Button>
+                                  );
+                                }
+                              )}
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleNextPage}
+                                disabled={currentPage === totalPages}
+                                className="h-8 w-8 p-0 "
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4 text-[var(--orange)]">
+                  <p className="text-gray-500">
+                    {design.maxLoanTerm !== undefined &&
+                    design.maxLoanTerm !== null &&
+                    design.interestRate !== undefined &&
+                    design.interestRate !== null
+                      ? "Invalid loan configuration. Please check term or interest rate."
+                      : "Loan details are not fully configured"}
                   </p>
                 </div>
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Maximum Loan Term:
-                  </Label>
-                  <p className="text-sm">{design.maxLoanYears} years</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Annual Interest Rate:
-                  </Label>
-                  <p className="text-sm">{design.interestRate}%</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Effective APR:
-                  </Label>
-                  <p className="text-sm">{design.interestRate}%</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Monthly Payment:
-                  </Label>
-                  <p className="text-sm font-semibold">
-                    {formatCurrency(paymentSchedule[0]?.payment || 0)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Total Interest Paid:
-                  </Label>
-                  <p className="text-sm font-semibold">
-                    {formatCurrency(totalInterest)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-semibold">
-                    Total Amount Paid:
-                  </Label>
-                  <p className="text-2xl font-bold">
-                    {formatCurrency(totalAmountPaid)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <h4 className="text-md font-semibold mb-2">
-                  Monthly Payment Breakdown
-                </h4>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white border border-gray-200 rounded-md">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">
-                          Month
-                        </th>
-                        <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">
-                          Payment
-                        </th>
-                        <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">
-                          Principal
-                        </th>
-                        <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">
-                          Interest
-                        </th>
-                        <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">
-                          Balance
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paymentSchedule.map((row) => (
-                        <tr key={row.month} className="hover:bg-gray-50">
-                          <td className="py-2 px-4 border-b text-sm text-gray-600">
-                            {row.month}
-                          </td>
-                          <td className="py-2 px-4 border-b text-sm text-gray-600">
-                            {formatCurrency(row.payment)}
-                          </td>
-                          <td className="py-2 px-4 border-b text-sm text-gray-600">
-                            {formatCurrency(row.principal)}
-                          </td>
-                          <td className="py-2 px-4 border-b text-sm text-gray-600">
-                            {formatCurrency(row.interest)}
-                          </td>
-                          <td className="py-2 px-4 border-b text-sm text-gray-600">
-                            {formatCurrency(row.balance)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         )}
-        <hr className="my-6 border-t border-gray-200" />
       </div>
-      <AlertDialog
-        open={isDeleteDesignOpen}
-        onOpenChange={setIsDeleteDesignOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this design? This action cannot be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setIsDeleteDesignOpen(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
+      <ConfirmationModal
+        isOpen={isDeleteDesignOpen}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setIsDeleteDesignOpen(false)}
+        title="Delete Design"
+        description="Are you sure you want to delete this design? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

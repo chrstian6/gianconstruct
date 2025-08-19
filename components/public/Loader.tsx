@@ -29,12 +29,12 @@ export default function Loader() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
       {error ? (
-        <div className="text-red-500 text-lg">Error: {error}</div>
+        <div className="text-red-500 text-md">Error: {error}</div>
       ) : animationData ? (
         <Lottie
           animationData={animationData}
           loop={true}
-          style={{ width: 80, height: 80 }}
+          style={{ width: 50, height: 50 }}
           rendererSettings={{
             preserveAspectRatio: "xMidYMid slice",
           }}
@@ -48,7 +48,7 @@ export default function Loader() {
         initial="hidden"
         animate="visible"
       >
-        Hang tight, we&apos;re wrestling pixels into place!
+        Redirecting...
       </motion.p>
     </div>
   );
