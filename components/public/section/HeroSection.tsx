@@ -234,10 +234,10 @@ export default function HeroSection() {
               )}
             </motion.div>
           ))}
-          <h1 className="text-3xl font-bold md:text-4xl mb-4 text-gray-900">
+          <h1 className="text-5xl font-black md:text-6xl w-full mb-4 text-[var(--orange)] tracking-tight">
             Design with Precision. Build with Strength. Done with Excellence.
           </h1>
-          <p className="text-base text-black mb-4">
+          <p className="text-base md:text-md font-semibold text-black mb-4">
             Gian Construction & Supplies delivers top-tier construction services
             for residential and commercial projects, blending quality,
             innovation, and expertise.
@@ -245,15 +245,16 @@ export default function HeroSection() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
               size="lg"
-              className="w-full sm:w-auto rounded-md bg-text-secondary hover:bg-text-secondary/90 text-text-secondary-foreground"
+              variant="outline"
+              className="w-full sm:w-auto px-8 py-4 border-1 border-[var(--orange)] bg-background border-1 b text-[var(--orange)] hover:bg-[var(--orange)] hover:text-primary-foreground cursor-pointer text-lg transition-colors duration-200 box-border"
               onClick={() => setIsLoginOpen(true)}
             >
               Sign In
             </Button>
+
             <Button
               size="lg"
-              variant="outline"
-              className="w-full sm:w-auto rounded-md border-text-secondary text-text-secondary hover:bg-text-secondary hover:text-text-secondary-foreground"
+              className="w-full sm:w-auto px-8 py-4 bg-[var(--orange)] border-1 border-[var(--orange)] text-text-secondary hover:bg-[var(--orange)] hover:text-[var(--orange)] cursor-pointer hover:bg-text-secondary text-lg transition-colors duration-200 box-border"
               onClick={() => setIsCreateAccountOpen(true)}
             >
               Sign Up

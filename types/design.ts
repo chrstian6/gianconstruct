@@ -1,6 +1,5 @@
 export interface Design {
-  _id: string;
-  design_id: string;
+  design_id: string; // Custom ID replaces _id
   name: string;
   description: string;
   price: number;
@@ -10,10 +9,12 @@ export interface Design {
   images: string[];
   createdBy: string;
   isLoanOffer: boolean;
-  maxLoanYears: number | null;
-  interestRate: number | null;
-  createdAt: string;
-  updatedAt: string;
+  maxLoanTerm?: number | null;
+  loanTermType?: "months" | "years" | null;
+  interestRate?: number | null;
+  interestRateType?: "monthly" | "yearly" | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AddDesignResponse {
@@ -36,5 +37,20 @@ export interface UpdateDesignResponse {
 export interface GetDesignsResponse {
   success: boolean;
   designs?: Design[];
+  error?: string;
+}
+
+export type RevalidatePath = string;
+
+// New interface for login response
+export interface User {
+  email: string;
+  role?: string; // Assuming role is part of user object based on redirect logic
+  // Add other user properties as needed
+}
+
+export interface LoginResponse {
+  success: boolean;
+  user?: User;
   error?: string;
 }

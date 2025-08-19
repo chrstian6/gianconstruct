@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Toaster } from "sonner";
 import CatalogForm from "@/components/admin/catalog/Form";
 import CatalogList from "@/components/admin/catalog/CatalogList";
 import { getDesigns } from "@/action/designs";
@@ -34,27 +33,27 @@ export default function CatalogPage() {
 
   // Handle design deletion
   const handleDelete = (id: string) => {
-    setDesigns(designs.filter((design: Design) => design._id !== id));
+    setDesigns(designs.filter((design: Design) => design.design_id !== id)); // Changed from _id to design_id
   };
 
   // Handle design update
   const handleUpdate = (updatedDesign: Design) => {
     setDesigns(
-      designs.map((design) =>
-        design._id === updatedDesign._id ? updatedDesign : design
+      designs.map(
+        (design) =>
+          design.design_id === updatedDesign.design_id ? updatedDesign : design // Changed from _id to design_id
       )
     );
   };
 
   return (
-    <div className="p-8 max-w-7xl overflow-y-auto">
-      <Toaster />
+    <div className="p-6 max-w-7xl overflow-y-auto">
       <h1 className="text-2xl font-bold text-text-secondary mb-6">
         Design Catalog
       </h1>
 
       {/* Catalog Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="list">Catalog List</TabsTrigger>
           <TabsTrigger value="add">Add Catalog</TabsTrigger>
@@ -64,7 +63,6 @@ export default function CatalogPage() {
           <CatalogList
             designs={designs}
             onDelete={handleDelete}
-            onAddTemplate={() => setActiveTab("add")}
             onUpdate={handleUpdate}
           />
         </TabsContent>

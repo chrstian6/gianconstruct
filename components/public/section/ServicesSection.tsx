@@ -31,7 +31,7 @@ export default function ServicesSection() {
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
         <motion.div className="text-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900 sm:mb-4 sm:text-2xl md:text-3xl font-semibold">
+          <h2 className="text-xl font-bold text-[var(--orange)] sm:mb-4 sm:text-2xl md:text-3xl font-semibold">
             Our Expertise
           </h2>
           <p className="text-gray-500/90 sm:text-md text-sm mx-auto md:text-lg md:max-w-md">
@@ -51,11 +51,11 @@ export default function ServicesSection() {
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="currentColor"
+                  stroke="var(--orange)"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12 text-blue-600"
+                  className="w-12 h-12"
                 >
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                   <polyline points="9 22 9 12 15 12 15 22" />
@@ -73,11 +73,11 @@ export default function ServicesSection() {
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="currentColor"
+                  stroke="var(--orange)"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12 text-blue-600"
+                  className="w-12 h-12"
                 >
                   <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
                   <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
@@ -97,11 +97,11 @@ export default function ServicesSection() {
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="currentColor"
+                  stroke="var(--orange)"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12 text-blue-600"
+                  className="w-12 h-12"
                 >
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                   <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
@@ -120,11 +120,11 @@ export default function ServicesSection() {
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="currentColor"
+                  stroke="var(--orange)"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12 text-blue-600"
+                  className="w-12 h-12"
                 >
                   <path d="M20 7h-3.5l-2.5-5h-5l-2.5 5H4v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
                   <path d="M4 7h16" />

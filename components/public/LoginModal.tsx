@@ -84,6 +84,10 @@ export default function LoginModal() {
       const result = await loginUser(formData);
       console.log("Login result:", JSON.stringify(result, null, 2));
 
+      if (!result) {
+        throw new Error("No response from server");
+      }
+
       if (result.success && result.user) {
         await setUser(result.user);
         toast.success(`Welcome back, ${result.user.email}!`, {
@@ -101,10 +105,12 @@ export default function LoginModal() {
         router.replace(redirectPath);
         router.refresh();
       } else {
-        const errorMessage =
-          typeof result.error === "string"
+        const errorMessage = result.error
+          ? typeof result.error === "string"
             ? result.error
-            : "Invalid email or password";
+            : "Invalid email or password"
+          : "Login failed. Please try again.";
+
         toast.error(errorMessage, {
           className:
             "bg-red-50 text-red-700 border border-red-200 rounded-md shadow-sm py-2 px-4 text-sm font-medium",
@@ -114,7 +120,12 @@ export default function LoginModal() {
       }
     } catch (error) {
       console.error("Login failed:", error);
-      toast.error("Login failed. Please try again.", {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Login failed. Please try again.";
+
+      toast.error(errorMessage, {
         className:
           "bg-red-50 text-red-700 border border-red-200 rounded-md shadow-sm py-2 px-4 text-sm font-medium",
         duration: 4000,
@@ -193,7 +204,7 @@ export default function LoginModal() {
                   </div>
                   <Button
                     type="submit"
-                    className="w-full bg-text-secondary hover:bg-white/90 hover:text-text-secondary cursor-pointer hover:border-1 border-text-secondary text-sm py-2 mt-3"
+                    className="w-full bg-black text-white hover:bg-white hover:text-black hover:border-2 hover:border-black cursor-pointer text-sm py-2 px-4 transition-colors duration-200 box-border"
                     disabled={isCheckingEmail}
                   >
                     {isCheckingEmail ? "Checking..." : "Continue"}
@@ -201,16 +212,12 @@ export default function LoginModal() {
                   <div className="text-center mt-2">
                     <p className="text-sm text-gray-600">
                       Don’t have an account?{" "}
-                      <button
-                        type="button"
-                        className="text-primary hover:underline"
-                        onClick={() => {
-                          setIsLoginOpen(false);
-                          setIsCreateAccountOpen(true);
-                        }}
+                      <Button
+                        type="submit"
+                        className="w-full bg-white text-black border-1 border-black hover:bg-black hover:text-black  cursor-pointer text-sm py-2 px-4 transition-colors duration-200 box-border"
                       >
-                        Sign Up
-                      </button>
+                        Sign In
+                      </Button>
                     </p>
                   </div>
                 </form>
