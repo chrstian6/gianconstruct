@@ -189,6 +189,8 @@ export async function loginUser(formData: FormData) {
         role: user.role,
       },
       sessionId,
+      instructions:
+        "To clear your conversation history, click the book icon beneath any message that references a chat and select the chat from the menu to forget it. You can also disable the memory feature by going to the 'Data Controls' section of settings.",
     };
   } catch (error: any) {
     console.error("Login error:", error);

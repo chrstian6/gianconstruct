@@ -64,10 +64,10 @@ export function Sidebar() {
         { name: "Catalog", href: "/admin/catalog", icon: Folder },
         {
           name: "Notifications",
-          icon: MessageSquare,
           onClick: () => setIsNotificationSheetOpen(true),
+          icon: MessageSquare,
         },
-        { name: "User Management", href: "/admin/users", icon: User },
+        { name: "User Management", href: "/admin/usermanagement", icon: User },
       ],
     },
   ];
@@ -122,7 +122,9 @@ export function Sidebar() {
                           href={item.href}
                           className="flex items-center gap-2 w-full p-2"
                         >
-                          <item.icon className="h-4 w-4" />
+                          <div className="flex-shrink-0 w-6">
+                            <item.icon className="h-4 w-4 ml-2" />
+                          </div>
                           {!isCollapsed && <span>{item.name}</span>}
                         </Link>
                       ) : (
@@ -131,7 +133,10 @@ export function Sidebar() {
                           className={`flex items-center gap-2 w-full p-2 ${isCollapsed ? "justify-center" : "justify-start"} relative`}
                           onClick={item.onClick}
                         >
-                          <item.icon className="h-4 w-4" />
+                          <div className="flex-shrink-0 w-6">
+                            <item.icon className="h-4 w-4 ml-2" />{" "}
+                            {/* Added fixed-width div and ml-2 */}
+                          </div>
                           {!isCollapsed && (
                             <span className="flex items-center">
                               {item.name}
