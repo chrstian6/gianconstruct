@@ -21,12 +21,13 @@ import {
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { NotificationSheet } from "@/components/admin/NotificationSheet";
-import { getNotifications } from "@/action/inquiries"; // Import to fetch notifications
+import { getNotifications } from "@/action/inquiries";
+import { motion } from "framer-motion"; // Import Framer Motion
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isNotificationSheetOpen, setIsNotificationSheetOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0); // State for unread notifications
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const fetchUnreadCount = async () => {
@@ -41,7 +42,7 @@ export function Sidebar() {
       }
     };
     fetchUnreadCount();
-  }, []); // Run once on mount
+  }, []);
 
   const menuItems = [
     {
@@ -72,10 +73,29 @@ export function Sidebar() {
     },
   ];
 
+  // Framer Motion variants for sidebar collapse/expand animation
+  const sidebarVariants = {
+    expanded: { width: 256 }, // 64px (w-64)
+    collapsed: { width: 64 }, // 16px (w-16)
+  };
+
+  // Micro animation variants for icons
+  const iconVariants = {
+    initial: { scale: 1, rotate: 0 },
+    animate: {
+      scale: [1, 1.1, 1], // Slight scale up and back
+      rotate: [0, 5, -5, 0], // Subtle rotation
+    },
+  };
+
   return (
     <div className="flex h-screen">
-      <div
-        className={`flex flex-col h-full bg-background border-r transition-all duration-300 ${isCollapsed ? "w-16" : "w-64"} relative`}
+      <motion.div
+        className="flex flex-col h-full bg-background border-r relative"
+        variants={sidebarVariants}
+        initial="expanded"
+        animate={isCollapsed ? "collapsed" : "expanded"}
+        transition={{ duration: 0.3, ease: "easeInOut" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4">
@@ -97,7 +117,7 @@ export function Sidebar() {
             )}
           </Button>
         </div>
-        <Separator />
+        <Separator />   
 
         {/* Menu Items */}
         <nav className="flex-1 overflow-y-auto p-4">
@@ -115,39 +135,48 @@ export function Sidebar() {
                   {section.items.map((item) => (
                     <div
                       key={item.name}
-                      className={`flex items-center rounded-md text-sm font-medium text-accent hover:bg-accent hover:text-accent-foreground ${isCollapsed ? "justify-center" : ""}`}
+                      className={`flex items-center rounded-md text-sm font-medium text-accent hover:bg-accent hover:text-accent-foreground ${isCollapsed ? "justify-start" : "justify-start"}`}
                     >
                       {item.href ? (
                         <Link
                           href={item.href}
                           className="flex items-center gap-2 w-full p-2"
                         >
-                          <div className="flex-shrink-0 w-6">
-                            <item.icon className="h-4 w-4 ml-2" />
+                          <div className="flex-shrink-0 w-6 flex justify-center">
+                            <motion.div
+                              variants={iconVariants}
+                              initial="initial"
+                              animate={isCollapsed ? "initial" : "animate"}
+                              transition={{ duration: 0.3, ease: "easeOut" }}
+                            >
+                              <item.icon className="h-4 w-4" />
+                            </motion.div>
                           </div>
                           {!isCollapsed && <span>{item.name}</span>}
                         </Link>
                       ) : (
                         <Button
                           variant="ghost"
-                          className={`flex items-center gap-2 w-full p-2 ${isCollapsed ? "justify-center" : "justify-start"} relative`}
+                          className={`flex items-center gap-2 w-full p-2 relative ${isCollapsed ? "justify-start" : "justify-start"}`}
                           onClick={item.onClick}
                         >
-                          <div className="flex-shrink-0 w-6">
-                            <item.icon className="h-4 w-4 ml-2" />{" "}
-                            {/* Added fixed-width div and ml-2 */}
+                          <div className="flex-shrink-0 w-6 flex justify-center relative">
+                            <motion.div
+                              variants={iconVariants}
+                              initial="initial"
+                              animate={isCollapsed ? "initial" : "animate"}
+                              transition={{ duration: 0.3, ease: "easeOut" }}
+                            >
+                              <item.icon className="h-4 w-4" />
+                            </motion.div>
+                            {item.name === "Notifications" &&
+                              unreadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-xs font-medium">
+                                  {unreadCount}
+                                </span>
+                              )}
                           </div>
-                          {!isCollapsed && (
-                            <span className="flex items-center">
-                              {item.name}
-                              {item.name === "Notifications" &&
-                                unreadCount > 0 && (
-                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-500 text-white text-xs font-medium">
-                                    {unreadCount}
-                                  </span>
-                                )}
-                            </span>
-                          )}
+                          {!isCollapsed && <span>{item.name}</span>}
                         </Button>
                       )}
                     </div>
@@ -158,7 +187,7 @@ export function Sidebar() {
             </Collapsible>
           ))}
         </nav>
-      </div>
+      </motion.div>
 
       {/* Notification Sheet */}
       <NotificationSheet

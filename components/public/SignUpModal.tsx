@@ -1,4 +1,4 @@
-"use client"; // Client-side component
+"use client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import { registerUser } from "@/action/register";
 import { Toaster, toast } from "sonner";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, X } from "lucide-react";
 
 export default function SignUpModal() {
   const { isCreateAccountOpen, setIsCreateAccountOpen, setIsLoginOpen } =
@@ -75,15 +75,12 @@ export default function SignUpModal() {
     // Set user in AuthStore
     if (result.user) {
       await setUser(result.user);
-      toast.success(
-        `Registration successful! Check your email to verify. User ID: ${result.user.user_id}`,
-        {
-          className:
-            "bg-green-100 text-green-800 border border-green-600 rounded-md shadow-sm py-2 px-4 text-sm font-medium",
-          duration: 4000,
-          position: "top-right",
-        }
-      );
+      toast.success(`Registration successful! Check your email to verify.`, {
+        className:
+          "bg-green-100 text-green-800 border border-green-600 rounded-md shadow-sm py-2 px-4 text-sm font-medium",
+        duration: 4000,
+        position: "top-right",
+      });
     }
 
     // Show success modal
@@ -97,180 +94,200 @@ export default function SignUpModal() {
       <AnimatePresence>
         {isCreateAccountOpen && !showSuccess && (
           <motion.div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
             <motion.div
-              className="bg-white p-4 rounded-lg shadow-lg w-full max-w-sm relative"
-              initial={{ scale: 0.8, y: 50 }}
+              className="bg-white rounded-xl shadow-xl w-full max-w-md relative overflow-hidden"
+              initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.8, y: 50 }}
+              exit={{ scale: 0.9, y: 20 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
-              <motion.button
-                className="absolute top-2 right-3 text-red-600 hover:text-gray-900"
-                onClick={() => setIsCreateAccountOpen(false)}
-                whileHover={{ scale: 1.2 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                ✕
-              </motion.button>
-              <div className="text-center mb-4">
-                <h1 className="text-xl font-bold text-text-primary mb-5">
+              {/* Header with orange accent */}
+              <div className="bg-[var(--orange)] p-6 text-center">
+                <h1 className="text-2xl font-bold text-white">
                   GianConstruct®
                 </h1>
-                <h1 className="text-2xl font-bold">Create your Account</h1>
-                <p className="text-sm text-gray-600 mt-1">
-                  Create an account to get started.
-                </p>
+                <p className="text-white/90 mt-1">Create Your Account</p>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-3 px-4 mt-6">
-                <div className="flex gap-3">
-                  <div className="flex-1">
+
+              {/* Close button */}
+              <button
+                className="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors"
+                onClick={() => setIsCreateAccountOpen(false)}
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="p-6 max-h-[80vh] overflow-y-auto">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label
+                        htmlFor="firstName"
+                        className="text-gray-700 text-sm font-medium mb-2"
+                      >
+                        First Name
+                      </Label>
+                      <Input
+                        id="firstName"
+                        name="firstName"
+                        type="text"
+                        placeholder="First name"
+                        className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label
+                        htmlFor="lastName"
+                        className="text-gray-700 text-sm font-medium mb-2"
+                      >
+                        Last Name
+                      </Label>
+                      <Input
+                        id="lastName"
+                        name="lastName"
+                        type="text"
+                        placeholder="Last name"
+                        className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
                     <Label
-                      htmlFor="firstName"
-                      className="text-gray-700 text-sm mb-1"
+                      htmlFor="address"
+                      className="text-gray-700 text-sm font-medium mb-2"
                     >
-                      First Name
+                      Address
                     </Label>
                     <Input
-                      id="firstName"
-                      name="firstName"
+                      id="address"
+                      name="address"
                       type="text"
-                      placeholder="Enter your first name"
-                      className="bg-white border-gray-300 text-sm px-3 py-2"
+                      placeholder="Enter your address"
+                      className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
                       required
                     />
                   </div>
-                  <div className="flex-1">
+
+                  <div>
                     <Label
-                      htmlFor="lastName"
-                      className="text-gray-700 text-sm mb-1"
+                      htmlFor="contactNo"
+                      className="text-gray-700 text-sm font-medium mb-2"
                     >
-                      Last Name
+                      Contact Number
                     </Label>
                     <Input
-                      id="lastName"
-                      name="lastName"
-                      type="text"
-                      placeholder="Last name"
-                      className="bg-white border-gray-300 text-sm px-3 py-2"
+                      id="contactNo"
+                      name="contactNo"
+                      type="tel"
+                      placeholder="+63 912 345 6789"
+                      className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
+                      onInput={handlePhoneInput}
                       required
                     />
                   </div>
-                </div>
-                <div>
-                  <Label
-                    htmlFor="address"
-                    className="text-gray-700 text-sm mb-1"
+
+                  <div>
+                    <Label
+                      htmlFor="email"
+                      className="text-gray-700 text-sm font-medium mb-2"
+                    >
+                      Email
+                    </Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="Enter your email"
+                      className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label
+                      htmlFor="password"
+                      className="text-gray-700 text-sm font-medium mb-2"
+                    >
+                      Password
+                    </Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      placeholder="Create a password"
+                      className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label
+                      htmlFor="confirmPassword"
+                      className="text-gray-700 text-sm font-medium mb-2"
+                    >
+                      Confirm Password
+                    </Label>
+                    <Input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type="password"
+                      placeholder="Confirm your password"
+                      className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
+                      required
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-[var(--orange)] hover:bg-orange-600 text-white font-semibold py-3"
+                    disabled={isSubmitting}
                   >
-                    Address
-                  </Label>
-                  <Input
-                    id="address"
-                    name="address"
-                    type="text"
-                    placeholder="Enter your address"
-                    className="bg-white border-gray-300 text-sm px-3 py-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label
-                    htmlFor="contactNo"
-                    className="text-gray-700 text-sm mb-1"
-                  >
-                    Contact Number
-                  </Label>
-                  <Input
-                    id="contactNo"
-                    name="contactNo"
-                    type="tel"
-                    placeholder="+639123456789"
-                    className="bg-white border-gray-300 text-sm px-3 py-2"
-                    onInput={handlePhoneInput}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email" className="text-gray-700 text-sm mb-1">
-                    Email
-                  </Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    className="bg-white border-gray-300 text-sm px-3 py-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label
-                    htmlFor="password"
-                    className="text-gray-700 text-sm mb-1"
-                  >
-                    Password
-                  </Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    className="bg-white border-gray-300 text-sm px-3 py-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label
-                    htmlFor="confirmPassword"
-                    className="text-gray-700 text-sm mb-1"
-                  >
-                    Confirm Password
-                  </Label>
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    placeholder="Confirm your password"
-                    className="bg-white border-gray-300 text-sm px-3 py-2"
-                    required
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-text-secondary hover:bg-white/90 hover:text-text-primary cursor-pointer hover:border-1 border-text-primary text-sm py-2 mt-3"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Signing Up..." : "Sign Up"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full text-sm py-2 mt-3 border-gray-300"
-                >
-                  Sign up with Google
-                </Button>
-              </form>
+                    {isSubmitting ? "Creating Account..." : "Create Account"}
+                  </Button>
+
+                  <div className="text-center pt-4 border-t border-gray-200 mt-6">
+                    <p className="text-sm text-gray-600">
+                      Already have an account?{" "}
+                      <button
+                        type="button"
+                        className="text-[var(--orange)] hover:text-orange-600 font-medium"
+                        onClick={() => {
+                          setIsCreateAccountOpen(false);
+                          setIsLoginOpen(true);
+                        }}
+                      >
+                        Sign in
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              </div>
             </motion.div>
           </motion.div>
         )}
+
         {showSuccess && (
           <motion.div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
             <motion.div
-              className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm text-center"
-              initial={{ scale: 0.8, y: 50 }}
+              className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center"
+              initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.8, y: 50 }}
+              exit={{ scale: 0.9, y: 20 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
               <motion.div
@@ -280,22 +297,25 @@ export default function SignUpModal() {
               >
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
               </motion.div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+
+              <h2 className="text-xl font-bold text-gray-800 mb-2">
                 Registration Successful!
               </h2>
+
               <p className="text-sm text-gray-600 mb-4">
-                Check your email to verify your account. You’ll be redirected to
-                the login page in {timer} seconds.
+                Check your email to verify your account. You'll be redirected to
+                login in {timer} seconds.
               </p>
+
               <Button
                 onClick={() => {
                   setShowSuccess(false);
                   setIsCreateAccountOpen(false);
                   setIsLoginOpen(true);
                 }}
-                className="bg-text-primary text-white hover:bg-white/90 hover:text-text-primary hover:border-1 border-text-primary"
+                className="bg-[var(--orange)] hover:bg-orange-600 text-white font-semibold"
               >
-                Go to Login
+                Go to Login Now
               </Button>
             </motion.div>
           </motion.div>

@@ -113,7 +113,7 @@ export async function adminRegisterUser(formData: FormData) {
         email: user.email,
         role: user.role,
       },
-    };
+    };  
   } catch (error: any) {
     console.error("Admin registration error:", error);
     return {
