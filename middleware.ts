@@ -3,7 +3,7 @@ import { verifySession } from "@/lib/redis";
 
 const protectedAdminRoutes = ["/admin/:path*"];
 const protectedUserRoutes = ["/user/:path*"];
-const publicRoutes = ["/"];
+const publicRoutes = ["/", "/catalog"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -38,7 +38,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Prevent authenticated users from accessing the public route
+  // Prevent authenticated users from accessing public routes
   if (publicRoutes.includes(pathname) && session) {
     const redirectPath =
       userRole === "admin" ? "/admin/admindashboard" : "/user/userdashboard";
@@ -46,7 +46,9 @@ export async function middleware(request: NextRequest) {
       pathname,
       redirectPath,
     });
-    return NextResponse.redirect(new URL(redirectPath, request.url));
+    const response = NextResponse.redirect(new URL(redirectPath, request.url));
+    response.headers.set("X-Auth-Redirect", "true"); // Signal client to enforce redirect
+    return response;
   }
 
   // Allow the request to proceed
@@ -54,5 +56,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/user/:path*", "/"],
+  matcher: ["/admin/:path*", "/user/:path*", "/", "/catalog"], // Explicitly include /catalog
 };

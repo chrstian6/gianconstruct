@@ -1,7 +1,6 @@
 "use client";
 
 import { useModalStore } from "@/lib/stores";
-import Loader from "@/components/public/Loader";
 import LoginModal from "@/components/public/LoginModal";
 import SignUpModal from "@/components/public/SignUpModal";
 import HeroSection from "@/components/public/section/HeroSection";
@@ -34,10 +33,6 @@ const Home: React.FC = () => {
       return () => clearTimeout(timeout);
     }
   }, [showConfetti]);
-
-  if (loading) {
-    return <Loader />;
-  }
 
   return (
     <>

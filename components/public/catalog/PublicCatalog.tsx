@@ -19,7 +19,6 @@ import { Home, Square, Heart, ArrowRight, X } from "lucide-react";
 import { PublicDesignDetails } from "@/components/public/catalog/PublicDesignDetails";
 import Image from "next/image";
 import Confetti from "react-confetti";
-import { Navbar } from "@/components/public/Navbar"; // Import Navbar
 
 export default function PublicCatalog() {
   const [designs, setDesigns] = useState<Design[]>([]);
@@ -114,9 +113,6 @@ export default function PublicCatalog() {
 
   return (
     <div className="container mx-auto px-4 py-12 pt-16">
-      <div className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
-        <Navbar />
-      </div>
       {showConfetti && (
         <Confetti
           width={window.innerWidth}

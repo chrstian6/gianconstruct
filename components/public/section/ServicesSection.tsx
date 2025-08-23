@@ -1,4 +1,7 @@
+"use client";
+
 import { motion } from "framer-motion";
+import ProjectTimeline from "./Timeline";
 
 // Animation variants for scroll reveal
 const sectionVariants = {
@@ -10,147 +13,209 @@ const sectionVariants = {
   },
 };
 
-const cardVariants = {
-  hidden: { opacity: 0, scale: 0.95 },
+const listItemVariants = {
+  hidden: { opacity: 0, x: -20 },
   visible: {
     opacity: 1,
-    scale: 1,
+    x: 0,
     transition: { duration: 0.5, ease: "easeOut" },
   },
 };
 
+const financingCardVariants = {
+  hidden: { opacity: 0, x: -50 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.7, ease: "easeOut" },
+  },
+};
+
 export default function ServicesSection() {
+  const services = [
+    "Design Floor Plan & 3D Rendering",
+    "Build",
+    "Renovation",
+    "Building Permits",
+    "General Constructions",
+    "Loan Assistance Thru Pag-Ibig & Bank",
+  ];
+
   return (
     <motion.section
       id="services"
-      className="flex justify-center py-10"
+      className="flex justify-center py-16 bg-gray-50"
       variants={sectionVariants}
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true }}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
-        <motion.div className="text-center mb-6">
-          <h2 className="text-xl font-bold text-[var(--orange)] sm:mb-4 sm:text-2xl md:text-3xl font-semibold">
-            Our Expertise
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl">
+        {/* Header Section */}
+        <motion.div className="md:text-left text-center mb-12">
+          <h2 className="text-3xl font-black text-[var(--orange)] sm:text-4xl md:text-6xl mb-4 tracking-tight">
+            What Can We Build For You?
           </h2>
-          <p className="text-gray-500/90 sm:text-md text-sm mx-auto md:text-lg md:max-w-md">
-            Tailored construction and services to meet your unique needs.
+          <p className="text-gray-600 text-lg md:text-xl max-w-2xl">
+            We offer
+            <span className="font-semibold text-[var(--orange)]">
+              {" "}
+              "Build Now, Pay Later"{" "}
+            </span>
+            financing options
           </p>
         </motion.div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-8">
-          {[
-            {
-              title: "Residential Construction",
-              description:
-                "Custom homes and renovations built to your exact specifications.",
-              icon: (
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          {/* Financing Highlight Card - Left Side */}
+          <motion.div
+            className="bg-gradient-to-br from-[var(--orange)] to-orange-600 p-8 rounded-md shadow-lg text-white lg:sticky lg:top-24"
+            variants={financingCardVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+          >
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold mb-2">Build Now, Pay Later</h3>
+              <p className="text-white/90">
+                Start your project today with our flexible payment plans.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="var(--orange)"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  stroke-in="round"
+                  className="mr-3"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Flexible payment terms</span>
+              </div>
+              <div className="flex items-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12"
+                  className="mr-3"
                 >
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
+                  <polyline points="20 6 9 17 4 12" />
                 </svg>
-              ),
-            },
-            {
-              title: "Commercial Projects",
-              description:
-                "Modern office spaces and retail environments with precision.",
-              icon: (
+                <span>No hidden fees</span>
+              </div>
+              <div className="flex items-center">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="var(--orange)"
+                  stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12"
+                  className="mr-3"
                 >
-                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-                  <line x1="6" y1="6" x2="6.01" y2="6" />
-                  <line x1="6" y1="18" x2="6.01" y2="18" />
+                  <polyline points="20 6 9 17 4 12" />
                 </svg>
-              ),
-            },
-            {
-              title: "Design & Planning",
-              description:
-                "Innovative architectural design and project planning.",
-              icon: (
+                <span>Quick approval process</span>
+              </div>
+              <div className="flex items-center">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="var(--orange)"
+                  stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-12 h-12"
+                  className="mr-3"
                 >
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                  <polyline points="20 6 9 17 4 极" />
                 </svg>
-              ),
-            },
-            {
-              title: "Construction Supplies",
-              description:
-                "High-quality materials for all your construction needs.",
-              icon: (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="var(--orange)"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-12 h-12"
+                <span>Customizable ₱ payment plans</span>
+              </div>
+            </div>
+
+            <button className="w-full mt-6 bg-white text-[var(--orange)] font-semibold py-3 px-6 rounded-lg hover:bg-gray-100 transition-colors duration-200">
+              Learn More About Financing
+            </button>
+          </motion.div>
+
+          {/* Services List - Right Side */}
+          <div className="lg:col-span-2 bg-white border-1 p-8">
+            <h3 className="text-2xl font-bold text-[var(--orange)] mb-6 text-center lg:text-left">
+              What we offer:
+            </h3>
+
+            <div className="space-y-4">
+              {services.map((service, index) => (
+                <motion.div
+                  key={index}
+                  className="flex items-start p-4 rounded-lg border border-gray-200 hover:border-[var(--orange)] hover:bg-orange-50 transition-all duration-200"
+                  variants={listItemVariants}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.1 }}
+                  whileHover={{ x: 5 }}
                 >
-                  <path d="M20 7h-3.5l-2.5-5h-5l-2.5 5H4v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
-                  <path d="M4 7h16" />
-                </svg>
-              ),
-            },
-          ].map((service, index) => (
+                  <div className="flex-shrink-0 w-8 h-8 bg-[var(--orange)] rounded-full flex items-center justify-center mr-4 mt-1">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <span className="text-lg font-medium text-gray-900">
+                    {service}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Additional Info */}
             <motion.div
-              key={index}
-              className="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 sm:p-6"
-              variants={cardVariants}
-              initial="hidden"
-              whileInView="visible"
+              className="mt-8 p-6 bg-gray-50 rounded-lg border-l-4 border-[var(--orange)]"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
               viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
             >
-              <div className="mb-4 flex justify-center">{service.icon}</div>
-              <h3 className="text-lg font-semibold text-center mb-2 text-gray-900 sm:text-md md:text-lg">
-                {service.title}
-              </h3>
-              <p className="text-gray-600 text-sm text-center md:text-md">
-                {service.description}
+              <p className="text-gray-700 italic">
+                "All services come with our comprehensive support and guidance
+                through every step of your construction journey."
               </p>
             </motion.div>
-          ))}
+          </div>
         </div>
+
+        {/* Project Timeline Component */}
+        <ProjectTimeline />
       </div>
     </motion.section>
   );
