@@ -66,6 +66,16 @@ export function PublicDesignDetails({
     setIsFavorite(!isFavorite);
   };
 
+  // Format loan term for display, matching admin side behavior
+  const formatLoanTerm = (): string => {
+    if (design.maxLoanTerm == null || design.loanTermType == null) return "N/A";
+    if (design.loanTermType === "years") {
+      const years = Math.round(design.maxLoanTerm / 12);
+      return `${years} ${years === 1 ? "year" : "years"}`;
+    }
+    return `${design.maxLoanTerm} ${design.maxLoanTerm === 1 ? "month" : "months"}`;
+  };
+
   // Calculate payment schedule if loan details are available
   const paymentSchedule =
     design.isLoanOffer &&
@@ -112,7 +122,6 @@ export function PublicDesignDetails({
             {/* Main Selected Image */}
             <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden group">
               {design.images[selectedImageIndex] && (
-                // Replace Image with regular img tag for external URLs
                 <img
                   src={design.images[selectedImageIndex]}
                   alt={`${design.name} - ${selectedImageIndex + 1}`}
@@ -171,7 +180,6 @@ export function PublicDesignDetails({
                     onClick={() => setSelectedImageIndex(index)}
                     className={`relative aspect-square bg-gray-100 rounded-md overflow-hidden border-2 transition-all ${selectedImageIndex === index ? "border-[var(--orange)]" : "border-transparent"}`}
                   >
-                    {/* Replace Image with regular img tag for external URLs */}
                     <img
                       src={image}
                       alt={`Thumbnail ${index + 1}`}
@@ -234,6 +242,9 @@ export function PublicDesignDetails({
                       <span className="h-5 w-5 text-green-600">✓</span>
                       <div>
                         <p className="text-sm text-gray-500">Loan Available</p>
+                        <p className="font-medium text-xs">
+                          {formatLoanTerm()}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -265,9 +276,7 @@ export function PublicDesignDetails({
                         </div>
                         <div>
                           <p className="text-sm text-gray-600">Loan Term</p>
-                          <p className="font-medium">
-                            {design.maxLoanTerm} {design.loanTermType}
-                          </p>
+                          <p className="font-medium">{formatLoanTerm()}</p>
                         </div>
                         {loanSummary && (
                           <div>
