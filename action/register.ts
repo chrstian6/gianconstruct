@@ -117,6 +117,7 @@ export async function registerUser(formData: FormData) {
       userId: user._id.toString(),
       email: user.email,
       user_id: user.user_id,
+      firstName: user.firstName,
     });
 
     try {
@@ -159,7 +160,7 @@ export async function registerUser(formData: FormData) {
                       <td style="background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #666666;">
                         <p style="margin: 0;">&copy; 2025 GianConstruct. All rights reserved.</p>
                         <p style="margin: 5px 0 0;">
-                          <a href="${process.env.NEXT_PUBLIC_APP_URL}/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a> | 
+                          <a href="${process.env.NEXT_PUBLIC_APP_URL}/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a> |
                           <a href="${process.env.NEXT_PUBLIC_APP_URL}/terms" style="color: #1a73e8; text-decoration: none;">Terms of Service</a>
                         </p>
                       </td>

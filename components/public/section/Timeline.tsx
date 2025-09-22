@@ -82,7 +82,7 @@ export default function Timeline() {
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
-          stroke-ap="round"
+          strokeLinecap="round"
           strokeLinejoin="round"
         >
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -130,7 +130,7 @@ export default function Timeline() {
           xmlns="http://www.w3.org/2000/svg"
           width="20"
           height="20"
-          viewBox="0 0 24 24"
+          viewBox="0 极 24 24"
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
@@ -185,11 +185,6 @@ export default function Timeline() {
                   delay: particle.delay,
                   ease: "easeInOut",
                 }}
-                onAnimationStart={() =>
-                  console.log(
-                    `Particle ${particle.id} started at (${particle.x}%, ${particle.y}%)`
-                  )
-                }
               />
             ))}
         </div>
@@ -197,7 +192,7 @@ export default function Timeline() {
 
       {/* Content Layer */}
       <motion.h3
-        className="text-4xl font-black text-[var(--orange)] text-center mb-12 tracking-tight z-10 relative"
+        className="text-4xl font-black text-black text-center mb-12 tracking-tight z-10 relative"
         initial={{ opacity: 0, y: 10 }}
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
@@ -221,24 +216,24 @@ export default function Timeline() {
               viewport={{ once: true }}
             >
               {/* Minimal timeline dot */}
-              <div className="absolute left-0 w-6 h-6 bg-[var(--orange)] rounded-full flex items-center justify-center text-white font-medium text-xs z-10 border-2 border-white shadow-sm">
+              <div className="absolute left-0 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-white font-medium text-xs z-10 border-2 border-white shadow-sm">
                 {step.step}
               </div>
 
               {/* Compact card */}
-              <div className="ml-12 bg-white p-4 rounded-lg border border-gray-150 flex-1">
+              <div className="ml-12 bg-white p-4 rounded-lg border border-gray-200 flex-1">
                 <div className="flex items-start mb-3">
-                  <div className="w-8 h-8 bg-[var(--orange)]/10 rounded-lg flex items-center justify-center text-[var(--orange)] mr-3">
+                  <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 mr-3">
                     {step.icon}
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-base font-semibold text-gray-900 mb-1 tracking-tight">
+                    <h4 className="text-base font-semibold text-black mb-1 tracking-tight">
                       {step.title}
                     </h4>
-                    <p className="text-sm text-gray-600 mb-2 leading-tight">
+                    <p className="text-sm text-gray-700 mb-2 leading-tight">
                       {step.description}
                     </p>
-                    <p className="text-xs text-gray-500 leading-relaxed">
+                    <p className="text-xs text-gray-600 leading-relaxed">
                       {step.details}
                     </p>
 
@@ -246,7 +241,7 @@ export default function Timeline() {
                     {step.link && (
                       <Link
                         href={step.link}
-                        className="inline-block mt-3 px-4 py-1.5 bg-[var(--orange)] text-white text-xs font-medium rounded-md hover:bg-orange-600 transition-colors duration-200"
+                        className="inline-block mt-3 px-4 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-md hover:bg-orange-600 transition-colors duration-200"
                       >
                         {step.linkText}
                       </Link>
@@ -267,17 +262,17 @@ export default function Timeline() {
         transition={{ delay: 0.3, duration: 0.4 }}
         viewport={{ once: true }}
       >
-        <h4 className="text-base font-semibold text-gray-900 mb-2 tracking-tight">
+        <h4 className="text-base font-semibold text-black mb-2 tracking-tight">
           Ready to Start Your Project?
         </h4>
-        <p className="text-sm text-gray-600 mb-4 max-w-md mx-auto">
+        <p className="text-sm text-gray-700 mb-4 max-w-md mx-auto">
           Begin with our catalog or schedule a consultation to discuss your
           needs
         </p>
         <div className="flex flex-col sm:flex-row gap-2 justify-center">
           <Link
             href="/catalog"
-            className="px-5 py-2 bg-[var(--orange)] text-white text-sm font-medium rounded-md hover:bg-orange-600 transition-colors duration-200"
+            className="px-5 py-2 bg-orange-500 text-white text-sm font-medium rounded-md hover:bg-orange-600 transition-colors duration-200"
           >
             View Catalog
           </Link>

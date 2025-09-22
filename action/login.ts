@@ -1,3 +1,4 @@
+// actions/login.ts
 "use server";
 
 import { z } from "zod";
@@ -60,6 +61,7 @@ export async function loginUser(formData: FormData) {
       email: user.email,
       verified: user.verified,
       role: user.role,
+      firstName: user.firstName,
     });
 
     if (data.password) {
@@ -84,6 +86,7 @@ export async function loginUser(formData: FormData) {
         userId: user._id.toString(),
         email: user.email,
         user_id: user.user_id,
+        firstName: user.firstName,
       });
 
       try {
@@ -126,7 +129,7 @@ export async function loginUser(formData: FormData) {
                         <td style="background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #666666;">
                           <p style="margin: 0;">© 2025 GianConstruct. All rights reserved.</p>
                           <p style="margin: 5px 0 0;">
-                            <a href="${process.env.NEXT_PUBLIC_APP_URL}/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a> | 
+                            <a href="${process.env.NEXT_PUBLIC_APP_URL}/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a> |
                             <a href="${process.env.NEXT_PUBLIC_APP_URL}/terms" style="color: #1a73e8; text-decoration: none;">Terms of Service</a>
                           </p>
                         </td>
@@ -164,7 +167,8 @@ export async function loginUser(formData: FormData) {
     const { sessionId, sessionData } = await manageSession(
       user._id.toString(),
       user.email,
-      user.user_id
+      user.user_id,
+      user.firstName
     );
 
     // Set sessionId cookie
@@ -172,19 +176,22 @@ export async function loginUser(formData: FormData) {
     cookieStore.set("sessionId", sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60,
+      sameSite: "lax",
       path: "/",
+      maxAge: 24 * 60 * 60,
     });
 
     console.log("Login successful, session created:", {
       sessionId,
       email: user.email,
+      firstName: user.firstName,
     });
 
     return {
       success: true,
       user: {
         user_id: user.user_id,
+        firstName: user.firstName,
         email: user.email,
         role: user.role,
       },
@@ -200,3 +207,5 @@ export async function loginUser(formData: FormData) {
     };
   }
 }
+
+

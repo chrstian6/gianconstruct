@@ -187,7 +187,7 @@ export function NotificationSheet({
             <div className="h-full flex flex-col">
               <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-800">
+                  <h3 className="text-2xl tracking-tight font-bold text-gray-800">
                     Notifications ({notifications.length})
                   </h3>
                   <Button

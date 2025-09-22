@@ -6,7 +6,6 @@ import dbConnect from "@/lib/db";
 import DesignModel from "@/models/Design";
 import { supabase } from "@/lib/supabase";
 import { nanoid } from "nanoid";
-import mongoose from "mongoose";
 import {
   AddDesignResponse,
   DeleteDesignResponse,
@@ -112,10 +111,13 @@ export async function addDesign(
       images: imageUrls,
       createdBy,
       isLoanOffer,
-      maxLoanTerm: isLoanOffer ? maxLoanTerm : null,
-      loanTermType: isLoanOffer ? loanTermType : null,
-      interestRate: isLoanOffer ? interestRate : null,
-      interestRateType: isLoanOffer ? interestRateType : null,
+      // Only include loan-related fields if isLoanOffer is true
+      ...(isLoanOffer && {
+        maxLoanTerm,
+        loanTermType,
+        interestRate,
+        interestRateType,
+      }),
       design_id: nanoid(10),
     };
 
@@ -242,10 +244,20 @@ export async function updateDesign(
       images: [...existingImages, ...newImageUrls],
       createdBy,
       isLoanOffer,
-      maxLoanTerm: isLoanOffer ? maxLoanTerm : null,
-      loanTermType: isLoanOffer ? loanTermType : null,
-      interestRate: isLoanOffer ? interestRate : null,
-      interestRateType: isLoanOffer ? interestRateType : null,
+      // Only include loan-related fields if isLoanOffer is true, otherwise set to undefined
+      ...(isLoanOffer
+        ? {
+            maxLoanTerm,
+            loanTermType,
+            interestRate,
+            interestRateType,
+          }
+        : {
+            maxLoanTerm: undefined,
+            loanTermType: undefined,
+            interestRate: undefined,
+            interestRateType: undefined,
+          }),
     };
 
     const updatedDesign = await DesignModel.findOneAndUpdate(

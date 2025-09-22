@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { useModalStore, useAuthStore } from "@/lib/stores";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -18,66 +19,25 @@ export default function LoginModal() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
-  const [step, setStep] = useState("email");
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     console.log("Email state:", email);
-    if (step === "password") {
-      setPassword("");
-    }
-  }, [email, step]);
+  }, [email]);
 
-  const handleEmailSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsCheckingEmail(true);
+    setIsLoading(true);
 
     try {
       const formData = new FormData();
       const normalizedEmail = email.trim().toLowerCase();
       formData.append("email", normalizedEmail);
-      console.log("Submitting email:", normalizedEmail);
-
-      const result = await loginUser(formData);
-      console.log("Email check result:", result);
-
-      if (result.success) {
-        setStep("password");
-      } else {
-        const errorMessage =
-          typeof result.error === "string"
-            ? result.error
-            : result.error?.email || "Unable to validate email";
-        toast.error(errorMessage, {
-          className:
-            "bg-red-50 text-red-700 border border-red-200 rounded-md shadow-sm py-2 px-4 text-sm font-medium",
-          duration: 4000,
-          position: "top-right",
-        });
-      }
-    } catch (error) {
-      console.error("Email check failed:", error);
-      toast.error("Failed to validate email. Please try again.", {
-        className:
-          "bg-red-50 text-red-700 border border-red-200 rounded-md shadow-sm py-2 px-4 text-sm font-medium",
-        duration: 4000,
-        position: "top-right",
-      });
-    } finally {
-      setIsCheckingEmail(false);
-    }
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    try {
-      const formData = new FormData();
-      formData.append("email", email.trim().toLowerCase());
       formData.append("password", password);
+
       console.log("Submitting login:", {
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password: "[hidden]",
       });
 
@@ -134,6 +94,8 @@ export default function LoginModal() {
         duration: 4000,
         position: "top-right",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -150,160 +112,127 @@ export default function LoginModal() {
             transition={{ duration: 0.3 }}
           >
             <motion.div
-              className="bg-white rounded-xl shadow-xl w-full max-w-md relative overflow-hidden"
+              className="w-full max-w-md relative"
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
-              {/* Header with orange accent */}
-              <div className="bg-[var(--orange)] p-6 text-center">
-                <h1 className="text-2xl font-bold text-white">
-                  GianConstruct®
-                </h1>
-                <p className="text-white/90 mt-1">
-                  {step === "email"
-                    ? "Sign In to Continue"
-                    : "Enter Your Password"}
-                </p>
-              </div>
-
               {/* Close button */}
               <button
-                className="absolute top-4 right-4 text-white hover:text-gray-200 transition-colors"
+                className="absolute top-2 right-2 z-50 bg-white rounded-full p-1 shadow-md hover:bg-gray-100 transition-colors"
                 onClick={() => {
                   setIsLoginOpen(false);
                   console.log("LoginModal closed");
                 }}
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-gray-600" />
               </button>
 
-              <div className="p-6">
-                {step === "email" ? (
-                  <form onSubmit={handleEmailSubmit} className="space-y-4">
-                    <div>
-                      <Label
-                        htmlFor="email"
-                        className="text-gray-700 text-sm font-medium mb-2"
-                      >
-                        Email Address
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="Enter your email"
-                        className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)]"
-                        value={email}
-                        onChange={(e) => {
-                          const value = e.target.value ?? "";
-                          setEmail(value);
-                          console.log("Email input:", value);
-                        }}
-                        required
-                        autoComplete="email"
-                      />
-                    </div>
+              <Card className="overflow-hidden p-0 border-0 shadow-xl">
+                <CardContent className="grid p-0">
+                  <form
+                    className="p-6 md:p-8 bg-white"
+                    onSubmit={handleLoginSubmit}
+                  >
+                    <div className="flex flex-col gap-6">
+                      <div className="flex flex-col items-center text-center">
+                        <h1 className="text-2xl font-bold text-black">
+                          Welcome back
+                        </h1>
+                        <p className="text-gray-600 text-balance">
+                          Sign in to your GianConstruct® account
+                        </p>
+                      </div>
 
-                    <Button
-                      type="submit"
-                      className="w-full bg-[var(--orange)] hover:bg-orange-600 text-white font-semibold py-3"
-                      disabled={isCheckingEmail}
-                    >
-                      {isCheckingEmail ? "Checking..." : "Continue with Email"}
-                    </Button>
-
-                    <div className="text-center pt-4 border-t border-gray-200 mt-6">
-                      <p className="text-sm text-gray-600">
-                        Don't have an account?{" "}
-                        <button
-                          type="button"
-                          className="text-[var(--orange)] hover:text-orange-600 font-medium"
-                          onClick={() => {
-                            setIsLoginOpen(false);
-                            setIsCreateAccountOpen(true);
+                      <div className="grid gap-3">
+                        <Label htmlFor="email" className="text-black">
+                          Email
+                        </Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="m@example.com"
+                          required
+                          className="border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                          value={email}
+                          onChange={(e) => {
+                            const value = e.target.value ?? "";
+                            setEmail(value);
+                            console.log("Email input:", value);
                           }}
-                        >
-                          Sign up now
-                        </button>
-                      </p>
-                    </div>
-                  </form>
-                ) : (
-                  <form onSubmit={handlePasswordSubmit} className="space-y-4">
-                    <div className="relative">
-                      <Label
-                        htmlFor="password"
-                        className="text-gray-700 text-sm font-medium mb-2"
-                      >
-                        Password
-                      </Label>
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Enter your password"
-                        className="border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)] pr-10"
-                        value={password}
-                        onChange={(e) => {
-                          setPassword(e.target.value);
-                          console.log("Password input: [hidden]");
-                        }}
-                        required
-                        autoComplete="current-password"
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
-                        onClick={() => setShowPassword(!showPassword)}
-                        title={showPassword ? "Hide password" : "Show password"}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
+                          autoComplete="email"
+                        />
+                      </div>
 
-                    <div className="flex gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="flex-1 border-gray-300 text-gray-700"
-                        onClick={() => {
-                          setStep("email");
-                          setPassword("");
-                          console.log("Back to email step");
-                        }}
-                      >
-                        Back
-                      </Button>
+                      <div className="grid gap-3">
+                        <div className="flex items-center">
+                          <Label htmlFor="password" className="text-black">
+                            Password
+                          </Label>
+                          <a
+                            href="#"
+                            className="ml-auto text-sm underline-offset-2 hover:underline text-orange-500"
+                          >
+                            Forgot your password?
+                          </a>
+                        </div>
+                        <div className="relative">
+                          <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            required
+                            className="border-gray-300 focus:border-orange-500 focus:ring-orange-500 pr-10"
+                            placeholder="Enter your password"
+                            value={password}
+                            onChange={(e) => {
+                              setPassword(e.target.value);
+                              console.log("Password input: [hidden]");
+                            }}
+                            autoComplete="current-password"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                            onClick={() => setShowPassword(!showPassword)}
+                            title={
+                              showPassword ? "Hide password" : "Show password"
+                            }
+                          >
+                            {showPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
                       <Button
                         type="submit"
-                        className="flex-1 bg-[var(--orange)] hover:bg-orange-600 text-white font-semibold"
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                        disabled={isLoading}
                       >
-                        Sign In
+                        {isLoading ? "Signing in..." : "Sign In"}
                       </Button>
-                    </div>
 
-                    <div className="text-center pt-4 border-t border-gray-200 mt-6">
-                      <p className="text-sm text-gray-600">
+                      <div className="text-center text-sm">
                         Don't have an account?{" "}
                         <button
                           type="button"
-                          className="text-[var(--orange)] hover:text-orange-600 font-medium"
+                          className="text-orange-500 hover:text-orange-600 underline underline-offset-4"
                           onClick={() => {
                             setIsLoginOpen(false);
                             setIsCreateAccountOpen(true);
                           }}
                         >
-                          Sign up now
+                          Sign up
                         </button>
-                      </p>
+                      </div>
                     </div>
                   </form>
-                )}
-              </div>
+                </CardContent>
+              </Card>
             </motion.div>
           </motion.div>
         )}
