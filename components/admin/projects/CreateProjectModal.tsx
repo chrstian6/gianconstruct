@@ -20,7 +20,6 @@ import {
   Mail,
   Phone,
   CalendarIcon,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createProject } from "@/action/project";

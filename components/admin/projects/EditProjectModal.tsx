@@ -20,7 +20,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, Info, AlertCircle, HardHat } from "lucide-react";
+import { CalendarIcon, Info, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { updateProject } from "@/action/project";
 import {

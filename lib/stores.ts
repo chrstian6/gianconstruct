@@ -1,19 +1,47 @@
+// lib/stores.ts
 "use client";
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { IInventory } from "@/types/Inventory";
 
+// Define User type for user management
+interface User {
+  user_id: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  contactNo?: string;
+  email: string;
+  role: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ModalStore {
+  // Auth modals
   isLoginOpen: boolean;
   isCreateAccountOpen: boolean;
+
+  // Design modals
   isDeleteDesignOpen: boolean;
+  designIdToDelete: string | null;
+
+  // Project modals
   isCreateProjectOpen: boolean;
   isEditProjectOpen: boolean;
-  isEditInventoryOpen: boolean;
-  designIdToDelete: string | null;
   editingProject: any | null;
+
+  // Inventory modals
+  isEditInventoryOpen: boolean;
   editingInventory: IInventory | null;
+
+  // User management modals
+  isEditUserOpen: boolean;
+  editingUser: User | null;
+
+  // Modal control methods
   setIsLoginOpen: (open: boolean) => void;
   setIsCreateAccountOpen: (open: boolean) => void;
   setIsDeleteDesignOpen: (open: boolean, designId?: string) => void;
@@ -23,6 +51,7 @@ interface ModalStore {
     open: boolean,
     inventory?: IInventory | null
   ) => void;
+  setIsEditUserOpen: (open: boolean, user?: User | null) => void;
 }
 
 interface AuthStore {
@@ -48,22 +77,29 @@ interface AuthStore {
 }
 
 export const useModalStore = create<ModalStore>((set) => ({
+  // Initial state
   isLoginOpen: false,
   isCreateAccountOpen: false,
   isDeleteDesignOpen: false,
   isCreateProjectOpen: false,
   isEditProjectOpen: false,
   isEditInventoryOpen: false,
+  isEditUserOpen: false,
+
   designIdToDelete: null,
   editingProject: null,
   editingInventory: null,
+  editingUser: null,
 
+  // Modal control methods
   setIsLoginOpen: (open: boolean) => {
     set({ isLoginOpen: open });
   },
+
   setIsCreateAccountOpen: (open: boolean) => {
     set({ isCreateAccountOpen: open });
   },
+
   setIsDeleteDesignOpen: (open: boolean, designId?: string) => {
     set({
       isDeleteDesignOpen: open,
@@ -73,12 +109,14 @@ export const useModalStore = create<ModalStore>((set) => ({
       window.location.reload();
     }
   },
+
   setIsCreateProjectOpen: (open: boolean) => {
     set({ isCreateProjectOpen: open });
     if (!open) {
       window.location.reload();
     }
   },
+
   setIsEditProjectOpen: (open: boolean, project?: any) => {
     set({
       isEditProjectOpen: open,
@@ -88,10 +126,21 @@ export const useModalStore = create<ModalStore>((set) => ({
       window.location.reload();
     }
   },
+
   setIsEditInventoryOpen: (open: boolean, inventory?: IInventory | null) => {
     set({
       isEditInventoryOpen: open,
       editingInventory: open ? inventory : null,
+    });
+    if (!open) {
+      window.location.reload();
+    }
+  },
+
+  setIsEditUserOpen: (open: boolean, user?: User | null) => {
+    set({
+      isEditUserOpen: open,
+      editingUser: open ? user : null,
     });
     if (!open) {
       window.location.reload();
@@ -105,6 +154,7 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       loading: true,
       initialized: false,
+
       setUser: async (
         user: {
           user_id: string;
@@ -115,7 +165,9 @@ export const useAuthStore = create<AuthStore>()(
       ) => {
         set({ user, loading: false });
       },
+
       setLoading: (loading: boolean) => set({ loading }),
+
       clearUser: async () => {
         set({ user: null, initialized: false, loading: false });
         try {
@@ -131,6 +183,7 @@ export const useAuthStore = create<AuthStore>()(
           console.error("Error clearing session:", error);
         }
       },
+
       initialize: async () => {
         const { initialized } = get();
 

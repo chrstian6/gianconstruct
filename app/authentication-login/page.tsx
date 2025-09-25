@@ -1,10 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Toaster } from "sonner";
 import LoginForm from "@/components/auth/LoginForm";
-import { X, GalleryVerticalEnd } from "lucide-react";
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 // Define the AuthPage component
@@ -19,10 +17,10 @@ export default function AuthPage() {
       <div className="flex flex-col gap-4 p-6 md:p-10">
         {/* Header with Logo and Brand */}
         <div className="flex justify-center gap-2 md:justify-start">
-          <a href="#" className="flex items-center gap-2 font-medium">
-            <div className="bg-orange-500 text-white flex size-6 items-center justify-center rounded-md">
-              <GalleryVerticalEnd className="size-4" />
-            </div>
+          <a
+            href="#"
+            className="flex items-center gap-2 font-bold text-xl text-orange-500"
+          >
             GianConstruct®
           </a>
         </div>

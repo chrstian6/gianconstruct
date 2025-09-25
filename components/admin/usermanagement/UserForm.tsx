@@ -10,6 +10,7 @@ import { adminRegisterUser } from "@/action/adminRegister";
 
 interface UserFormProps {
   onAddUser: (user: any) => void;
+  onCancel?: () => void;
 }
 
 // Define the User type locally
