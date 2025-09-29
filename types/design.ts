@@ -37,6 +37,7 @@ export interface UpdateDesignResponse {
 export interface GetDesignsResponse {
   success: boolean;
   designs?: Design[];
+  data?: PaginatedDesignsResponse;
   error?: string;
 }
 
@@ -53,4 +54,11 @@ export interface LoginResponse {
   success: boolean;
   user?: User;
   error?: string;
+}
+
+export interface PaginatedDesignsResponse {
+  designs: Design[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }

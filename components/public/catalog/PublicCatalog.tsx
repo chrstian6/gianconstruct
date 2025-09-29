@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -15,9 +16,9 @@ import { toast } from "sonner";
 import { Design } from "@/types/design";
 import { getDesigns } from "@/action/designs";
 import { submitInquiry } from "@/action/inquiries";
-import { Home, Square, Heart, ArrowRight, X } from "lucide-react";
+import { X } from "lucide-react";
 import { PublicDesignDetails } from "@/components/public/catalog/PublicDesignDetails";
-import Image from "next/image";
+import { CatalogCard } from "@/components/public/catalog/CatalogCard";
 import Confetti from "react-confetti";
 
 export default function PublicCatalog() {
@@ -31,14 +32,14 @@ export default function PublicCatalog() {
     phone: "",
     message: "",
   });
-  const [isLoading, setIsLoading] = useState(false); // For form submission
-  const [showConfetti, setShowConfetti] = useState(false); // State to control confetti
-  const [showAcknowledgment, setShowAcknowledgment] = useState(false); // State for acknowledgment dialog
-  const [fetching, setFetching] = useState(true); // New state for data fetching
+  const [isLoading, setIsLoading] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showAcknowledgment, setShowAcknowledgment] = useState(false);
+  const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
     const fetchDesigns = async () => {
-      setFetching(true); // Start loading
+      setFetching(true);
       try {
         const result = await getDesigns();
         if (result.success && result.designs) {
@@ -49,7 +50,7 @@ export default function PublicCatalog() {
       } catch (error) {
         toast.error("An error occurred while loading designs");
       } finally {
-        setFetching(false); // End loading
+        setFetching(false);
       }
     };
     fetchDesigns();
@@ -77,19 +78,19 @@ export default function PublicCatalog() {
       formDataObj.append("email", formData.email);
       formDataObj.append("phone", formData.phone);
       formDataObj.append("message", formData.message);
-      formDataObj.append("designId", selectedDesign.design_id); // Already using design_id
+      formDataObj.append("designId", selectedDesign.design_id);
 
       const result = await submitInquiry(formDataObj);
       if (result.success) {
         toast.success("Inquiry submitted successfully!");
-        setIsInquiryOpen(false); // Close inquiry modal
+        setIsInquiryOpen(false);
         setFormData({ name: "", email: "", phone: "", message: "" });
-        setShowConfetti(true); // Trigger confetti
-        setShowAcknowledgment(true); // Show acknowledgment dialog
+        setShowConfetti(true);
+        setShowAcknowledgment(true);
         setTimeout(() => {
-          setShowConfetti(false); // Hide confetti after 5 seconds
-          setShowAcknowledgment(false); // Close acknowledgment after 5 seconds
-        }, 5000); // 5 seconds duration
+          setShowConfetti(false);
+          setShowAcknowledgment(false);
+        }, 5000);
       } else {
         toast.error(result.error || "Failed to submit inquiry");
       }
@@ -127,6 +128,8 @@ export default function PublicCatalog() {
           }}
         />
       )}
+
+      {/* Header Section */}
       <div className="text-center mb-16">
         <h1 className="text-4xl tracking-tight font-black text-[var(--orange)] mb-4">
           Our Design Catalog
@@ -136,7 +139,10 @@ export default function PublicCatalog() {
           lifestyle
         </p>
       </div>
+
       <hr className="border-t border-gray-200 my-8" />
+
+      {/* Designs Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         {fetching
           ? Array.from({ length: 8 }).map((_, index) => (
@@ -158,83 +164,17 @@ export default function PublicCatalog() {
                 </div>
               </div>
             ))
-          : designs.map((design, index) => (
-              <React.Fragment key={design.design_id}>
-                {" "}
-                {/* Changed from _id to design_id */}
-                <div
-                  className="group bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                  onClick={() => handleDesignClick(design)}
-                >
-                  <div className="relative aspect-[4/3] bg-gray-50">
-                    {design.images.length > 0 ? (
-                      <Image
-                        src={design.images[0]}
-                        alt={design.name}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-400">
-                        No image available
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
-                      <Button
-                        variant="outline"
-                        className="bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-900"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleInquire(design);
-                        }}
-                      >
-                        Inquire Now <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="absolute top-4 left-4 flex gap-2">
-                      <span className="bg-[var(--orange)] text-white text-sm font-medium px-3 py-1 rounded-full">
-                        {formatPrice(design.price)}
-                      </span>
-                      {design.isLoanOffer && (
-                        <span className="bg-green-600 text-white text-xs font-medium px-2 py-1 rounded-full">
-                          Loan Available
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      className="absolute top-4 right-4 p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Add favorite functionality here
-                      }}
-                    >
-                      <Heart className="h-5 w-5 text-gray-700" />
-                    </button>
-                  </div>
-
-                  <div className="p-6">
-                    <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1">
-                      {design.name}
-                    </h3>
-                    <p className="text-gray-600 text-sm line-clamp-2 mb-4">
-                      {design.description}
-                    </p>
-
-                    <div className="flex justify-between items-center text-sm text-gray-500 border-t border-gray-100 pt-4">
-                      <div className="flex items-center gap-1">
-                        <Home className="h-4 w-4 text-[var(--orange)]" />
-                        <span>{design.number_of_rooms} Rooms</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Square className="h-4 w-4 text-[var(--orange)]" />
-                        <span>{design.square_meters} sqm</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </React.Fragment>
+          : designs.map((design) => (
+              <CatalogCard
+                key={design.design_id}
+                design={design}
+                onDesignClick={handleDesignClick}
+                onInquire={handleInquire}
+                formatPrice={formatPrice}
+              />
             ))}
       </div>
+
       {/* Design Details Modal */}
       {selectedDesign && (
         <PublicDesignDetails
@@ -244,6 +184,7 @@ export default function PublicCatalog() {
           onInquire={handleInquire}
         />
       )}
+
       {/* Inquiry Form Modal */}
       <Dialog open={isInquiryOpen} onOpenChange={setIsInquiryOpen}>
         <DialogContent className="sm:max-w-lg rounded-xl">
@@ -351,6 +292,7 @@ export default function PublicCatalog() {
           </div>
         </DialogContent>
       </Dialog>
+
       {/* Acknowledgment Dialog */}
       <Dialog open={showAcknowledgment} onOpenChange={setShowAcknowledgment}>
         <DialogContent className="sm:max-w-md rounded-xl p-8">

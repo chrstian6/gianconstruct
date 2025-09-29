@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { nanoid } from "nanoid";
 import dbConnect from "../lib/db";
 import User from "../models/User";
 import {
@@ -9,7 +10,6 @@ import {
   deleteVerificationToken,
 } from "../lib/redis";
 import { sendEmail } from "../lib/nodemailer";
-import { nanoid } from "nanoid";
 
 const emailSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -41,11 +41,27 @@ interface ErrorResponse {
 }
 
 async function generateUserId(): Promise<string> {
-  const timestamp = Date.now().toString().slice(-6);
-  const random = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, "0");
-  return `GC${timestamp}${random}`;
+  await dbConnect();
+
+  // Find the highest existing user_id with GC- prefix
+  const lastUser = await User.findOne(
+    { user_id: { $regex: /^GC-\d+$/ } },
+    { user_id: 1 },
+    { sort: { user_id: -1 } }
+  );
+
+  let nextNumber = 1;
+
+  if (lastUser && lastUser.user_id) {
+    // Extract the number part from the last user_id (e.g., "GC-0042" -> 42)
+    const lastNumber = parseInt(lastUser.user_id.split("-")[1]);
+    if (!isNaN(lastNumber)) {
+      nextNumber = lastNumber + 1;
+    }
+  }
+
+  // Format as GC-0001, GC-0002, etc. with leading zeros
+  return `GC-${nextNumber.toString().padStart(4, "0")}`;
 }
 
 export async function initiateEmailSignup(formData: FormData) {
@@ -90,6 +106,9 @@ export async function initiateEmailSignup(formData: FormData) {
         email: email.toLowerCase(),
         verified: false,
         role: "user",
+        timeStamp: new Date().toISOString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
       await user.save();
       isNewUser = true;
@@ -308,8 +327,16 @@ export async function completeUserProfile(
     user.lastName = profileData.lastName;
     user.address = profileData.address;
     user.contactNo = profileData.contactNo;
+
+    // Hash password with error handling
+    if (typeof user.hashPassword !== "function") {
+      console.error("hashPassword is not a function on user instance");
+      throw new Error("Password hashing method is unavailable");
+    }
     await user.hashPassword(profileData.password);
+
     user.verified = true;
+    user.updatedAt = new Date();
     await user.save();
 
     return {

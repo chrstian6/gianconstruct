@@ -9,7 +9,18 @@ import { getUsers } from "@/action/userManagement";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Plus, X, Filter, Download, ChevronDown } from "lucide-react";
+import {
+  Search,
+  Plus,
+  X,
+  Filter,
+  Download,
+  ChevronDown,
+  Users,
+  UserCheck,
+  UserCog,
+  UserX,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +40,8 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { useModalStore } from "@/lib/stores";
+import NotFound from "@/components/admin/NotFound";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Define the User type locally since it doesn't exist in types/user
 interface User {
@@ -46,6 +59,27 @@ interface User {
 
 type StatusFilter = "all" | "verified" | "unverified";
 type RoleFilter = "all" | string;
+
+// Skeleton component for the table
+const TableSkeleton = () => {
+  return (
+    <div className="w-full space-y-3">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div key={index} className="flex items-center space-x-4 p-4 border-b">
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-20 ml-auto" />
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -65,17 +99,25 @@ export default function UserManagementPage() {
     actions: true,
   });
   const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const { setIsEditUserOpen } = useModalStore();
 
   // Fetch users on mount
   useEffect(() => {
     async function fetchUsers() {
-      const result = await getUsers();
-      if (result.success && result.users) {
-        setUsers(result.users);
-      } else {
-        toast.error(result.error || "Failed to fetch users");
+      try {
+        setIsLoading(true);
+        const result = await getUsers();
+        if (result.success && result.users) {
+          setUsers(result.users);
+        } else {
+          toast.error(result.error || "Failed to fetch users");
+        }
+      } catch (error) {
+        toast.error("Failed to fetch users");
+      } finally {
+        setIsLoading(false);
       }
     }
     fetchUsers();
@@ -292,15 +334,55 @@ export default function UserManagementPage() {
         </h1>
       </div>
 
-      {/* Stats Section */}
-      <div className="flex gap-4 mb-6 text-sm text-gray-600">
-        <p>Total Users: {userStats.total}</p>
-        <p>Verified: {userStats.verified}</p>
-        <p>Admins: {userStats.admins}</p>
-        <p>Regular Users: {userStats.users}</p>
-      </div>
+      {/* Stats Cards Section */}
+      {/* Stats Cards Section */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <Card className="rounded-sm shadow-none border">
+          <CardContent className="p-3">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {userStats.total}
+              </p>
+              <p className="text-sm font-semibold text-gray-600">Total Users</p>
+            </div>
+          </CardContent>
+        </Card>
 
-      <hr className="my-4 border-t border-gray-200" />
+        <Card className="rounded-sm shadow-none border">
+          <CardContent className="p-3">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {userStats.verified}
+              </p>
+              <p className="text-sm font-semibold text-gray-600">Verified</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-sm shadow-none border">
+          <CardContent className="p-3">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {userStats.admins}
+              </p>
+              <p className="text-sm font-semibold text-gray-600">
+                Administrators
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-sm shadow-none border">
+          <CardContent className="p-3">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
+                {userStats.unverified}
+              </p>
+              <p className="text-sm font-semibold text-gray-600">Unverified</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Main Content Area */}
       {showAddUserForm ? (
@@ -469,33 +551,58 @@ export default function UserManagementPage() {
           </div>
 
           {/* User Table Content */}
-          {filteredUsers.length === 0 ? (
-            <Card className="max-w-md mx-auto">
-              <CardContent className="pt-2">
-                <div className="text-center p-8">
-                  <h3 className="text-xl font-semibold text-gray-900 font-geist">
-                    No users found
-                  </h3>
-                  <p className="text-gray-600 mt-2 font-geist">
-                    {hasActiveFilters
-                      ? "Try adjusting your filters or search query."
-                      : "No users available. Add a new user to get started."}
-                  </p>
-                  {hasActiveFilters && (
-                    <Button
-                      onClick={clearFilters}
-                      variant="custom"
-                      size="sm"
-                      className="mt-4 rounded-sm font-geist"
-                    >
-                      Clear Filters
-                    </Button>
-                  )}
+          {isLoading ? (
+            <Card className="w-full">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
+                  <div>
+                    <CardTitle className="text-foreground-900 font-geist">
+                      User Management
+                    </CardTitle>
+                    <CardDescription className="font-geist">
+                      Loading users...
+                    </CardDescription>
+                  </div>
                 </div>
+              </CardHeader>
+              <CardContent>
+                <TableSkeleton />
               </CardContent>
             </Card>
+          ) : filteredUsers.length === 0 ? (
+            users.length === 0 ? (
+              <NotFound
+                title="No users found in the system"
+                description="Get started by adding your first user to manage your construction team and clients."
+              />
+            ) : (
+              <Card className="max-w-md mx-auto rounded-sm shadow-none border">
+                <CardContent className="pt-2">
+                  <div className="text-center p-8">
+                    <h3 className="text-xl font-semibold text-gray-900 font-geist">
+                      No users found
+                    </h3>
+                    <p className="text-gray-600 mt-2 font-geist">
+                      {hasActiveFilters
+                        ? "Try adjusting your filters or search query."
+                        : "No users match your current criteria."}
+                    </p>
+                    {hasActiveFilters && (
+                      <Button
+                        onClick={clearFilters}
+                        variant="custom"
+                        size="sm"
+                        className="mt-4 rounded-sm font-geist"
+                      >
+                        Clear Filters
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
           ) : (
-            <Card className="w-full">
+            <Card className="w-full rounded-sm shadow-none border">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
                   <div>
@@ -594,7 +701,7 @@ export default function UserManagementPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="w-full rounded-md border">
+                <div className="w-full rounded-sm border">
                   <UserManagementTable
                     users={filteredUsers}
                     onUpdate={handleUpdate}

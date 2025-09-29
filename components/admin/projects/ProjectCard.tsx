@@ -22,6 +22,7 @@ import {
   XCircle,
   Play,
   HardHat,
+  CheckSquare,
 } from "lucide-react";
 import { Project } from "@/types/project";
 import {
@@ -30,6 +31,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 interface ProjectCardProps {
   project: Project;
@@ -39,6 +42,9 @@ interface ProjectCardProps {
   onDelete: (project: Project) => void;
   userName?: string;
   location?: string;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 export default function ProjectCard({
@@ -49,6 +55,9 @@ export default function ProjectCard({
   onDelete,
   userName,
   location,
+  isSelectMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: ProjectCardProps) {
   const calculateProgress = (startDate: Date, endDate: Date | undefined) => {
     if (!endDate) return 0;
@@ -161,13 +170,49 @@ export default function ProjectCard({
   const StatusIcon =
     statusConfig[project.status as keyof typeof statusConfig]?.icon || Clock;
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // If in select mode, prevent navigation and handle selection
+    if (isSelectMode) {
+      e.preventDefault();
+      onSelect(project);
+    } else {
+      onSelect(project);
+    }
+  };
+
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleSelect?.();
+  };
+
   return (
     <Card
-      className={`w-full max-w-md transition-all shadow-none rounded-sm cursor-pointer border-gray-200 ${
-        project.status === "completed" ? "bg-gray-50" : "bg-white"
-      } cursor-pointer flex flex-col`}
-      onClick={() => onSelect(project)}
+      className={cn(
+        "w-full max-w-md transition-all shadow-none rounded-sm cursor-pointer border-gray-200 flex flex-col relative",
+        project.status === "completed" ? "bg-gray-50" : "bg-white",
+        isSelectMode && "border-gray-300",
+        isSelected && "border-blue-500 ring-2 ring-blue-200"
+      )}
+      onClick={handleCardClick}
     >
+      {/* Checkbox for multi-select mode */}
+      {isSelectMode && (
+        <div
+          className="absolute top-3 left-3 z-10"
+          onClick={handleCheckboxClick}
+        >
+          <Checkbox
+            checked={isSelected}
+            className={cn(
+              "h-5 w-5 rounded border-2",
+              isSelected
+                ? "bg-blue-600 border-blue-600 text-white"
+                : "bg-white border-gray-300"
+            )}
+          />
+        </div>
+      )}
+
       <CardHeader className="pb-2 border-b border-gray-100 px-3 pt-3">
         <div className="flex justify-between items-start gap-2">
           <CardTitle className="text-md font-medium text-gray-900 line-clamp-2 leading-tight flex-1 min-w-0">
@@ -182,41 +227,43 @@ export default function ProjectCard({
               {statusConfig[project.status as keyof typeof statusConfig]?.label}
             </Badge>
 
-            {/* Dropdown Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 rounded-full hover:bg-gray-100"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreVertical className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(project);
-                  }}
-                  className="text-xs cursor-pointer"
-                >
-                  <Edit className="h-3.5 w-3.5 mr-2" />
-                  Edit Project
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(project);
-                  }}
-                  className="text-xs cursor-pointer text-red-600 focus:text-red-600"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />
-                  Delete Project
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Dropdown Menu - Only show when not in select mode */}
+            {!isSelectMode && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 rounded-full hover:bg-gray-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(project);
+                    }}
+                    className="text-xs cursor-pointer"
+                  >
+                    <Edit className="h-3.5 w-3.5 mr-2" />
+                    Edit Project
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(project);
+                    }}
+                    className="text-xs cursor-pointer text-red-600 focus:text-red-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                    Delete Project
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
         <div className="flex items-center text-[0.6rem] text-gray-600 mt-1">
@@ -347,8 +394,17 @@ export default function ProjectCard({
             onSelect(project);
           }}
         >
-          View Details
-          <ArrowRight className="ml-1 h-3 w-3" />
+          {isSelectMode ? (
+            <>
+              <CheckSquare className="mr-1 h-3 w-3" />
+              {isSelected ? "Selected" : "Select"}
+            </>
+          ) : (
+            <>
+              View Details
+              <ArrowRight className="ml-1 h-3 w-3" />
+            </>
+          )}
         </Button>
       </CardFooter>
     </Card>

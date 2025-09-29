@@ -268,11 +268,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarContent className="text-xs font-medium text-900 pl-2">
           {data.navMain.map((item) => (
             <SidebarGroup key={item.section}>
-              <SidebarGroupLabel className="text-xs">{item.section}</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-xs">
+                {item.section}
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {item.items.map((subItem) => (
-                    <SidebarMenuItem key={subItem.name} className="text-xs">
+                    <SidebarMenuItem key={subItem.name} className="text-md">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           {subItem.isDropdown ? (
@@ -287,7 +289,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     subItem.dropdownItems
                                   )}
                                   className={cn(
-                                    "text-xs flex items-center justify-between w-full",
+                                    "text-md flex items-center justify-between w-full",
                                     isDropdownActive(subItem.dropdownItems) &&
                                       "text-gray-900 font-semibold tracking-relaxed"
                                   )}
@@ -300,7 +302,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 </SidebarMenuButton>
                               </CollapsibleTrigger>
                               <CollapsibleContent>
-                                <SidebarMenu className="ml-4 border-l border-border pl-2">
+                                <SidebarMenu className="ml-4 border-l border-border pl-2 text-md">
                                   {subItem.dropdownItems?.map(
                                     (dropdownItem) => (
                                       <SidebarMenuItem key={dropdownItem.name}>
@@ -308,7 +310,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                           asChild
                                           isActive={isActive(dropdownItem.href)}
                                           className={cn(
-                                            "text-xs flex items-center gap-2",
+                                            "text-md flex items-center gap-2",
                                             isActive(dropdownItem.href) &&
                                               "bg-gray-300 text-gray-900 !font-semibold"
                                           )}
@@ -329,7 +331,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                               onClick={subItem.onClick}
                               isActive={isActive(subItem.href)}
                               className={cn(
-                                "text-xs flex items-center gap-2",
+                                "text-md flex items-center gap-2",
                                 isActive(subItem.href) &&
                                   "bg-gray-300 text-gray-900 font-semibold"
                               )}
@@ -348,7 +350,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                               asChild
                               isActive={isActive(subItem.href)}
                               className={cn(
-                                "flex items-center gap-2 text-xs",
+                                "flex items-center gap-2 text-md",
                                 isActive(subItem.href) &&
                                   "bg-gray-300 text-gray-900 !font-semibold"
                               )}

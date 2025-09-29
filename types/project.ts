@@ -90,3 +90,10 @@ export interface TaskResponse {
   tasks?: Task[];
   error?: string;
 }
+
+export interface PaginatedProjectsResponse {
+  projects: Project[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+}

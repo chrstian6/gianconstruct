@@ -842,3 +842,296 @@ export async function deleteTimelineEntry(
     };
   }
 }
+
+export interface PaginatedProjectsResponse {
+  projects: ProjectType[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+}
+
+// Fetch projects with pagination and filtering
+export async function getProjectsPaginated(params: {
+  page: number;
+  limit: number;
+  status?: string;
+  search?: string;
+  dateFilter?: string;
+}): Promise<{
+  success: boolean;
+  data?: PaginatedProjectsResponse;
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    const { page = 1, limit = 12, status, search, dateFilter } = params;
+    const skip = (page - 1) * limit;
+
+    // Build filter query
+    const filter: any = {};
+
+    if (status && status !== "all") {
+      filter.status = status;
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { "location.fullAddress": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Date filtering logic
+    if (dateFilter && dateFilter !== "any") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      switch (dateFilter) {
+        case "today":
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          filter.startDate = { $gte: today, $lt: tomorrow };
+          break;
+        case "thisWeek":
+          const startOfWeek = new Date(today);
+          startOfWeek.setDate(today.getDate() - today.getDay());
+          const endOfWeek = new Date(today);
+          endOfWeek.setDate(today.getDate() + (6 - today.getDay()));
+          endOfWeek.setHours(23, 59, 59, 999);
+          filter.startDate = { $gte: startOfWeek, $lte: endOfWeek };
+          break;
+        case "thisMonth":
+          const startOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+          );
+          const endOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            0
+          );
+          endOfMonth.setHours(23, 59, 59, 999);
+          filter.startDate = { $gte: startOfMonth, $lte: endOfMonth };
+          break;
+        case "overdue":
+          filter.$and = [
+            { endDate: { $lt: today } },
+            { status: { $ne: "completed" } },
+          ];
+          break;
+      }
+    }
+
+    // Get total count for pagination
+    const totalCount = await Project.countDocuments(filter);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get paginated projects
+    const projects = await Project.find(filter)
+      .sort({ startDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .exec();
+
+    const convertedProjects = projects
+      .map((project: any) => {
+        try {
+          return ProjectZodSchema.parse({
+            _id: project._id?.toString() || "",
+            project_id: project.project_id,
+            name: project.name,
+            status: project.status,
+            startDate: new Date(project.startDate),
+            endDate: project.endDate ? new Date(project.endDate) : undefined,
+            userId: project.userId || "default-user-id",
+            totalCost: project.totalCost || 0,
+            location: project.location || undefined,
+            timeline: project.timeline?.map((entry: any) => ({
+              date: new Date(entry.date),
+              photoUrls:
+                entry.photoUrls ||
+                (entry.photoUrl ? [entry.photoUrl] : undefined),
+              caption: entry.caption,
+            })),
+            __v: project.__v || 0,
+            createdAt: project.createdAt?.toISOString() || "",
+            updatedAt: project.updatedAt?.toISOString() || "",
+          });
+        } catch (parseError) {
+          console.error(
+            `Validation error for project ${project.project_id}:`,
+            parseError
+          );
+          return null;
+        }
+      })
+      .filter((p): p is ProjectType => p !== null);
+
+    return {
+      success: true,
+      data: {
+        projects: convertedProjects,
+        totalCount,
+        totalPages,
+        currentPage: page,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching paginated projects:", error);
+    return {
+      success: false,
+      error: "Failed to fetch projects",
+    };
+  }
+}
+
+export async function getProjectsCount(): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    const count = await Project.countDocuments();
+    return { success: true, count };
+  } catch (error) {
+    console.error("Error counting projects:", error);
+    return {
+      success: false,
+      error: "Failed to count projects",
+    };
+  }
+}
+
+// Delete multiple projects
+export async function deleteMultipleProjects(
+  projectIds: string[]
+): Promise<ActionResponse> {
+  await dbConnect();
+
+  try {
+    // Check if user is authenticated and has admin role
+    const session = await verifySession();
+    if (!session || session.role.toLowerCase() !== "admin") {
+      return { success: false, error: "Unauthorized: Admin access required" };
+    }
+
+    if (!projectIds || projectIds.length === 0) {
+      return { success: false, error: "No project IDs provided" };
+    }
+
+    // Find all projects to be deleted
+    const projects = await Project.find({ project_id: { $in: projectIds } });
+
+    if (projects.length === 0) {
+      return { success: false, error: "No projects found to delete" };
+    }
+
+    const currentDate = new Date();
+
+    // Check if any projects cannot be deleted
+    const undeletableProjects = projects.filter((project) => {
+      if (project.status === "completed") return false; // Completed projects can be deleted
+
+      const projectEndDate = project.endDate ? new Date(project.endDate) : null;
+      // If project is not completed and end date hasn't passed, it cannot be deleted
+      return !projectEndDate || projectEndDate > currentDate;
+    });
+
+    if (undeletableProjects.length > 0) {
+      const undeletableNames = undeletableProjects
+        .map((p) => p.name)
+        .join(", ");
+      return {
+        success: false,
+        error: `Cannot delete projects that are still active and haven't reached completion date: ${undeletableNames}`,
+      };
+    }
+
+    // Collect all photo URLs from all projects for deletion
+    const allPhotoUrls: string[] = [];
+
+    projects.forEach((project) => {
+      if (project.timeline && project.timeline.length > 0) {
+        project.timeline.forEach((entry: any) => {
+          if (entry.photoUrls && Array.isArray(entry.photoUrls)) {
+            allPhotoUrls.push(...entry.photoUrls);
+          } else if (entry.photoUrl) {
+            allPhotoUrls.push(entry.photoUrl);
+          }
+        });
+      }
+    });
+
+    // Delete all photos from Supabase storage
+    if (allPhotoUrls.length > 0) {
+      const filePaths = allPhotoUrls
+        .map((url: string) => {
+          const match = url.match(/gianprojectimage\/(.*)$/);
+          return match ? match[1] : null;
+        })
+        .filter((path): path is string => !!path);
+
+      if (filePaths.length > 0) {
+        const { error: deleteError } = await supabase.storage
+          .from("gianprojectimage")
+          .remove(filePaths);
+
+        if (deleteError) {
+          console.error(
+            "Error deleting project photos from storage:",
+            deleteError
+          );
+          // Continue with project deletion even if photo deletion fails
+        }
+      }
+    }
+
+    // Delete all projects from database
+    const result = await Project.deleteMany({
+      project_id: { $in: projectIds },
+    });
+
+    if (result.deletedCount === 0) {
+      return { success: false, error: "Failed to delete projects" };
+    }
+
+    revalidatePath("/admin/admin-project");
+    return {
+      success: true,
+      projects: projects.map((project) =>
+        ProjectZodSchema.parse({
+          _id: project._id.toString(),
+          project_id: project.project_id,
+          name: project.name,
+          status: project.status,
+          startDate: new Date(project.startDate),
+          endDate: project.endDate ? new Date(project.endDate) : undefined,
+          userId: project.userId,
+          totalCost: project.totalCost,
+          location: project.location || undefined,
+          timeline: project.timeline?.map((entry: any) => ({
+            date: new Date(entry.date),
+            photoUrls:
+              entry.photoUrls ||
+              (entry.photoUrl ? [entry.photoUrl] : undefined),
+            caption: entry.caption,
+          })),
+          __v: project.__v,
+          createdAt: project.createdAt.toISOString(),
+          updatedAt: project.updatedAt.toISOString(),
+        })
+      ),
+    };
+  } catch (error) {
+    console.error("Error deleting multiple projects:", error);
+    return {
+      success: false,
+      error:
+        "Failed to delete projects: " +
+        (error instanceof Error ? error.message : String(error)),
+    };
+  }
+}

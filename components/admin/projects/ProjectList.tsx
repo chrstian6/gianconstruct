@@ -3,33 +3,32 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Clock, CheckCircle, Search, Filter, X, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
-import { getProjects, deleteProject } from "@/action/project";
-import { getUsers } from "@/action/userManagement";
-import { Project } from "@/types/project";
-import ProjectCard from "./ProjectCard";
-import CreateProjectModal from "./CreateProjectModal";
-import EditProjectModal from "./EditProjectModal";
-import ConfirmationModal from "@/components/ConfirmationModal";
-import { useModalStore } from "@/lib/stores";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Filter,
+  Plus,
+  Clock,
+  CheckCircle,
+  Search,
+  Eye,
+  X,
+  Trash2,
+  CheckSquare,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  regions,
-  provinces,
-  cities,
-  barangays,
-} from "select-philippines-address";
 import {
   Pagination,
   PaginationContent,
@@ -39,35 +38,31 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { toast } from "sonner";
+import {
+  getProjectsPaginated,
+  deleteProject,
+  deleteMultipleProjects,
+  PaginatedProjectsResponse,
+} from "@/action/project";
+import { getUsers } from "@/action/userManagement";
+import { Project } from "@/types/project";
+import ProjectCard from "./ProjectCard";
+import CreateProjectModal from "./CreateProjectModal";
+import EditProjectModal from "./EditProjectModal";
+import ConfirmationModal from "@/components/ConfirmationModal";
+import NotFound from "../NotFound";
+import { useModalStore } from "@/lib/stores";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-
-interface Region {
-  region_code: string;
-  region_name: string;
-  psgc_code: string;
-  id: string;
-}
-
-interface Province {
-  province_code: string;
-  province_name: string;
-  psgc_code: string;
-  region_code: string;
-}
-
-interface City {
-  city_code: string;
-  city_name: string;
-  province_code: string;
-  region_desc: string;
-}
-
-interface Barangay {
-  brgy_code: string;
-  brgy_name: string;
-  province_code: string;
-  region_code: string;
-}
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface User {
   user_id: string;
@@ -78,7 +73,7 @@ interface User {
   address: string;
 }
 
-type StatusFilter = "all" | "active" | "completed" | "pending";
+type StatusFilter = "all" | "not-started" | "active" | "completed" | "pending";
 type DateFilter = "any" | "today" | "thisWeek" | "thisMonth" | "overdue";
 
 export default function ProjectList() {
@@ -86,18 +81,25 @@ export default function ProjectList() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [regionList, setRegionList] = useState<Region[]>([]);
-  const [provinceList, setProvinceList] = useState<Province[]>([]);
-  const [cityList, setCityList] = useState<City[]>([]);
-  const [barangayList, setBarangayList] = useState<Barangay[]>([]);
-  const [currentActivePage, setCurrentActivePage] = useState<number>(1);
-  const [currentCompletedPage, setCurrentCompletedPage] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [dateFilter, setDateFilter] = useState<DateFilter>("any");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active"); // Default to "active"
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const cardsPerPage = 12;
+
+  // Multi-select state
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(
+    new Set()
+  );
+  const [isMultiDeleteModalOpen, setIsMultiDeleteModalOpen] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+
+  // State for paginated data
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
 
   const {
     setIsCreateProjectOpen,
@@ -107,20 +109,42 @@ export default function ProjectList() {
     editingProject,
   } = useModalStore();
 
+  // Available statuses for tags - Always visible regardless of data
+  const statuses = ["all", "not-started", "active", "completed", "pending"];
+
   // ✅ useCallback to prevent re-creation
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await getProjects();
-      if (response.success) {
-        setProjects(response.projects || []);
+      setIsLoading(true);
+      const response = await getProjectsPaginated({
+        page: currentPage,
+        limit: cardsPerPage,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        search: searchQuery || undefined,
+        dateFilter: dateFilter !== "any" ? dateFilter : undefined,
+      });
+
+      if (response.success && response.data) {
+        const data = response.data as PaginatedProjectsResponse;
+        setProjects(data.projects || []);
+        setTotalCount(data.totalCount || 0);
+        setTotalPages(data.totalPages || 1);
       } else {
         toast.error(response.error || "Failed to fetch projects");
+        setProjects([]);
+        setTotalCount(0);
+        setTotalPages(1);
       }
     } catch (error) {
       toast.error("Failed to fetch projects");
       console.error("Error fetching projects:", error);
+      setProjects([]);
+      setTotalCount(0);
+      setTotalPages(1);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [currentPage, statusFilter, searchQuery, dateFilter]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -136,30 +160,16 @@ export default function ProjectList() {
     }
   }, []);
 
-  const fetchRegions = useCallback(async () => {
-    try {
-      const data = await regions();
-      if (Array.isArray(data)) {
-        setRegionList(data);
-      } else {
-        toast.error("Failed to fetch regions: " + data);
-      }
-    } catch (error) {
-      toast.error("Failed to fetch regions");
-      console.error("Error fetching regions:", error);
-    }
-  }, []);
-
   useEffect(() => {
     fetchProjects();
     fetchUsers();
-    fetchRegions();
-  }, [fetchProjects, fetchUsers, fetchRegions]);
+  }, [fetchProjects, fetchUsers]);
 
+  // Reset selection when projects change
   useEffect(() => {
-    setCurrentActivePage(1);
-    setCurrentCompletedPage(1);
-  }, [searchQuery, dateFilter, statusFilter]);
+    setSelectedProjects(new Set());
+    setIsSelectMode(false);
+  }, [projects, currentPage, statusFilter, searchQuery, dateFilter]);
 
   const getUserName = useCallback(
     (userId: string) => {
@@ -171,9 +181,21 @@ export default function ProjectList() {
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
-      router.push(`/admin/admin-project/${project.project_id}`);
+      if (isSelectMode) {
+        // Toggle selection in select mode
+        const newSelected = new Set(selectedProjects);
+        if (newSelected.has(project.project_id)) {
+          newSelected.delete(project.project_id);
+        } else {
+          newSelected.add(project.project_id);
+        }
+        setSelectedProjects(newSelected);
+      } else {
+        // Navigate to project detail in normal mode
+        router.push(`/admin/admin-project/${project.project_id}`);
+      }
     },
-    [router]
+    [router, isSelectMode, selectedProjects]
   );
 
   const handleDeleteClick = useCallback((project: Project) => {
@@ -189,9 +211,8 @@ export default function ProjectList() {
 
       if (response.success) {
         toast.success("Project deleted successfully");
-        setProjects((prev) =>
-          prev.filter((p) => p.project_id !== projectToDelete.project_id)
-        );
+        // Refetch projects to get updated data
+        await fetchProjects();
       } else {
         toast.error(response.error || "Failed to delete project");
       }
@@ -202,11 +223,41 @@ export default function ProjectList() {
       setIsDeleteModalOpen(false);
       setProjectToDelete(null);
     }
-  }, [projectToDelete]);
+  }, [projectToDelete, fetchProjects]);
+
+  const handleMultiDeleteConfirm = useCallback(async () => {
+    if (selectedProjects.size === 0) return;
+
+    try {
+      const projectIds = Array.from(selectedProjects);
+      const response = await deleteMultipleProjects(projectIds);
+
+      if (response.success) {
+        toast.success(
+          `Successfully deleted ${selectedProjects.size} project${selectedProjects.size > 1 ? "s" : ""}`
+        );
+        // Refetch projects to get updated data
+        await fetchProjects();
+        setSelectedProjects(new Set());
+        setIsSelectMode(false);
+      } else {
+        toast.error(response.error || "Failed to delete projects");
+      }
+    } catch (error) {
+      toast.error("An error occurred while deleting the projects");
+      console.error("Multi-delete error:", error);
+    } finally {
+      setIsMultiDeleteModalOpen(false);
+    }
+  }, [selectedProjects, fetchProjects]);
 
   const handleDeleteCancel = useCallback(() => {
     setIsDeleteModalOpen(false);
     setProjectToDelete(null);
+  }, []);
+
+  const handleMultiDeleteCancel = useCallback(() => {
+    setIsMultiDeleteModalOpen(false);
   }, []);
 
   const handleEditProject = useCallback(
@@ -216,64 +267,18 @@ export default function ProjectList() {
     [setIsEditProjectOpen]
   );
 
-  const handleProjectUpdated = useCallback((updatedProject: Project) => {
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.project_id === updatedProject.project_id ? updatedProject : p
-      )
-    );
-  }, []);
+  const handleProjectUpdated = useCallback(
+    async (updatedProject: Project) => {
+      // Refetch projects to get updated data
+      await fetchProjects();
+    },
+    [fetchProjects]
+  );
 
-  const filteredProjects = useMemo(() => {
-    return projects.filter((project) => {
-      if (statusFilter !== "all" && project.status !== statusFilter)
-        return false;
-
-      if (
-        searchQuery &&
-        !project.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-        return false;
-
-      if (dateFilter !== "any") {
-        const today = new Date();
-        const projectDate = new Date(project.startDate);
-
-        switch (dateFilter) {
-          case "today":
-            return (
-              projectDate.getDate() === today.getDate() &&
-              projectDate.getMonth() === today.getMonth() &&
-              projectDate.getFullYear() === today.getFullYear()
-            );
-          case "thisWeek":
-            const startOfWeek = new Date(today);
-            startOfWeek.setDate(today.getDate() - today.getDay());
-            startOfWeek.setHours(0, 0, 0, 0);
-
-            const endOfWeek = new Date(today);
-            endOfWeek.setDate(today.getDate() + (6 - today.getDay()));
-            endOfWeek.setHours(23, 59, 59, 999);
-
-            return projectDate >= startOfWeek && projectDate <= endOfWeek;
-          case "thisMonth":
-            return (
-              projectDate.getMonth() === today.getMonth() &&
-              projectDate.getFullYear() === today.getFullYear()
-            );
-          case "overdue":
-            if (project.endDate) {
-              const endDate = new Date(project.endDate);
-              return endDate < today && project.status !== "completed";
-            }
-            return false;
-          default:
-            return true;
-        }
-      }
-      return true;
-    });
-  }, [projects, searchQuery, dateFilter, statusFilter]);
+  const handleProjectCreated = useCallback(async () => {
+    // Refetch projects to get updated data
+    await fetchProjects();
+  }, [fetchProjects]);
 
   const getPageNumbers = useCallback(
     (totalPages: number, currentPage: number) => {
@@ -308,341 +313,424 @@ export default function ProjectList() {
   const clearFilters = useCallback(() => {
     setSearchQuery("");
     setDateFilter("any");
-    setStatusFilter("active");
+    setStatusFilter("active"); // Reset to "active" when clearing filters
+    setCurrentPage(1);
   }, []);
 
   const hasActiveFilters = useMemo(
-    () => searchQuery || dateFilter !== "any" || statusFilter !== "active",
+    () => searchQuery || dateFilter !== "any" || statusFilter !== "active", // Changed from "all" to "active"
     [searchQuery, dateFilter, statusFilter]
   );
 
-  const totalPages = Math.ceil(filteredProjects.length / cardsPerPage);
-  const currentPage =
-    statusFilter === "active" ? currentActivePage : currentCompletedPage;
-  const setCurrentPage =
-    statusFilter === "active" ? setCurrentActivePage : setCurrentCompletedPage;
+  const capitalizeFirstLetter = (str: string): string => {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  };
 
-  const paginatedProjects = useMemo(() => {
-    return filteredProjects.slice(
-      (currentPage - 1) * cardsPerPage,
-      currentPage * cardsPerPage
-    );
-  }, [filteredProjects, currentPage, cardsPerPage]);
+  const formatStatusDisplay = (status: string): string => {
+    if (status === "not-started") return "Not Started";
+    return capitalizeFirstLetter(status);
+  };
+
+  // Multi-select functions
+  const toggleSelectMode = useCallback(() => {
+    setIsSelectMode(!isSelectMode);
+    if (isSelectMode) {
+      setSelectedProjects(new Set());
+    }
+  }, [isSelectMode]);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedProjects.size === projects.length) {
+      setSelectedProjects(new Set());
+    } else {
+      const allProjectIds = projects.map((project) => project.project_id);
+      setSelectedProjects(new Set(allProjectIds));
+    }
+  }, [projects, selectedProjects.size]);
+
+  const toggleProjectSelection = useCallback(
+    (projectId: string) => {
+      const newSelected = new Set(selectedProjects);
+      if (newSelected.has(projectId)) {
+        newSelected.delete(projectId);
+      } else {
+        newSelected.add(projectId);
+      }
+      setSelectedProjects(newSelected);
+    },
+    [selectedProjects]
+  );
+
+  const handleMultiDeleteClick = useCallback(() => {
+    if (selectedProjects.size > 0) {
+      setIsMultiDeleteModalOpen(true);
+    }
+  }, [selectedProjects.size]);
 
   return (
-    <div className="min-h-screen flex flex-col font-geist">
-      {" "}
-      {/* Updated for scrolling */}
-      {/* Header Section */}
-      <div className="flex-shrink-0">
-        <div className="p-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-semibold text-gray-900 flex items-center gap-2 tracking-tight">
-                Construction Projects
-              </h1>
-              <p className="text-sm text-gray-600">
-                {filteredProjects.length} projects found
-                {hasActiveFilters && " (filtered)"}
-              </p>
-            </div>
+    <div className="flex flex-col h-screen px-10 font-geist">
+      {/* Fixed Header Section - Matching CatalogList layout */}
+      <div className="flex-shrink-0 px-6 py-2 bg-white border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 font-geist">
+              Construction Projects
+            </h1>
+            <p className="text-gray-600 mt-1 text-sm font-geist">
+              {isLoading
+                ? "Loading..."
+                : `${totalCount.toLocaleString()} projects found${hasActiveFilters ? " (filtered)" : ""}`}
+            </p>
           </div>
         </div>
 
-        {/* Search and Filter Bar */}
-        <div className="px-6 pb-4">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-800" />
-                <Input
-                  placeholder="Search projects..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-10 rounded-sm border-gray-300 text-gray-800 focus:ring-gray-500 font-geist"
+        {/* Search and Filters - Matching CatalogList layout */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Input
+                placeholder="Search projects..."
+                className="pl-10 w-full border-gray-300 rounded-lg focus:border-gray-500 focus:ring-gray-500 font-geist"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+              {searchQuery && (
+                <X
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500 cursor-pointer"
+                  onClick={() => setSearchQuery("")}
                 />
-                {searchQuery && (
-                  <X
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 cursor-pointer"
-                    onClick={() => setSearchQuery("")}
-                  />
-                )}
-              </div>
-
-              <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="rounded-full border-gray-300 gap-2 font-geist"
-                  >
-                    <Filter className="h-4 w-4" />
-                    Filters
-                    {hasActiveFilters && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center"
-                      >
-                        !
-                      </Badge>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56 bg-white font-geist">
-                  <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      className={statusFilter === "all" ? "bg-gray-100" : ""}
-                      onClick={() => setStatusFilter("all")}
-                    >
-                      All Projects
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={statusFilter === "active" ? "bg-gray-100" : ""}
-                      onClick={() => setStatusFilter("active")}
-                    >
-                      Active
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "completed" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("completed")}
-                    >
-                      Completed
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "pending" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("pending")}
-                    >
-                      Pending
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel>Filter by Date</DropdownMenuLabel>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      className={dateFilter === "any" ? "bg-gray-100" : ""}
-                      onClick={() => setDateFilter("any")}
-                    >
-                      Any Date
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={dateFilter === "today" ? "bg-gray-100" : ""}
-                      onClick={() => setDateFilter("today")}
-                    >
-                      Today
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={dateFilter === "thisWeek" ? "bg-gray-100" : ""}
-                      onClick={() => setDateFilter("thisWeek")}
-                    >
-                      This Week
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        dateFilter === "thisMonth" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setDateFilter("thisMonth")}
-                    >
-                      This Month
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={dateFilter === "overdue" ? "bg-gray-100" : ""}
-                      onClick={() => setDateFilter("overdue")}
-                    >
-                      Overdue
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  {hasActiveFilters && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={clearFilters}>
-                        Clear Filters
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  onClick={clearFilters}
-                  className="rounded-full text-gray-600 hover:text-gray-900 font-geist"
-                >
-                  Clear
-                  <X className="ml-1 h-4 w-4" />
-                </Button>
               )}
             </div>
 
+            <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 border-gray-300 rounded-lg hover:bg-gray-100 text-gray-700 font-geist"
+                >
+                  <Filter className="h-5 w-5" />
+                  <span>Filters</span>
+                  {hasActiveFilters && (
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center"
+                    >
+                      !
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64 p-4 space-y-4 bg-white shadow-lg rounded-lg border border-gray-200 font-geist">
+                <div>
+                  <Label
+                    htmlFor="dropdown_status_filter"
+                    className="block text-sm font-medium text-gray-700 mb-1 font-geist"
+                  >
+                    Status
+                  </Label>
+                  <Select
+                    onValueChange={(value: StatusFilter) => {
+                      setStatusFilter(value);
+                      setCurrentPage(1);
+                    }}
+                    value={statusFilter}
+                  >
+                    <SelectTrigger
+                      id="dropdown_status_filter"
+                      className="w-full border-gray-300 rounded-lg font-geist"
+                    >
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent className="font-geist">
+                      <SelectItem value="all" className="font-geist">
+                        All Projects
+                      </SelectItem>
+                      <SelectItem value="not-started" className="font-geist">
+                        Not Started
+                      </SelectItem>
+                      <SelectItem value="active" className="font-geist">
+                        Active
+                      </SelectItem>
+                      <SelectItem value="completed" className="font-geist">
+                        Completed
+                      </SelectItem>
+                      <SelectItem value="pending" className="font-geist">
+                        Pending
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="dropdown_date_filter"
+                    className="block text-sm font-medium text-gray-700 mb-1 font-geist"
+                  >
+                    Date Filter
+                  </Label>
+                  <Select
+                    onValueChange={(value: DateFilter) => {
+                      setDateFilter(value);
+                      setCurrentPage(1);
+                    }}
+                    value={dateFilter}
+                  >
+                    <SelectTrigger
+                      id="dropdown_date_filter"
+                      className="w-full border-gray-300 rounded-lg font-geist"
+                    >
+                      <SelectValue placeholder="Select date filter" />
+                    </SelectTrigger>
+                    <SelectContent className="font-geist">
+                      <SelectItem value="any" className="font-geist">
+                        Any Date
+                      </SelectItem>
+                      <SelectItem value="today" className="font-geist">
+                        Today
+                      </SelectItem>
+                      <SelectItem value="thisWeek" className="font-geist">
+                        This Week
+                      </SelectItem>
+                      <SelectItem value="thisMonth" className="font-geist">
+                        This Month
+                      </SelectItem>
+                      <SelectItem value="overdue" className="font-geist">
+                        Overdue
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200 font-geist"
+                    onClick={clearFilters}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* New Project Button - Moved down to align with search input */}
             <Button
               onClick={() => setIsCreateProjectOpen(true)}
-              className="rounded-sm bg-gray-900 hover:bg-gray-800 text-white whitespace-nowrap font-geist"
+              size="sm"
+              className="bg-gray-900 hover:bg-gray-800 text-white font-geist whitespace-nowrap"
             >
               <Plus className="mr-2 h-4 w-4" /> New Project
             </Button>
           </div>
 
-          {/* Status Dropdown */}
-          <div className="mt-4">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+          {/* Multi-select Actions - Moved to the right/end */}
+          <div className="flex items-center gap-2">
+            {isSelectMode ? (
+              <div className="flex gap-2 items-center">
+                {/* Select All / Deselect All */}
                 <Button
-                  variant="outline"
-                  className="rounded-sm border-gray-300 gap-2 font-geist text-sm"
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleSelectAll}
+                  className="font-geist"
                 >
-                  {statusFilter === "all" && <Eye className="h-4 w-4" />}
-                  {statusFilter === "active" && <Clock className="h-4 w-4" />}
-                  {statusFilter === "completed" && (
-                    <CheckCircle className="h-4 w-4" />
-                  )}
-                  {statusFilter === "pending" && <Clock className="h-4 w-4" />}
-                  {statusFilter === "all"
-                    ? "All Projects"
-                    : statusFilter.charAt(0).toUpperCase() +
-                      statusFilter.slice(1)}
+                  {selectedProjects.size === projects.length
+                    ? "Deselect All"
+                    : "Select All"}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-white font-geist">
-                <DropdownMenuItem
-                  className={statusFilter === "all" ? "bg-gray-100" : ""}
-                  onClick={() => setStatusFilter("all")}
+
+                {/* X icon for cancel */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleSelectMode}
+                  className="font-geist"
+                  title="Cancel selection"
                 >
-                  <Eye className="h-4 w-4 mr-2" />
-                  All Projects
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={statusFilter === "active" ? "bg-gray-100" : ""}
-                  onClick={() => setStatusFilter("active")}
+                  <X className="h-4 w-4" />
+                </Button>
+
+                {/* Trash icon for delete */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleMultiDeleteClick}
+                  disabled={selectedProjects.size === 0}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 font-geist"
+                  title={`Delete ${selectedProjects.size} selected project${selectedProjects.size > 1 ? "s" : ""}`}
                 >
-                  <Clock className="h-4 w-4 mr-2" />
-                  Active
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={statusFilter === "completed" ? "bg-gray-100" : ""}
-                  onClick={() => setStatusFilter("completed")}
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Completed
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={statusFilter === "pending" ? "bg-gray-100" : ""}
-                  onClick={() => setStatusFilter("pending")}
-                >
-                  <Clock className="h-4 w-4 mr-2" />
-                  Pending
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+
+                {/* Selection count badge */}
+                {selectedProjects.size > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-blue-100 text-blue-800 hover:bg-blue-200 text-sm"
+                  >
+                    {selectedProjects.size} selected
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleSelectMode}
+                className="font-geist flex items-center gap-2"
+              >
+                <CheckSquare className="h-4 w-4" />
+                Select
+              </Button>
+            )}
           </div>
         </div>
-      </div>
-      {/* Main Content Area - Scrollable */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="p-6">
-          {filteredProjects.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center max-w-md mx-auto">
-              <h3 className="text-xl font-semibold text-gray-900 font-geist">
-                No projects found
-              </h3>
-              <p className="text-gray-600 mt-2 font-geist">
-                {hasActiveFilters
-                  ? "Try adjusting your filters or search query."
-                  : "No projects available. Create a new project to get started."}
-              </p>
-              {hasActiveFilters && (
-                <Button
-                  onClick={clearFilters}
-                  className="mt-4 rounded-full font-geist"
-                  variant="outline"
-                >
-                  Clear Filters
-                </Button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 mb-6">
-                {paginatedProjects.map((project) => (
-                  <ProjectCard
-                    key={project.project_id}
-                    project={project}
-                    activeTab={statusFilter}
-                    onSelect={handleProjectSelect} // Updated: Navigates to dynamic route
-                    onEdit={handleEditProject}
-                    onDelete={handleDeleteClick}
-                    userName={getUserName(project.userId)}
-                  />
-                ))}
-              </div>
 
-              {/* Pagination - Sticky bottom */}
-              {totalPages > 1 && (
-                <div className="bg-white sticky bottom-0 left-0 right-0 p-4 border-t border-gray-200 z-10">
-                  <Pagination>
-                    <PaginationContent className="justify-center font-geist">
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() =>
-                            setCurrentPage((prev) => Math.max(prev - 1, 1))
-                          }
-                          className={cn(
-                            "rounded-md border border-gray-300 hover:bg-gray-100 font-geist",
-                            currentPage === 1 && "opacity-50 cursor-not-allowed"
-                          )}
-                        />
-                      </PaginationItem>
-                      {getPageNumbers(totalPages, currentPage).map(
-                        (page, index) => (
-                          <PaginationItem key={index}>
-                            {page === "ellipsis" ? (
-                              <PaginationEllipsis className="font-geist" />
-                            ) : (
-                              <PaginationLink
-                                onClick={() => setCurrentPage(page as number)}
-                                isActive={currentPage === page}
-                                className={cn(
-                                  "rounded-md border border-gray-300 font-geist",
-                                  currentPage === page
-                                    ? "bg-gray-900 text-white hover:bg-gray-800"
-                                    : "text-gray-700 hover:bg-gray-100"
-                                )}
-                              >
-                                {page}
-                              </PaginationLink>
-                            )}
-                          </PaginationItem>
-                        )
-                      )}
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() =>
-                            setCurrentPage((prev) =>
-                              Math.min(prev + 1, totalPages)
-                            )
-                          }
-                          className={cn(
-                            "rounded-md border border-gray-300 hover:bg-gray-100 font-geist",
-                            currentPage === totalPages &&
-                              "opacity-50 cursor-not-allowed"
-                          )}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                </div>
-              )}
-            </>
-          )}
+        {/* Status Tags - Always visible like CatalogList categories */}
+        <div className="flex flex-wrap gap-2 mt-4 border-t py-3">
+          {statuses.map((status) => (
+            <button
+              key={status}
+              onClick={() => {
+                setStatusFilter(status as StatusFilter);
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 font-geist ${
+                statusFilter === status
+                  ? "bg-gray-900 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {status === "all" ? "All Projects" : formatStatusDisplay(status)}
+            </button>
+          ))}
         </div>
       </div>
+
+      {/* Scrollable Content Section with Cards and Pagination */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          // Skeleton Loading State - Matching CatalogList
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+              {Array.from({ length: cardsPerPage }).map((_, index) => (
+                <div key={index} className="animate-pulse font-geist">
+                  <div className="bg-gray-200 rounded-xl aspect-video mb-3"></div>
+                  <div className="bg-gray-200 rounded-lg p-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="bg-gray-300 rounded h-4 w-3/4 mb-2"></div>
+                        <div className="bg-gray-300 rounded h-3 w-1/2"></div>
+                      </div>
+                      <div className="bg-gray-300 rounded-full h-7 w-7"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="p-6">
+            <div className="p-8 text-center mx-auto font-geist">
+              <NotFound description="Try adjusting the filters or start your new project" />
+            </div>
+          </div>
+        ) : (
+          <div className="px-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 mb-6">
+              {projects.map((project) => (
+                <ProjectCard
+                  key={project.project_id}
+                  project={project}
+                  activeTab={statusFilter}
+                  onSelect={handleProjectSelect}
+                  onEdit={handleEditProject}
+                  onDelete={handleDeleteClick}
+                  userName={getUserName(project.userId)}
+                  isSelectMode={isSelectMode}
+                  isSelected={selectedProjects.has(project.project_id)}
+                  onToggleSelect={() =>
+                    toggleProjectSelection(project.project_id)
+                  }
+                />
+              ))}
+            </div>
+
+            {/* Pagination Section - Always visible even with 1 page */}
+            <div className="my-6 px-6 p-10 border-gray-200">
+              <Pagination>
+                <PaginationContent className="font-geist">
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      }
+                      className={cn(
+                        "font-geist text-sm",
+                        currentPage === 1 && "pointer-events-none opacity-50"
+                      )}
+                    />
+                  </PaginationItem>
+
+                  {getPageNumbers(totalPages, currentPage).map(
+                    (page, index) => (
+                      <PaginationItem key={index}>
+                        {page === "ellipsis" ? (
+                          <PaginationEllipsis className="font-geist" />
+                        ) : (
+                          <PaginationLink
+                            onClick={() => setCurrentPage(page as number)}
+                            isActive={currentPage === page}
+                            className={cn(
+                              "font-geist text-sm",
+                              currentPage === page
+                                ? "bg-gray-900 text-white hover:bg-gray-800"
+                                : "text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            {page}
+                          </PaginationLink>
+                        )}
+                      </PaginationItem>
+                    )
+                  )}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      }
+                      className={cn(
+                        "font-geist text-sm",
+                        currentPage === totalPages &&
+                          "pointer-events-none opacity-50"
+                      )}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+
+              {/* Page info */}
+              <div className="text-center mt-4 text-sm text-gray-600 font-geist">
+                Page {currentPage} of {totalPages} •{" "}
+                {totalCount.toLocaleString()} total projects
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modals - All functionality preserved */}
       <CreateProjectModal
         isOpen={isCreateProjectOpen}
         onClose={() => setIsCreateProjectOpen(false)}
-        onProjectCreated={fetchProjects}
+        onProjectCreated={handleProjectCreated}
       />
       <EditProjectModal
         open={isEditProjectOpen}
@@ -659,6 +747,15 @@ export default function ProjectList() {
         title="Delete Project"
         description={`Are you sure you want to delete project "${projectToDelete?.name}"? This action cannot be undone.`}
         confirmText="Delete"
+        cancelText="Cancel"
+      />
+      <ConfirmationModal
+        isOpen={isMultiDeleteModalOpen}
+        onConfirm={handleMultiDeleteConfirm}
+        onCancel={handleMultiDeleteCancel}
+        title={`Delete ${selectedProjects.size} Project${selectedProjects.size > 1 ? "s" : ""}`}
+        description={`Are you sure you want to delete ${selectedProjects.size} selected project${selectedProjects.size > 1 ? "s" : ""}? This action cannot be undone.`}
+        confirmText={`Delete ${selectedProjects.size} Project${selectedProjects.size > 1 ? "s" : ""}`}
         cancelText="Cancel"
       />
     </div>

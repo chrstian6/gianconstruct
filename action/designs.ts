@@ -12,6 +12,7 @@ import {
   GetDesignsResponse,
   UpdateDesignResponse,
   Design,
+  PaginatedDesignsResponse,
   RevalidatePath,
 } from "@/types/design";
 
@@ -391,6 +392,213 @@ export async function getDesigns(): Promise<GetDesignsResponse> {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to fetch designs",
+    };
+  }
+}
+
+export async function getDesignsPaginated(params: {
+  page: number;
+  limit: number;
+  category?: string;
+  search?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRooms?: number;
+  maxRooms?: number;
+}): Promise<GetDesignsResponse> {
+  try {
+    await dbConnect();
+
+    const {
+      page = 1,
+      limit = 12,
+      category,
+      search,
+      minPrice,
+      maxPrice,
+      minRooms,
+      maxRooms,
+    } = params;
+    const skip = (page - 1) * limit;
+
+    // Build filter query
+    const filter: any = {};
+
+    if (category && category !== "all") {
+      filter.category = { $regex: category, $options: "i" };
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (minPrice !== undefined) {
+      filter.price = { ...filter.price, $gte: minPrice };
+    }
+
+    if (maxPrice !== undefined) {
+      filter.price = { ...filter.price, $lte: maxPrice };
+    }
+
+    if (minRooms !== undefined) {
+      filter.number_of_rooms = { ...filter.number_of_rooms, $gte: minRooms };
+    }
+
+    if (maxRooms !== undefined) {
+      filter.number_of_rooms = { ...filter.number_of_rooms, $lte: maxRooms };
+    }
+
+    // Get total count for pagination
+    const totalCount = await DesignModel.countDocuments(filter);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get paginated designs
+    const designs = await DesignModel.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .exec();
+
+    const resultDesigns: Design[] = designs.map((design: any) => ({
+      design_id: design.design_id,
+      name: design.name,
+      description: design.description,
+      price: design.price,
+      number_of_rooms: design.number_of_rooms,
+      square_meters: design.square_meters,
+      category: design.category,
+      images: design.images,
+      createdBy: design.createdBy,
+      isLoanOffer: design.isLoanOffer,
+      maxLoanTerm: design.maxLoanTerm ?? null,
+      loanTermType: design.loanTermType ?? null,
+      interestRate: design.interestRate ?? null,
+      interestRateType: design.interestRateType ?? null,
+      createdAt: design.createdAt,
+      updatedAt: design.updatedAt,
+    }));
+
+    return {
+      success: true,
+      data: {
+        designs: resultDesigns,
+        totalCount,
+        totalPages,
+        currentPage: page,
+      },
+    };
+  } catch (error) {
+    console.error("Get paginated designs error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to fetch designs",
+    };
+  }
+}
+
+export async function getDesignsCount(): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  try {
+    await dbConnect();
+    const count = await DesignModel.countDocuments();
+    return { success: true, count };
+  } catch (error) {
+    console.error("Get designs count error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to count designs",
+    };
+  }
+}
+
+// Delete multiple designs
+// Delete multiple designs
+export async function deleteMultipleDesigns(
+  designIds: string[]
+): Promise<DeleteDesignResponse> {
+  try {
+    await dbConnect();
+
+    if (!designIds || designIds.length === 0) {
+      return {
+        success: false,
+        error: "No design IDs provided",
+      };
+    }
+
+    // Find all designs to be deleted
+    const designs = await DesignModel.find({ design_id: { $in: designIds } });
+
+    if (designs.length === 0) {
+      return {
+        success: false,
+        error: "No designs found to delete",
+      };
+    }
+
+    // Collect all image URLs from all designs for deletion
+    const allImageUrls: string[] = [];
+
+    designs.forEach((design) => {
+      if (design.images && design.images.length > 0) {
+        allImageUrls.push(...design.images);
+      }
+    });
+
+    // Delete all images from Supabase storage
+    if (allImageUrls.length > 0) {
+      const imagePaths = allImageUrls
+        .map((url: string) => {
+          // Extract the filename from the URL
+          const urlParts = url.split("/");
+          return urlParts[urlParts.length - 1];
+        })
+        .filter(
+          (path: string | undefined): path is string =>
+            path !== undefined && path !== ""
+        );
+
+      if (imagePaths.length > 0) {
+        const { error } = await supabase.storage
+          .from("gianconstructimage")
+          .remove(imagePaths);
+
+        if (error) {
+          console.error("Error deleting design images from storage:", error);
+          // Continue with design deletion even if image deletion fails
+        }
+      }
+    }
+
+    // Delete all designs from database
+    const { deletedCount } = await DesignModel.deleteMany({
+      design_id: { $in: designIds },
+    });
+
+    if (deletedCount === 0) {
+      return {
+        success: false,
+        error: "Failed to delete designs",
+      };
+    }
+
+    revalidatePath(ADMIN_CATALOG_PATH);
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Delete multiple designs error:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to delete designs",
     };
   }
 }

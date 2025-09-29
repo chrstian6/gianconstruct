@@ -25,18 +25,26 @@ const registerSchema = z
     path: ["confirmPassword"],
   });
 
+// Updated alphabet for the new format: lowercase letters and numbers
 const generateUserId = customAlphabet(
   "abcdefghijklmnopqrstuvwxyz0123456789",
-  6
+  5
 );
+
 async function generateUniqueUserId(): Promise<string> {
   let user_id: string;
   let existingUser: IUserDocument | null;
+
   do {
+    // Generate 5 characters for the ID part (e.g., "m95xu")
     const rawId = generateUserId();
+
+    // Format as: first 3 characters + "-" + last 2 characters (e.g., "m95-xu")
     user_id = `${rawId.slice(0, 3)}-${rawId.slice(3)}`;
+
     existingUser = await User.findOne({ user_id });
   } while (existingUser);
+
   return user_id;
 }
 
