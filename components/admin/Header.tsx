@@ -9,7 +9,6 @@ import {
   BreadcrumbList,
   BreadcrumbSeparator,
   BreadcrumbPage,
-
 } from "@/components/ui/breadcrumb";
 import { LogOut, GalleryVerticalEnd } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
@@ -75,7 +74,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-none">
       <div className="w-full flex h-16 p-5 justify-between">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="p-2">

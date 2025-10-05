@@ -3,7 +3,7 @@ export interface Design {
   name: string;
   description: string;
   price: number;
-  number_of_rooms: number;
+  estimated_downpayment: number; // NEW FIELD - replaces number_of_rooms
   square_meters: number;
   category: string;
   images: string[];

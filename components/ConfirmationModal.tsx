@@ -9,7 +9,6 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { useModalStore } from "@/lib/stores";
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -19,6 +18,7 @@ interface ConfirmationModalProps {
   description: string;
   confirmText: string;
   cancelText: string;
+  variant?: "default" | "destructive";
 }
 
 export default function ConfirmationModal({
@@ -29,16 +29,10 @@ export default function ConfirmationModal({
   description,
   confirmText,
   cancelText,
+  variant = "default",
 }: ConfirmationModalProps) {
-  const { setIsDeleteDesignOpen } = useModalStore();
-
-  const handleCancel = () => {
-    onCancel();
-    setIsDeleteDesignOpen(false);
-  };
-
   return (
-    <AlertDialog open={isOpen} onOpenChange={setIsDeleteDesignOpen}>
+    <AlertDialog open={isOpen} onOpenChange={onCancel}>
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-lg font-semibold text-gray-900">
@@ -51,13 +45,17 @@ export default function ConfirmationModal({
         <AlertDialogFooter className="mt-4 flex justify-end gap-3">
           <AlertDialogCancel
             className="border-gray-300 text-gray-700 hover:bg-gray-50"
-            onClick={handleCancel}
+            onClick={onCancel}
           >
             {cancelText}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-red-600 text-white hover:bg-red-700"
+            className={
+              variant === "destructive"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "bg-blue-600 text-white hover:bg-blue-700"
+            }
           >
             {confirmText}
           </AlertDialogAction>

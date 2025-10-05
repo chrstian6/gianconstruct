@@ -1,25 +1,21 @@
 "use client";
 
 import React from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Design } from "@/types/design";
-import { Home, Square, Heart, ArrowRight } from "lucide-react";
+import { Home, Square, Heart, FileText } from "lucide-react";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
+import { PDFFormatter } from "@/components/admin/catalog/pdf/Formatter";
+import { calculatePaymentSchedule, formatCurrency } from "@/lib/amortization";
 
 interface CatalogCardProps {
   design: Design;
   onDesignClick: (design: Design) => void;
   onInquire: (design: Design) => void;
   formatPrice: (price: number) => string;
+  formatSquareMeters?: (square_meters: number) => string;
+  capitalizeFirstLetter?: (str: string) => string;
 }
 
 export function CatalogCard({
@@ -27,88 +23,146 @@ export function CatalogCard({
   onDesignClick,
   onInquire,
   formatPrice,
+  formatSquareMeters = (sqm) => `${sqm} sqm`,
+  capitalizeFirstLetter = (str) => str.charAt(0).toUpperCase() + str.slice(1),
 }: CatalogCardProps) {
-  return (
-    <Card
-      className="group overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg"
-      onClick={() => onDesignClick(design)}
-    >
-      <div className="relative aspect-[4/3] bg-gray-50">
-        {design.images.length > 0 ? (
-          <Image
-            src={design.images[0]}
-            alt={design.name}
-            fill
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            No image available
-          </div>
-        )}
+  const handleCardClick = (e: React.MouseEvent) => {
+    onDesignClick(design);
+  };
 
-        {/* Overlay with Inquire Button */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+  const handleGetQuotation = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!design.isLoanOffer) {
+      // If no loan offer, fall back to inquire
+      onInquire(design);
+      return;
+    }
+
+    try {
+      // Calculate default loan values
+      const downpaymentAmount =
+        design.estimated_downpayment || design.price * 0.2;
+      const selectedTerm = design.maxLoanTerm || 60; // Default to 5 years if not specified
+
+      // Calculate payment schedule
+      const loanCalculation = calculatePaymentSchedule(
+        design.price,
+        downpaymentAmount,
+        selectedTerm,
+        design.interestRate || 0,
+        design.interestRateType || "yearly",
+        "months"
+      );
+
+      // Use PDF formatter to generate and download PDF
+      const { exportToPDF } = PDFFormatter({
+        design,
+        selectedTerm,
+        loanSummary: {
+          totalInterest: loanCalculation.totalInterest,
+          totalAmountPaid: loanCalculation.totalPayment,
+          monthlyPayment: loanCalculation.monthlyPayment,
+          loanAmount: loanCalculation.loanAmount,
+        },
+        paymentSchedule: loanCalculation.schedule,
+        downpaymentAmount,
+      });
+
+      await exportToPDF();
+    } catch (error) {
+      console.error("Error generating quotation:", error);
+      // Fall back to inquire if PDF generation fails
+      onInquire(design);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Image Section - Separate Card */}
+      <div
+        className="bg-white rounded-sm overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer relative group"
+        onClick={handleCardClick}
+      >
+        <div className="relative">
+          {design.images.length > 0 ? (
+            <div className="relative aspect-video bg-gray-100">
+              <Image
+                src={design.images[0]}
+                alt={design.name}
+                fill
+                className="object-cover"
+              />
+            </div>
+          ) : (
+            <div className="aspect-video bg-gray-100 flex items-center justify-center">
+              <span className="text-gray-400">No image</span>
+            </div>
+          )}
+
+          {/* Favorite Button - Only show on hover */}
           <Button
-            variant="outline"
-            className="bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-900"
+            variant="ghost"
+            size="icon"
+            className="absolute top-3 right-3 h-7 w-7 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
             onClick={(e) => {
               e.stopPropagation();
-              onInquire(design);
+              // Add favorite functionality here
             }}
           >
-            Inquire Now <ArrowRight className="ml-2 h-4 w-4" />
+            <Heart className="h-4 w-4" />
           </Button>
         </div>
-
-        {/* Price and Loan Badges */}
-        <div className="absolute top-4 left-4 flex gap-2">
-          <Badge className="bg-[var(--orange)] text-white text-sm font-medium px-3 py-1">
-            {formatPrice(design.price)}
-          </Badge>
-          {design.isLoanOffer && (
-            <Badge
-              variant="secondary"
-              className="bg-green-600 text-white text-xs"
-            >
-              Loan Available
-            </Badge>
-          )}
-        </div>
-
-        {/* Favorite Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-4 right-4 h-8 w-8 bg-white/80 backdrop-blur-sm hover:bg-white"
-          onClick={(e) => {
-            e.stopPropagation();
-            // Add favorite functionality here
-          }}
-        >
-          <Heart className="h-4 w-4 text-gray-700" />
-        </Button>
       </div>
 
-      <CardHeader className="p-6 pb-4">
-        <CardTitle className="text-lg line-clamp-1">{design.name}</CardTitle>
-        <CardDescription className="line-clamp-2">
-          {design.description}
-        </CardDescription>
-      </CardHeader>
+      {/* Info Section - Separate from image */}
+      <div className="rounded-none">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-gray-900 text-sm text-base truncate">
+              {formatPrice(design.price)}
+            </h3>
+            <p className="text-gray-600 text-sm font-medium mb-2">
+              {capitalizeFirstLetter(design.name)}
+            </p>
 
-      <CardFooter className="p-6 pt-0">
-        <div className="flex justify-between items-center text-sm text-gray-500 w-full">
-          <div className="flex items-center gap-1">
-            <Home className="h-4 w-4 text-[var(--orange)]" />
-            <span>{design.number_of_rooms} Rooms</span>
+            {/* Room, Square Meters, and Loan Available Info */}
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              {/* Loan Available Text - Only show when loan is available */}
+              {design.isLoanOffer && (
+                <div className="flex items-center gap-1 text-green-600 font-medium">
+                  <span>Loan Available</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Square className="h-4 w-4 text-[var(--orange)]" />
-            <span>{design.square_meters} sqm</span>
-          </div>
+
+          {/* Get Quotation Button - Shows PDF icon when loan is available */}
+          {design.isLoanOffer ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0 text-xs h-8 px-3 border-green-600 text-green-600 hover:bg-green-600 hover:text-white flex items-center gap-1"
+              onClick={handleGetQuotation}
+            >
+              <FileText className="h-3 w-3" />
+              Get Quotation
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0 text-xs h-8 px-3 border-[var(--orange)] text-[var(--orange)] hover:bg-[var(--orange)] hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                onInquire(design);
+              }}
+            >
+              Inquire
+            </Button>
+          )}
         </div>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

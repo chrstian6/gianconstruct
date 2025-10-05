@@ -590,7 +590,7 @@ export default function UserManagementPage() {
                     {hasActiveFilters && (
                       <Button
                         onClick={clearFilters}
-                        variant="custom"
+                        variant="default"
                         size="sm"
                         className="mt-4 rounded-sm font-geist"
                       >

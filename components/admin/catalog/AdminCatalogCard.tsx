@@ -96,12 +96,6 @@ export default function AdminCatalogCard({
               <span className="text-gray-400">No image</span>
             </div>
           )}
-
-          {design.isLoanOffer && (
-            <span className="absolute top-3 left-3 bg-gray-700/90 text-white text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm">
-              ₱
-            </span>
-          )}
         </div>
       </div>
 
@@ -115,6 +109,14 @@ export default function AdminCatalogCard({
             <p className="text-gray-600 text-sm font-medium font-geist">
               {capitalizeFirstLetter(design.name)}
             </p>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              {/* Loan Available Text - Only show when loan is available */}
+              {design.isLoanOffer && (
+                <div className="flex items-center gap-1 text-green-600 font-medium">
+                  <span>Loan Available</span>
+                </div>
+              )}
+            </div>
           </div>
           {/* Dropdown Menu - Only show when not in select mode */}
           {!isSelectMode && (

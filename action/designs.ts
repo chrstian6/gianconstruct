@@ -22,7 +22,7 @@ type LeanDesign = {
   name: string;
   description: string;
   price: number;
-  number_of_rooms: number;
+  estimated_downpayment: number; // UPDATED: Replaced number_of_rooms
   square_meters: number;
   category: string;
   images: string[];
@@ -47,7 +47,9 @@ export async function addDesign(
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const price = parseFloat(formData.get("price") as string);
-    const number_of_rooms = parseInt(formData.get("number_of_rooms") as string);
+    const estimated_downpayment = parseFloat(
+      formData.get("estimated_downpayment") as string
+    ); // UPDATED
     const square_meters = parseInt(formData.get("square_meters") as string);
     const category = formData.get("category") as string;
     const images = formData.getAll("images") as File[];
@@ -106,7 +108,7 @@ export async function addDesign(
       name,
       description,
       price,
-      number_of_rooms,
+      estimated_downpayment, // UPDATED
       square_meters,
       category,
       images: imageUrls,
@@ -134,7 +136,7 @@ export async function addDesign(
       name: cleanDesign.name,
       description: cleanDesign.description,
       price: cleanDesign.price,
-      number_of_rooms: cleanDesign.number_of_rooms,
+      estimated_downpayment: cleanDesign.estimated_downpayment, // UPDATED
       square_meters: cleanDesign.square_meters,
       category: cleanDesign.category,
       images: cleanDesign.images,
@@ -177,7 +179,9 @@ export async function updateDesign(
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const price = parseFloat(formData.get("price") as string);
-    const number_of_rooms = parseInt(formData.get("number_of_rooms") as string);
+    const estimated_downpayment = parseFloat(
+      formData.get("estimated_downpayment") as string
+    ); // UPDATED
     const square_meters = parseInt(formData.get("square_meters") as string);
     const category = formData.get("category") as string;
     const existingImages = JSON.parse(
@@ -239,7 +243,7 @@ export async function updateDesign(
       name,
       description,
       price,
-      number_of_rooms,
+      estimated_downpayment, // UPDATED
       square_meters,
       category,
       images: [...existingImages, ...newImageUrls],
@@ -280,7 +284,7 @@ export async function updateDesign(
       name: cleanDesign.name,
       description: cleanDesign.description,
       price: cleanDesign.price,
-      number_of_rooms: cleanDesign.number_of_rooms,
+      estimated_downpayment: cleanDesign.estimated_downpayment, // UPDATED
       square_meters: cleanDesign.square_meters,
       category: cleanDesign.category,
       images: cleanDesign.images,
@@ -369,7 +373,7 @@ export async function getDesigns(): Promise<GetDesignsResponse> {
       name: design.name,
       description: design.description,
       price: design.price,
-      number_of_rooms: design.number_of_rooms,
+      estimated_downpayment: design.estimated_downpayment, // UPDATED
       square_meters: design.square_meters,
       category: design.category,
       images: design.images,
@@ -403,8 +407,8 @@ export async function getDesignsPaginated(params: {
   search?: string;
   minPrice?: number;
   maxPrice?: number;
-  minRooms?: number;
-  maxRooms?: number;
+  minDownpayment?: number; // UPDATED: Replaced minRooms
+  maxDownpayment?: number; // UPDATED: Replaced maxRooms
 }): Promise<GetDesignsResponse> {
   try {
     await dbConnect();
@@ -416,8 +420,8 @@ export async function getDesignsPaginated(params: {
       search,
       minPrice,
       maxPrice,
-      minRooms,
-      maxRooms,
+      minDownpayment, // UPDATED
+      maxDownpayment, // UPDATED
     } = params;
     const skip = (page - 1) * limit;
 
@@ -443,12 +447,19 @@ export async function getDesignsPaginated(params: {
       filter.price = { ...filter.price, $lte: maxPrice };
     }
 
-    if (minRooms !== undefined) {
-      filter.number_of_rooms = { ...filter.number_of_rooms, $gte: minRooms };
+    // UPDATED: Replace rooms filters with downpayment filters
+    if (minDownpayment !== undefined) {
+      filter.estimated_downpayment = {
+        ...filter.estimated_downpayment,
+        $gte: minDownpayment,
+      };
     }
 
-    if (maxRooms !== undefined) {
-      filter.number_of_rooms = { ...filter.number_of_rooms, $lte: maxRooms };
+    if (maxDownpayment !== undefined) {
+      filter.estimated_downpayment = {
+        ...filter.estimated_downpayment,
+        $lte: maxDownpayment,
+      };
     }
 
     // Get total count for pagination
@@ -468,7 +479,7 @@ export async function getDesignsPaginated(params: {
       name: design.name,
       description: design.description,
       price: design.price,
-      number_of_rooms: design.number_of_rooms,
+      estimated_downpayment: design.estimated_downpayment, // UPDATED
       square_meters: design.square_meters,
       category: design.category,
       images: design.images,
@@ -518,7 +529,6 @@ export async function getDesignsCount(): Promise<{
   }
 }
 
-// Delete multiple designs
 // Delete multiple designs
 export async function deleteMultipleDesigns(
   designIds: string[]

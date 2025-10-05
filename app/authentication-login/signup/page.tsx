@@ -34,6 +34,31 @@ export default function SignupFlowPage() {
     }
   }, [userId, router]);
 
+  const formatPhoneNumber = (value: string): string => {
+    // Remove all non-digit characters
+    const digits = value.replace(/\D/g, "");
+
+    // Limit to 11 characters
+    const limitedDigits = digits.slice(0, 11);
+
+    // Apply formatting: 0961 697 0479
+    if (limitedDigits.length <= 4) {
+      return limitedDigits;
+    } else if (limitedDigits.length <= 7) {
+      return `${limitedDigits.slice(0, 4)} ${limitedDigits.slice(4)}`;
+    } else {
+      return `${limitedDigits.slice(0, 4)} ${limitedDigits.slice(4, 7)} ${limitedDigits.slice(7)}`;
+    }
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedValue = formatPhoneNumber(e.target.value);
+    setProfileData({
+      ...profileData,
+      contactNo: formattedValue,
+    });
+  };
+
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -62,10 +87,14 @@ export default function SignupFlowPage() {
 
     setIsLoading(true);
 
-    const result = await completeUserProfile(userId, {
+    // Remove spaces from phone number before submitting
+    const submissionData = {
       ...profileData,
+      contactNo: profileData.contactNo.replace(/\s/g, ""),
       password,
-    });
+    };
+
+    const result = await completeUserProfile(userId, submissionData);
 
     if (result.success) {
       toast.success("Welcome to GianConstruct! 🎉");
@@ -152,16 +181,15 @@ export default function SignupFlowPage() {
             <Input
               id="contactNo"
               type="tel"
-              placeholder="+63 912 345 6789"
+              placeholder="09XX XXX XXXX"
               value={profileData.contactNo}
-              onChange={(e) =>
-                setProfileData({
-                  ...profileData,
-                  contactNo: e.target.value,
-                })
-              }
+              onChange={handlePhoneChange}
               className="h-10"
+              maxLength={13} // 11 digits + 2 spaces = 13 characters
             />
+            <p className="text-xs text-gray-500">
+              {profileData.contactNo.replace(/\s/g, "").length}/11 digits
+            </p>
           </div>
 
           <Button

@@ -69,8 +69,8 @@ export default function CatalogList() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
-  const [minRooms, setMinRooms] = useState<string>("");
-  const [maxRooms, setMaxRooms] = useState<string>("");
+  const [minDownpayment, setMinDownpayment] = useState<string>(""); // UPDATED: Replaced minRooms
+  const [maxDownpayment, setMaxDownpayment] = useState<string>(""); // UPDATED: Replaced maxRooms
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -113,8 +113,12 @@ export default function CatalogList() {
         search: searchQuery || undefined,
         minPrice: minPrice ? parseFloat(minPrice.replace(/,/g, "")) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice.replace(/,/g, "")) : undefined,
-        minRooms: minRooms ? parseInt(minRooms.replace(/,/g, "")) : undefined,
-        maxRooms: maxRooms ? parseInt(maxRooms.replace(/,/g, "")) : undefined,
+        minDownpayment: minDownpayment
+          ? parseFloat(minDownpayment.replace(/,/g, ""))
+          : undefined, // UPDATED
+        maxDownpayment: maxDownpayment
+          ? parseFloat(maxDownpayment.replace(/,/g, ""))
+          : undefined, // UPDATED
       });
 
       if (!result) {
@@ -155,8 +159,8 @@ export default function CatalogList() {
     searchQuery,
     minPrice,
     maxPrice,
-    minRooms,
-    maxRooms,
+    minDownpayment, // UPDATED
+    maxDownpayment, // UPDATED
   ]);
 
   // Reset selection when designs change
@@ -170,8 +174,8 @@ export default function CatalogList() {
     searchQuery,
     minPrice,
     maxPrice,
-    minRooms,
-    maxRooms,
+    minDownpayment, // UPDATED
+    maxDownpayment, // UPDATED
   ]);
 
   // Handle design selection from URL parameter
@@ -376,17 +380,6 @@ export default function CatalogList() {
     );
   }
 
-  if (selectedDesign) {
-    return (
-      <DesignDetails
-        design={selectedDesign}
-        onBack={() => setSelectedDesign(null)}
-        onDelete={handleDeleteClick}
-        onEdit={() => setEditingDesign(selectedDesign)}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col min-h-screen px-10 font-geist">
       {/* Fixed Header Section */}
@@ -513,20 +506,23 @@ export default function CatalogList() {
                   </div>
                 </div>
 
+                {/* UPDATED: Replaced Rooms filters with Downpayment filters */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label
-                      htmlFor="dropdown_min_rooms"
+                      htmlFor="dropdown_min_downpayment"
                       className="block text-sm font-medium text-gray-700 mb-1 font-geist"
                     >
-                      Min Rooms
+                      Min Downpayment
                     </Label>
                     <Input
-                      id="dropdown_min_rooms"
+                      id="dropdown_min_downpayment"
                       placeholder="Min"
-                      value={minRooms}
+                      value={minDownpayment}
                       onChange={(e) => {
-                        setMinRooms(formatNumberWithCommas(e.target.value));
+                        setMinDownpayment(
+                          formatNumberWithCommas(e.target.value)
+                        );
                         setCurrentPage(1);
                       }}
                       className="w-full border-gray-300 rounded-lg font-geist"
@@ -534,17 +530,19 @@ export default function CatalogList() {
                   </div>
                   <div>
                     <Label
-                      htmlFor="dropdown_max_rooms"
+                      htmlFor="dropdown_max_downpayment"
                       className="block text-sm font-medium text-gray-700 mb-1 font-geist"
                     >
-                      Max Rooms
+                      Max Downpayment
                     </Label>
                     <Input
-                      id="dropdown_max_rooms"
+                      id="dropdown_max_downpayment"
                       placeholder="Max"
-                      value={maxRooms}
+                      value={maxDownpayment}
                       onChange={(e) => {
-                        setMaxRooms(formatNumberWithCommas(e.target.value));
+                        setMaxDownpayment(
+                          formatNumberWithCommas(e.target.value)
+                        );
                         setCurrentPage(1);
                       }}
                       className="w-full border-gray-300 rounded-lg font-geist"
@@ -560,8 +558,8 @@ export default function CatalogList() {
                     setFilterCategory("all");
                     setMinPrice("");
                     setMaxPrice("");
-                    setMinRooms("");
-                    setMaxRooms("");
+                    setMinDownpayment(""); // UPDATED
+                    setMaxDownpayment(""); // UPDATED
                     setCurrentPage(1);
                   }}
                 >
@@ -774,6 +772,19 @@ export default function CatalogList() {
           </div>
         )}
       </div>
+
+      {selectedDesign && (
+        <DesignDetails
+          design={selectedDesign}
+          onBack={() => setSelectedDesign(null)}
+          onDelete={handleDeleteClick}
+          onEdit={() => {
+            setEditingDesign(selectedDesign);
+            setSelectedDesign(null);
+          }}
+          isOpen={!!selectedDesign}
+        />
+      )}
 
       {/* Add Design Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

@@ -48,6 +48,7 @@ import {
   ClipboardList,
   Clock,
   Building,
+  CalendarCheck,
 } from "lucide-react";
 
 interface MenuItem {
@@ -117,6 +118,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             href: "/admin/admindashboard",
             description: "Overview and analytics",
             icon: <LayoutDashboard className="h-4 w-4" />,
+          },
+          {
+            name: "Appointments",
+            href: "/admin/appointments",
+            description: "Manage client appointments and consultations",
+            icon: <CalendarCheck className="h-4 w-4" />,
           },
           {
             name: "Projects",
@@ -230,7 +237,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Icons for dropdown items
   const getDropdownIcon = (name: string) => {
     switch (name) {
-      case "Main Inventory":
+      case "Materials":
         return <Boxes className="h-3.5 w-3.5" />;
       case "Client Inventory":
         return <ClipboardList className="h-3.5 w-3.5" />;

@@ -2,10 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -15,27 +11,46 @@ import {
 import { toast } from "sonner";
 import { Design } from "@/types/design";
 import { getDesigns } from "@/action/designs";
-import { submitInquiry } from "@/action/inquiries";
-import { X } from "lucide-react";
 import { PublicDesignDetails } from "@/components/public/catalog/PublicDesignDetails";
 import { CatalogCard } from "@/components/public/catalog/CatalogCard";
+import { InquiryForm } from "@/components/public/catalog/InquiryForm";
 import Confetti from "react-confetti";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import NotFound from "@/components/admin/NotFound";
+import { X } from "lucide-react";
 
 export default function PublicCatalog() {
   const [designs, setDesigns] = useState<Design[]>([]);
+  const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isInquiryOpen, setIsInquiryOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    message: "",
-  });
-  const [isLoading, setIsLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [showAcknowledgment, setShowAcknowledgment] = useState(false);
   const [fetching, setFetching] = useState(true);
+
+  // Filter and pagination state
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const cardsPerPage = 12;
+
+  // Available categories for tags
+  const categories = [
+    "all",
+    "industrial",
+    "residential",
+    "commercial",
+    "office",
+    "custom",
+  ];
 
   useEffect(() => {
     const fetchDesigns = async () => {
@@ -44,6 +59,7 @@ export default function PublicCatalog() {
         const result = await getDesigns();
         if (result.success && result.designs) {
           setDesigns(result.designs);
+          setFilteredDesigns(result.designs);
         } else {
           toast.error(result.error || "Failed to load designs");
         }
@@ -56,6 +72,28 @@ export default function PublicCatalog() {
     fetchDesigns();
   }, []);
 
+  // Apply filters whenever filter criteria change
+  useEffect(() => {
+    let filtered = designs;
+
+    // Apply category filter
+    if (filterCategory !== "all") {
+      filtered = filtered.filter(
+        (design) => design.category === filterCategory
+      );
+    }
+
+    setFilteredDesigns(filtered);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [designs, filterCategory]);
+
+  // Calculate pagination
+  const totalCount = filteredDesigns.length;
+  const totalPages = Math.ceil(totalCount / cardsPerPage);
+  const startIndex = (currentPage - 1) * cardsPerPage;
+  const endIndex = startIndex + cardsPerPage;
+  const currentDesigns = filteredDesigns.slice(startIndex, endIndex);
+
   const handleDesignClick = (design: Design) => {
     setSelectedDesign(design);
     setIsDetailsOpen(true);
@@ -67,49 +105,56 @@ export default function PublicCatalog() {
     setIsInquiryOpen(true);
   };
 
-  const handleSubmitInquiry = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedDesign) return;
-
-    setIsLoading(true);
-    try {
-      const formDataObj = new FormData();
-      formDataObj.append("name", formData.name);
-      formDataObj.append("email", formData.email);
-      formDataObj.append("phone", formData.phone);
-      formDataObj.append("message", formData.message);
-      formDataObj.append("designId", selectedDesign.design_id);
-
-      const result = await submitInquiry(formDataObj);
-      if (result.success) {
-        toast.success("Inquiry submitted successfully!");
-        setIsInquiryOpen(false);
-        setFormData({ name: "", email: "", phone: "", message: "" });
-        setShowConfetti(true);
-        setShowAcknowledgment(true);
-        setTimeout(() => {
-          setShowConfetti(false);
-          setShowAcknowledgment(false);
-        }, 5000);
-      } else {
-        toast.error(result.error || "Failed to submit inquiry");
-      }
-    } catch (error) {
-      toast.error("An error occurred while submitting the inquiry");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleInquirySuccess = () => {
+    setShowConfetti(true);
+    setShowAcknowledgment(true);
+    setTimeout(() => {
+      setShowConfetti(false);
+      setShowAcknowledgment(false);
+    }, 5000);
   };
 
   const formatPrice = (price: number): string => {
     return `₱${price.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+  };
+
+  const capitalizeFirstLetter = (str: string): string => {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i);
+        }
+        pages.push("ellipsis");
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push("ellipsis");
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+        pages.push("ellipsis");
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i);
+        }
+        pages.push("ellipsis");
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
   };
 
   return (
@@ -130,7 +175,7 @@ export default function PublicCatalog() {
       )}
 
       {/* Header Section */}
-      <div className="text-center mb-16">
+      <div className="text-center mb-8">
         <h1 className="text-4xl tracking-tight font-black text-[var(--orange)] mb-4">
           Our Design Catalog
         </h1>
@@ -140,31 +185,65 @@ export default function PublicCatalog() {
         </p>
       </div>
 
-      <hr className="border-t border-gray-200 my-8" />
+      {/* Category Tags Only - UPDATED WITH ORANGE COLORS */}
+      <div className="flex flex-wrap gap-2 mb-2 border-t py-4">
+        {categories.map((category) => (
+          <button
+            key={category}
+            onClick={() => {
+              setFilterCategory(category);
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 ${
+              filterCategory === category
+                ? "bg-orange-500 text-white hover:bg-orange-600"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            {category === "all"
+              ? "All Categories"
+              : capitalizeFirstLetter(category)}
+          </button>
+        ))}
+      </div>
 
       {/* Designs Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        {fetching
-          ? Array.from({ length: 8 }).map((_, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 animate-pulse"
-              >
-                <div className="relative aspect-[4/3] bg-gray-200">
-                  {/* Skeleton for image */}
-                </div>
-                <div className="p-6 space-y-4">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-full"></div>
-                  <div className="flex justify-between items-center pt-4">
-                    <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-                    <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+      {fetching ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="space-y-3 animate-pulse">
+              {/* Image Skeleton */}
+              <div className="bg-white rounded-sm overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer relative">
+                <div className="relative aspect-video bg-gray-200"></div>
+              </div>
+
+              {/* Info Skeleton */}
+              <div className="rounded-none">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="h-3 w-3 bg-gray-200 rounded"></div>
+                        <div className="h-3 bg-gray-200 rounded w-12"></div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-3 w-3 bg-gray-200 rounded"></div>
+                        <div className="h-3 bg-gray-200 rounded w-12"></div>
+                      </div>
+                    </div>
                   </div>
+                  <div className="h-8 bg-gray-200 rounded w-16"></div>
                 </div>
               </div>
-            ))
-          : designs.map((design) => (
+            </div>
+          ))}
+        </div>
+      ) : currentDesigns.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {currentDesigns.map((design) => (
               <CatalogCard
                 key={design.design_id}
                 design={design}
@@ -173,7 +252,79 @@ export default function PublicCatalog() {
                 formatPrice={formatPrice}
               />
             ))}
-      </div>
+          </div>
+
+          {/* Pagination Section - ALWAYS VISIBLE even with 1 page */}
+          <div className="mt-12 mb-8">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    className={
+                      currentPage === 1
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+
+                {getPageNumbers().map((page, index) => (
+                  <PaginationItem key={index}>
+                    {page === "ellipsis" ? (
+                      <PaginationEllipsis />
+                    ) : (
+                      <PaginationLink
+                        onClick={() => setCurrentPage(page as number)}
+                        isActive={currentPage === page}
+                        className={
+                          currentPage === page
+                            ? "bg-gray-900 text-white hover:bg-gray-800"
+                            : "text-gray-700 hover:bg-gray-100"
+                        }
+                      >
+                        {page}
+                      </PaginationLink>
+                    )}
+                  </PaginationItem>
+                ))}
+
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                    }
+                    className={
+                      currentPage === totalPages
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+
+            {/* Page info */}
+            <div className="text-center mt-4 text-sm text-gray-600">
+              Page {currentPage} of {totalPages}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* No Results State - Using NotFound Component */
+        <div className="text-center py-16">
+          <NotFound description="Try selecting a different category to explore more designs" />
+          <Button
+            variant="outline"
+            onClick={() => setFilterCategory("all")}
+            className="border-gray-300 mt-6"
+          >
+            Show All Categories
+          </Button>
+        </div>
+      )}
 
       {/* Design Details Modal */}
       {selectedDesign && (
@@ -185,113 +336,13 @@ export default function PublicCatalog() {
         />
       )}
 
-      {/* Inquiry Form Modal */}
-      <Dialog open={isInquiryOpen} onOpenChange={setIsInquiryOpen}>
-        <DialogContent className="sm:max-w-lg rounded-xl">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">
-              Inquire About {selectedDesign?.name}
-            </DialogTitle>
-            <p className="text-sm text-gray-500">
-              We'll get back to you within 24 hours
-            </p>
-          </DialogHeader>
-
-          <div className="grid gap-6">
-            {selectedDesign && (
-              <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                <div className="w-20 h-20 bg-gray-200 rounded-lg overflow-hidden">
-                  {selectedDesign.images.length > 0 && (
-                    <Image
-                      src={selectedDesign.images[0]}
-                      alt={selectedDesign.name}
-                      width={80}
-                      height={80}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-medium">{selectedDesign.name}</h4>
-                  <p className="text-sm text-gray-600">
-                    {formatPrice(selectedDesign.price)} •{" "}
-                    {selectedDesign.square_meters} sqm
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmitInquiry} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    placeholder="John Doe"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    placeholder="your@email.com"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  required
-                  placeholder="+63 912 345 6789"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="message">Your Message</Label>
-                <Textarea
-                  id="message"
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  required
-                  placeholder="Tell us about your requirements..."
-                  rows={4}
-                />
-              </div>
-
-              <div className="relative">
-                <Button
-                  type="submit"
-                  className="w-full bg-[var(--orange)] hover:bg-[var(--orange)]/90"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Submitting..." : "Submit Inquiry"}
-                </Button>
-              </div>
-
-              <p className="text-xs text-gray-500 text-center">
-                By submitting, you agree to our privacy policy and terms of
-                service
-              </p>
-            </form>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Inquiry Form Component */}
+      <InquiryForm
+        selectedDesign={selectedDesign}
+        isInquiryOpen={isInquiryOpen}
+        setIsInquiryOpen={setIsInquiryOpen}
+        onInquirySuccess={handleInquirySuccess}
+      />
 
       {/* Acknowledgment Dialog */}
       <Dialog open={showAcknowledgment} onOpenChange={setShowAcknowledgment}>

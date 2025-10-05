@@ -7,7 +7,7 @@ interface NotFoundProps {
 }
 
 export default function NotFound({
-  title = "This space is cleaner than a minimalist's dream. Maybe too clean?",
+  title = "As flawless as fresh paint on a brand-new facade. Maybe too flawless?",
   description = "The page you're looking for seems to have vanished into thin air.",
 }: NotFoundProps) {
   return (

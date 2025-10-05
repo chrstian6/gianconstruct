@@ -104,24 +104,24 @@ export function UserManagementTable({
     <div className="w-full">
       <div className="overflow-x-auto">
         <Table className="min-w-full compact-table">
-          <TableHeader className="bg-[var(--orange)]/5">
+          <TableHeader className="bg-muted/50">
             <TableRow className="h-10">
               {tableHeaders.map((header) => (
                 <TableHead
                   key={header.key}
-                  className="px-3 py-2 text-left text-xs font-medium text-[var(--orange)] uppercase tracking-wider"
+                  className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
                   {header.label}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
-          <TableBody className="bg-white divide-y divide-gray-200">
+          <TableBody className="bg-card divide-y divide-border">
             {users.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={tableHeaders.length}
-                  className="px-3 py-4 text-center text-sm text-gray-500"
+                  className="px-3 py-4 text-center text-sm text-muted-foreground"
                 >
                   No users found
                 </TableCell>
@@ -130,11 +130,11 @@ export function UserManagementTable({
               users.map((user) => (
                 <TableRow
                   key={user.user_id}
-                  className="h-12 hover:bg-gray-50 transition-colors"
+                  className="h-12 hover:bg-accent/50 transition-colors"
                 >
                   {/* User ID Column */}
                   {columnVisibility.user_id && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 font-mono">
+                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground font-mono">
                       {formatText(user.user_id, 8)}
                     </TableCell>
                   )}
@@ -142,21 +142,21 @@ export function UserManagementTable({
                   {/* Name Column */}
                   {(columnVisibility.firstName ||
                     columnVisibility.lastName) && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
                       {formatText(`${user.firstName} ${user.lastName}`, 15)}
                     </TableCell>
                   )}
 
                   {/* Email Column */}
                   {columnVisibility.email && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
                       {formatText(user.email, 20)}
                     </TableCell>
                   )}
 
                   {/* Contact Column */}
                   {columnVisibility.contactNo && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
                       {user.contactNo ? formatText(user.contactNo, 12) : "N/A"}
                     </TableCell>
                   )}
@@ -164,18 +164,7 @@ export function UserManagementTable({
                   {/* Role Column */}
                   {columnVisibility.role && (
                     <TableCell className="px-3 py-2 whitespace-nowrap">
-                      <Badge
-                        variant="outline"
-                        className="text-xs capitalize"
-                        style={{
-                          backgroundColor:
-                            user.role === "admin"
-                              ? "rgba(var(--orange-rgb), 0.1)"
-                              : "transparent",
-                          borderColor: "var(--orange)",
-                          color: "var(--orange)",
-                        }}
-                      >
+                      <Badge variant="secondary" className="text-xs capitalize">
                         {user.role}
                       </Badge>
                     </TableCell>
@@ -187,12 +176,6 @@ export function UserManagementTable({
                       <Badge
                         className="text-xs"
                         variant={user.verified ? "default" : "secondary"}
-                        style={{
-                          backgroundColor: user.verified
-                            ? "var(--orange)"
-                            : "#f1f5f9",
-                          color: user.verified ? "white" : "#64748b",
-                        }}
                       >
                         {user.verified ? "Active" : "Inactive"}
                       </Badge>
@@ -201,7 +184,7 @@ export function UserManagementTable({
 
                   {/* Actions Column */}
                   {columnVisibility.actions && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
@@ -209,20 +192,20 @@ export function UserManagementTable({
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="text-xs">
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem className="text-xs cursor-pointer">
                             <Eye className="mr-2 h-3.5 w-3.5" />
                             View Details
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="text-xs"
+                            className="text-xs cursor-pointer"
                             onClick={() => handleEditClick(user)}
                           >
                             <Edit3 className="mr-2 h-3.5 w-3.5" />
                             Edit User
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="text-xs"
+                            className="text-xs cursor-pointer"
                             onClick={() => handleToggleInactive(user.user_id)}
                           >
                             {user.verified ? (

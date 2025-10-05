@@ -37,7 +37,7 @@ interface CatalogFormProps {
   onAddDesign: (design: Design) => void;
 }
 
-// Image Modal Component
+// Image Modal Component (keep this the same)
 const ImageModal = ({
   images,
   currentIndex,
@@ -110,7 +110,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [estimatedCost, setEstimatedCost] = useState<string>("");
-  const [numberOfRooms, setNumberOfRooms] = useState<string>("");
+  const [estimatedDownpayment, setEstimatedDownpayment] = useState<string>(""); // NEW FIELD
   const [squareMeters, setSquareMeters] = useState<string>("");
   const [category, setCategory] = useState<string>("");
   const [customCategory, setCustomCategory] = useState<string>("");
@@ -144,11 +144,12 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
     setEstimatedCost(formatNumberWithCommas(value));
   };
 
-  const handleNumberOfRoomsChange = (
+  // NEW: Handler for downpayment
+  const handleEstimatedDownpaymentChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ): void => {
-    const value = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
-    setNumberOfRooms(value);
+    const value = e.target.value.replace(/[^0-9]/g, "");
+    setEstimatedDownpayment(formatNumberWithCommas(value));
   };
 
   const handleSquareMetersChange = (
@@ -242,13 +243,13 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isModalOpen, currentImageIndex, previews.length]);
 
-  // Check if basic section is complete
+  // Check if basic section is complete - UPDATED
   const isBasicSectionComplete = () => {
     return (
       name &&
       description &&
       estimatedCost &&
-      numberOfRooms &&
+      estimatedDownpayment && // NEW: Check downpayment
       squareMeters &&
       category &&
       (category !== "custom" || customCategory)
@@ -304,7 +305,10 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
     formData.append("name", name);
     formData.append("description", description);
     formData.append("price", estimatedCost.replace(/,/g, ""));
-    formData.append("number_of_rooms", numberOfRooms);
+    formData.append(
+      "estimated_downpayment",
+      estimatedDownpayment.replace(/,/g, "")
+    ); // NEW
     formData.append("square_meters", squareMeters.replace(/,/g, ""));
     formData.append("category", finalCategory);
     formData.append("isLoanOffer", isLoanOffer.toString());
@@ -324,7 +328,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
       setName("");
       setDescription("");
       setEstimatedCost("");
-      setNumberOfRooms("");
+      setEstimatedDownpayment(""); // NEW: Reset downpayment
       setSquareMeters("");
       setCategory("");
       setCustomCategory("");
@@ -464,7 +468,7 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
                     />
                   </div>
 
-                  {/* Specifications */}
+                  {/* Specifications - UPDATED */}
                   <div className="md:col-span-2">
                     <h4 className="text-sm font-medium mb-4">Specifications</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -482,17 +486,24 @@ export default function CatalogForm({ onAddDesign }: CatalogFormProps) {
                         />
                       </div>
 
+                      {/* NEW: Estimated Downpayment Field */}
                       <div className="space-y-2">
-                        <Label htmlFor="number_of_rooms" className="text-sm">
-                          Number of Rooms *
+                        <Label
+                          htmlFor="estimated_downpayment"
+                          className="text-sm"
+                        >
+                          Estimated Downpayment (₱) *
                         </Label>
                         <Input
-                          id="number_of_rooms"
+                          id="estimated_downpayment"
                           type="text"
-                          value={numberOfRooms}
-                          onChange={handleNumberOfRoomsChange}
-                          placeholder="Enter total rooms"
-                          maxLength={2}
+                          value={
+                            estimatedDownpayment
+                              ? `₱${estimatedDownpayment}`
+                              : ""
+                          }
+                          onChange={handleEstimatedDownpaymentChange}
+                          placeholder="Enter downpayment amount"
                           required
                         />
                       </div>

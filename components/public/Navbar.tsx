@@ -35,7 +35,7 @@ export function Navbar() {
   }, [pathname]); // Only recompute when pathname changes
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-white backdrop-blur supports-[backdrop-filter]:bg-white/95">
+    <header className="sticky top-0 z-50 bg-white backdrop-blur supports-[backdrop-filter]:bg-white/95">
       <div className="flex-1 flex items-center justify-between">
         <div className="container mx-auto flex h-16 items-center px-4">
           {/* Logo */}
