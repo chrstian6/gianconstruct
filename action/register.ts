@@ -25,18 +25,26 @@ const registerSchema = z
     path: ["confirmPassword"],
   });
 
+// Updated alphabet for the new format: lowercase letters and numbers
 const generateUserId = customAlphabet(
   "abcdefghijklmnopqrstuvwxyz0123456789",
-  6
+  5
 );
+
 async function generateUniqueUserId(): Promise<string> {
   let user_id: string;
   let existingUser: IUserDocument | null;
+
   do {
+    // Generate 5 characters for the ID part (e.g., "m95xu")
     const rawId = generateUserId();
+
+    // Format as: first 3 characters + "-" + last 2 characters (e.g., "m95-xu")
     user_id = `${rawId.slice(0, 3)}-${rawId.slice(3)}`;
+
     existingUser = await User.findOne({ user_id });
   } while (existingUser);
+
   return user_id;
 }
 
@@ -117,6 +125,7 @@ export async function registerUser(formData: FormData) {
       userId: user._id.toString(),
       email: user.email,
       user_id: user.user_id,
+      firstName: user.firstName,
     });
 
     try {
@@ -159,7 +168,7 @@ export async function registerUser(formData: FormData) {
                       <td style="background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #666666;">
                         <p style="margin: 0;">&copy; 2025 GianConstruct. All rights reserved.</p>
                         <p style="margin: 5px 0 0;">
-                          <a href="${process.env.NEXT_PUBLIC_APP_URL}/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a> | 
+                          <a href="${process.env.NEXT_PUBLIC_APP_URL}/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a> |
                           <a href="${process.env.NEXT_PUBLIC_APP_URL}/terms" style="color: #1a73e8; text-decoration: none;">Terms of Service</a>
                         </p>
                       </td>

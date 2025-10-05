@@ -6,9 +6,15 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**.supabase.co", // Wildcard for all Supabase domains
+        hostname: "**.supabase.co",
       },
     ],
+  },
+  // For older versions (keep both for compatibility)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "50mb",
+    },
   },
 };
 

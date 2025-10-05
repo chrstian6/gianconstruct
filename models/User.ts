@@ -1,8 +1,9 @@
+// models/User.ts
 import mongoose, { Schema, Document } from "mongoose";
 import { scryptSync, randomBytes } from "crypto";
 
 export interface IUserDocument extends Document {
-  _id: string; // Mongoose adds this by default
+  _id: string;
   user_id: string;
   firstName: string;
   lastName: string;
@@ -12,6 +13,8 @@ export interface IUserDocument extends Document {
   password: string;
   role: string;
   verified: boolean;
+  otp?: string;
+  otpExpires?: Date;
   hashPassword: (password: string) => Promise<void>;
   createdAt: Date;
   updatedAt: Date;
@@ -20,17 +23,19 @@ export interface IUserDocument extends Document {
 const userSchema = new Schema<IUserDocument>(
   {
     user_id: { type: String, required: true, unique: true },
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
-    address: { type: String, required: true },
+    firstName: { type: String },
+    lastName: { type: String },
+    address: { type: String },
     contactNo: { type: String, unique: true, sparse: true },
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    password: { type: String },
     role: { type: String, default: "user" },
     verified: { type: Boolean, default: false },
+    otp: { type: String },
+    otpExpires: { type: Date },
   },
   {
-    timestamps: true, // Automatically adds createdAt and updatedAt
+    timestamps: true,
   }
 );
 
@@ -47,5 +52,4 @@ userSchema.method("hashPassword", async function (password: string) {
 
 const User =
   mongoose.models.User || mongoose.model<IUserDocument>("User", userSchema);
-
 export default User;

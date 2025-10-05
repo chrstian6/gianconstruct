@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Caveat&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Nata+Sans:wght@100..900&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -8,7 +6,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -46,95 +44,237 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0); /* white */
-  --foreground: oklch(0 0 0); /* black */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0 0 0);
-  --primary: oklch(0 0 0); /* black */
-  --primary-foreground: oklch(1 0 0); /* white */
-  --text-secondary: oklch(1 0 0); /* white */
-  --text-secondary-foreground: oklch(0 0 0); /* black */
-  --orange: #e78b48;
-  --orange-foreground: #ffffff;
-  --muted: oklch(0.97 0.001 106.424);
-  --muted-foreground: oklch(0.553 0.013 58.071);
-  --accent: var(--orange);
-  --accent-foreground: var(--orange-foreground);
+  --radius: 0.65rem;
+  --background: oklch(0.9992 0.0039 106.47);
+  --foreground: oklch(0.325 0 0);
+  --card: oklch(0.9992 0.0039 106.47);
+  --card-foreground: oklch(0.325 0 0);
+  --popover: oklch(0.9992 0.0039 106.47);
+  --popover-foreground: oklch(0.325 0 0);
+  --primary: oklch(0.325 0 0);
+  --primary-foreground: oklch(0.9992 0.0039 106.47);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.325 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.325 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.923 0.003 48.717);
-  --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.709 0.01 56.259);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0 0 0);
-  --sidebar-primary: oklch(0 0 0);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.97 0.001 106.424);
-  --sidebar-accent-foreground: oklch(0 0 0);
-  --sidebar-border: oklch(0.923 0.003 48.717);
-  --sidebar-ring: oklch(0.709 0.01 56.259);
+  --sidebar: oklch(0.9992 0.0039 106.47);
+  --sidebar-foreground: oklch(0.325 0 0);
+  --sidebar-primary: oklch(0.325 0 0);
+  --sidebar-primary-foreground: oklch(0.9992 0.0039 106.47);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.325 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-  --background: oklch(0 0 0); /* black */
-  --foreground: oklch(1 0 0); /* white */
-  --card: oklch(0.1 0 0);
-  --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.1 0 0);
-  --popover-foreground: oklch(1 0 0);
-  --primary: oklch(1 0 0); /* white */
-  --primary-foreground: oklch(0 0 0); /* black */
-  --text-secondary: oklch(0 0 0); /* black */
-  --text-secondary-foreground: oklch(1 0 0); /* white */
-  --orange: #e78b48; /* Same orange in dark mode */
-  --orange-foreground: #000000;
-  --muted: oklch(0.2 0 0);
-  --muted-foreground: oklch(0.8 0 0);
-  --accent: oklch(0.2 0 0);
-  --accent-foreground: oklch(1 0 0);
+  --background: oklch(0.325 0 0);
+  --foreground: oklch(0.9992 0.0039 106.47);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.9992 0.0039 106.47);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.9992 0.0039 106.47);
+  --primary: oklch(0.9992 0.0039 106.47);
+  --primary-foreground: oklch(0.325 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.9992 0.0039 106.47);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.9992 0.0039 106.47);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.3 0 0);
-  --input: oklch(0.3 0 0);
-  --ring: oklch(0.8 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.1 0 0);
-  --sidebar-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(1 0 0);
-  --sidebar-primary-foreground: oklch(0 0 0);
-  --sidebar-accent: oklch(0.2 0 0);
-  --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.3 0 0);
-  --sidebar-ring: oklch(0.8 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.9992 0.0039 106.47);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.9992 0.0039 106.47);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.9992 0.0039 106.47);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
   * {
+    padding: 0;
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
-  .font-handwritten {
-    font-family: "Caveat", cursive;
+  .font-geist {
+    background-color: var(--background);
+    font-family:
+      "Segoe UI",
+      system-ui,
+      -apple-system,
+      sans-serif;
   }
+}
 
-  .font-handwriting {
-    font-family: "Caveat", cursive;
-    -webkit-text-stroke: 0.5px #000000;
-    color: transparent;
-  }
-  .font-helvetica {
-    font-family: "Nata Sans", sans-serif;
-  }
+/* React DatePicker Custom Styles */
+.react-datepicker {
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  background-color: white;
+}
+
+.react-datepicker__header {
+  background-color: white;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.react-datepicker__current-month {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.react-datepicker__day-name {
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 0.75rem;
+  width: 2rem;
+  line-height: 2rem;
+}
+
+.react-datepicker__day {
+  color: #374151;
+  font-size: 0.875rem;
+  width: 2rem;
+  height: 2rem;
+  line-height: 2rem;
+  margin: 0.1rem;
+}
+
+.react-datepicker__day:hover {
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+}
+
+.react-datepicker__day--selected {
+  background-color: #111827;
+  color: white;
+  border-radius: 0.25rem;
+}
+
+.react-datepicker__day--selected:hover {
+  background-color: #1f2937;
+}
+
+.react-datepicker__day--disabled {
+  color: #d1d5db;
+  cursor: not-allowed;
+}
+
+.react-datepicker__day--keyboard-selected {
+  background-color: #e5e7eb;
+  color: #374151;
+  border-radius: 0.25rem;
+}
+
+.react-datepicker__navigation {
+  top: 8px;
+  width: 2rem;
+  height: 2rem;
+}
+
+.react-datepicker__navigation--previous {
+  border-right-color: #6b7280;
+  left: 8px;
+}
+
+.react-datepicker__navigation--next {
+  border-left-color: #6b7280;
+  right: 8px;
+}
+
+.react-datepicker-popper {
+  z-index: 1000 !important;
+}
+
+.react-datepicker__triangle {
+  display: none;
+}
+
+.react-datepicker__month {
+  margin: 0.5rem;
+}
+
+.react-datepicker__week {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Dark mode styles for datepicker */
+.dark .react-datepicker {
+  background-color: oklch(0.205 0 0);
+  border-color: oklch(1 0 0 / 10%);
+}
+
+.dark .react-datepicker__header {
+  background-color: oklch(0.269 0 0);
+  border-bottom-color: oklch(1 0 0 / 10%);
+}
+
+.dark .react-datepicker__current-month {
+  color: oklch(0.9992 0.0039 106.47);
+}
+
+.dark .react-datepicker__day-name {
+  color: oklch(0.708 0 0);
+}
+
+.dark .react-datepicker__day {
+  color: oklch(0.9992 0.0039 106.47);
+}
+
+.dark .react-datepicker__day:hover {
+  background-color: oklch(0.269 0 0);
+}
+
+.dark .react-datepicker__day--selected {
+  background-color: oklch(0.488 0.243 264.376);
+}
+
+.dark .react-datepicker__day--disabled {
+  color: oklch(0.556 0 0);
+}
+
+.dark .react-datepicker__day--keyboard-selected {
+  background-color: oklch(0.269 0 0);
+  color: oklch(0.9992 0.0039 106.47);
+}
+
+.dark .react-datepicker__navigation--previous {
+  border-right-color: oklch(0.708 0 0);
+}
+
+.dark .react-datepicker__navigation--next {
+  border-left-color: oklch(0.708 0 0);
 }

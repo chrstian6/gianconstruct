@@ -1,32 +1,136 @@
 "use client";
 
-import { Design } from "@/types/design";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Home,
-  Square,
-  Heart,
-  ArrowRight,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Info, Calculator, X } from "lucide-react";
+import { Design } from "@/types/design";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState } from "react";
-import { calculatePaymentSchedule, formatCurrency } from "@/lib/amortization";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+  type CarouselApi,
+} from "@/components/ui/carousel";
+import { Card, CardContent } from "@/components/ui/card";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import DetailsCard from "@/components/admin/catalog/DetailsCard";
+import QuotationCard from "@/components/admin/catalog/QuotationCard";
+
+// 🔹 Simple and Fast Supabase Image Cache
+const supabaseImageCache = new Map<
+  string,
+  { url: string; timestamp: number }
+>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Track loading images to prevent duplicates
+const loadingImages = new Set<string>();
+
+// Simple cache cleanup
+const cleanupCache = () => {
+  const now = Date.now();
+  supabaseImageCache.forEach((value, key) => {
+    if (now - value.timestamp > CACHE_DURATION) {
+      supabaseImageCache.delete(key);
+    }
+  });
+};
+
+// 🔹 Optimized Image Component with simple caching
+const OptimizedImage = React.memo(function OptimizedImage({
+  src,
+  alt,
+  className,
+  priority = false,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  priority?: boolean;
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState("");
+
+  useEffect(() => {
+    // Reset states when src changes
+    setIsLoaded(false);
+
+    // Check cache first
+    cleanupCache();
+    const cached = supabaseImageCache.get(src);
+    const now = Date.now();
+
+    if (cached && now - cached.timestamp < CACHE_DURATION) {
+      setCurrentSrc(cached.url);
+      setIsLoaded(true);
+      return;
+    }
+
+    // Prevent duplicate loading
+    if (loadingImages.has(src)) {
+      // If already loading, wait for it
+      const checkInterval = setInterval(() => {
+        const cached = supabaseImageCache.get(src);
+        if (cached) {
+          setCurrentSrc(cached.url);
+          setIsLoaded(true);
+          clearInterval(checkInterval);
+        }
+      }, 50);
+      return () => clearInterval(checkInterval);
+    }
+
+    // Mark as loading and load new image
+    loadingImages.add(src);
+    const img = new Image();
+    img.src = src;
+
+    img.onload = () => {
+      // Cache the image
+      supabaseImageCache.set(src, { url: src, timestamp: Date.now() });
+      loadingImages.delete(src);
+      setCurrentSrc(src);
+      setIsLoaded(true);
+    };
+
+    img.onerror = () => {
+      loadingImages.delete(src);
+      setIsLoaded(true); // Still set loaded to show error state
+    };
+  }, [src]);
+
+  if (!isLoaded) {
+    return <div className={`bg-gray-200 animate-pulse ${className}`} />;
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      alt={alt}
+      className={className}
+      loading={priority ? "eager" : "lazy"}
+      decoding="async"
+    />
+  );
+});
+
+// Display name for better debugging
+OptimizedImage.displayName = "OptimizedImage";
 
 interface PublicDesignDetailsProps {
   design: Design;
@@ -41,342 +145,330 @@ export function PublicDesignDetails({
   onOpenChange,
   onInquire,
 }: PublicDesignDetailsProps) {
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [activeTab, setActiveTab] = useState("details");
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] =
+    useState<boolean>(false);
+  const [isLoanDialogOpen, setIsLoanDialogOpen] = useState<boolean>(false);
 
-  const formatPrice = (price: number): string => {
-    return `₱${price.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-  };
+  // Carousel state
+  const [api, setApi] = useState<CarouselApi>();
+  const [current, setCurrent] = useState(0);
+  const [count, setCount] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
-  const handleNextImage = () => {
-    setSelectedImageIndex((prev) =>
-      prev === design.images.length - 1 ? 0 : prev + 1
-    );
-  };
+  // Track already preloaded images to prevent duplicates
+  const preloadedImagesRef = useRef<Set<string>>(new Set());
 
-  const handlePrevImage = () => {
-    setSelectedImageIndex((prev) =>
-      prev === 0 ? design.images.length - 1 : prev - 1
-    );
-  };
+  // 🔹 Fast preload without complex logic
+  useEffect(() => {
+    if (open && design?.images) {
+      design.images.forEach((image) => {
+        // Skip if already preloaded or cached
+        if (
+          preloadedImagesRef.current.has(image) ||
+          supabaseImageCache.has(image)
+        ) {
+          return;
+        }
 
-  const toggleFavorite = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsFavorite(!isFavorite);
-  };
+        // Mark as preloaded immediately
+        preloadedImagesRef.current.add(image);
 
-  // Format loan term for display, matching admin side behavior
-  const formatLoanTerm = (): string => {
-    if (design.maxLoanTerm == null || design.loanTermType == null) return "N/A";
-    if (design.loanTermType === "years") {
-      const years = Math.round(design.maxLoanTerm / 12);
-      return `${years} ${years === 1 ? "year" : "years"}`;
+        // Only preload if not in cache
+        if (!supabaseImageCache.has(image) && !loadingImages.has(image)) {
+          loadingImages.add(image);
+          const img = new Image();
+          img.src = image;
+          img.onload = () => {
+            supabaseImageCache.set(image, {
+              url: image,
+              timestamp: Date.now(),
+            });
+            loadingImages.delete(image);
+          };
+          img.onerror = () => {
+            loadingImages.delete(image);
+            preloadedImagesRef.current.delete(image); // Allow retry
+          };
+        }
+      });
     }
-    return `${design.maxLoanTerm} ${design.maxLoanTerm === 1 ? "month" : "months"}`;
-  };
+  }, [open, design?.images]);
 
-  // Calculate payment schedule if loan details are available
-  const paymentSchedule =
-    design.isLoanOffer &&
-    design.maxLoanTerm &&
-    design.interestRate &&
-    design.interestRateType &&
-    design.loanTermType
-      ? calculatePaymentSchedule(
-          design.price,
-          design.maxLoanTerm,
-          design.interestRate,
-          design.interestRateType,
-          design.loanTermType
-        )
-      : [];
+  // Cleanup preloaded images when component unmounts
+  useEffect(() => {
+    return () => {
+      preloadedImagesRef.current.clear();
+    };
+  }, []);
 
-  // Calculate summary of the loan
-  const loanSummary = paymentSchedule.length
-    ? {
-        totalPayments: paymentSchedule.reduce(
-          (sum, payment) => sum + payment.payment,
-          0
-        ),
-        totalInterest: paymentSchedule.reduce(
-          (sum, payment) => sum + payment.interest,
-          0
-        ),
-        monthlyPayment: paymentSchedule[0]?.payment || 0,
-      }
-    : null;
+  // 🔹 Carousel setup with optimized event handling
+  useEffect(() => {
+    if (!api) return;
+
+    setCount(api.scrollSnapList().length);
+    setCurrent(api.selectedScrollSnap());
+
+    const handleSelect = () => {
+      setCurrent(api.selectedScrollSnap());
+    };
+
+    api.on("select", handleSelect);
+
+    return () => {
+      api.off("select", handleSelect);
+    };
+  }, [api]);
+
+  // 🔹 Smooth scroll to top when opening
+  useEffect(() => {
+    if (open && carouselRef.current) {
+      // Use setTimeout to ensure smooth scroll works after render
+      setTimeout(() => {
+        carouselRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      }, 100);
+    }
+  }, [open]);
+
+  // 🔹 Memoized event handlers
+  const handleThumbnailClick = useCallback(
+    (index: number) => {
+      api?.scrollTo(index);
+    },
+    [api]
+  );
+
+  const handleInquireClick = useCallback(() => {
+    onInquire(design);
+  }, [design, onInquire]);
+
+  const handleClose = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  // 🔹 Memoized data
+  const memoizedDesign = useMemo(
+    () => design,
+    [
+      design.design_id,
+      design.name,
+      design.description,
+      design.price,
+      design.estimated_downpayment, // UPDATED: Replaced number_of_rooms
+      design.square_meters,
+      design.category,
+      design.isLoanOffer,
+    ]
+  );
+
+  const memoizedImages = useMemo(() => design.images, [design.images]);
+
+  // 🔹 Memoized carousel items to prevent re-renders
+  const carouselItems = useMemo(
+    () =>
+      memoizedImages.map((image, index) => (
+        <CarouselItem key={`${design.design_id}-${index}`}>
+          <Card className="border-0 shadow-none">
+            <CardContent className="flex items-center justify-center p-0">
+              <div className="w-full min-h-[500px] max-h-[680px] flex items-center justify-center bg-gray-100 rounded-lg">
+                <OptimizedImage
+                  src={image}
+                  alt={`${design.name} ${index + 1}`}
+                  className="w-full h-auto max-h-[680px] object-contain rounded-lg"
+                  priority={index === 0}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </CarouselItem>
+      )),
+    [memoizedImages, design.design_id, design.name]
+  );
+
+  // 🔹 Memoized thumbnail items
+  const thumbnailItems = useMemo(
+    () =>
+      memoizedImages.map((image, index) => (
+        <button
+          key={`thumb-${design.design_id}-${index}`}
+          onClick={() => handleThumbnailClick(index)}
+          className={`border-2 rounded-lg overflow-hidden transition-all duration-200 ${
+            current === index
+              ? "border-orange-500 ring-2 ring-orange-500 ring-opacity-50"
+              : "border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          <div className="w-full h-40 relative">
+            <OptimizedImage
+              src={image}
+              alt={`${design.name} thumbnail ${index + 1}`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </button>
+      )),
+    [
+      memoizedImages,
+      design.design_id,
+      design.name,
+      current,
+      handleThumbnailClick,
+    ]
+  );
+
+  const capitalizeWords = useCallback((str: string | undefined): string => {
+    if (!str) return "Unknown";
+    return str
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  }, []);
+
+  const memoizedDescription = useMemo(
+    () => capitalizeWords(design.description),
+    [design.description, capitalizeWords]
+  );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl rounded-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl text-accent font-bold">
-            Design Specifications
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      {/* Drawer */}
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent className="h-[98vh] max-h-[98vh]" ref={carouselRef}>
+          <DrawerTitle asChild>
+            <VisuallyHidden>Design Details - {design.name}</VisuallyHidden>
+          </DrawerTitle>
 
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Image Gallery */}
-          <div className="space-y-4">
-            {/* Main Selected Image */}
-            <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden group">
-              {design.images[selectedImageIndex] && (
-                <img
-                  src={design.images[selectedImageIndex]}
-                  alt={`${design.name} - ${selectedImageIndex + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              )}
-
-              {/* Navigation Arrows */}
-              {design.images.length > 1 && (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePrevImage();
-                    }}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100"
-                  >
-                    <ChevronLeft className="h-6 w-6" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNextImage();
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100"
-                  >
-                    <ChevronRight className="h-6 w-6" />
-                  </button>
-                </>
-              )}
-
-              {/* Favorite Button */}
-              <button
-                onClick={toggleFavorite}
-                className="absolute top-4 right-4 p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white transition-all"
+          <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+            {/* Header */}
+            <div className="w-full max-w-5xl mx-auto flex items-start justify-between mb-6 relative pt-5">
+              <h1 className="text-3xl font-semibold">{design.name}</h1>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClose}
+                className="h-8 w-8"
               >
-                <Heart
-                  className={`h-5 w-5 ${isFavorite ? "fill-red-500 text-red-500" : "text-gray-700"}`}
-                />
-              </button>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
 
-              {/* Image Counter */}
-              {design.images.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
-                  {selectedImageIndex + 1} / {design.images.length}
+            {/* Sticky Actions */}
+            <div className="w-full max-w-6xl p-4 bg-white sticky top-[-25] z-10 mx-auto">
+              <div className="flex justify-between items-center w-full max-w-5xl mx-auto">
+                <Badge
+                  variant="secondary"
+                  className={
+                    design.isLoanOffer
+                      ? "bg-green-100 text-green-800 hover:bg-green-200"
+                      : "bg-gray-100 text-gray-800"
+                  }
+                >
+                  {design.isLoanOffer
+                    ? "Available for Loan"
+                    : "Not Available for Loan"}
+                </Badge>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsDetailsDialogOpen(true)}
+                    className="flex items-center gap-2 font-medium cursor-pointer p-3 border-gray-300"
+                  >
+                    <Info className="h-4 w-4" />
+                    Project Details
+                  </Button>
+
+                  {design.isLoanOffer && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsLoanDialogOpen(true)}
+                      className="flex items-center gap-2 font-medium cursor-pointer p-3 border-gray-300"
+                    >
+                      <Calculator className="h-4 w-4" />
+                      Check Loan Quotation
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={handleInquireClick}
+                    className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2"
+                  >
+                    Inquire Now
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Carousel */}
+            <div className="w-full mb-6">
+              <Carousel
+                setApi={setApi}
+                className="w-full max-w-6xl mx-auto"
+                opts={{
+                  align: "start",
+                  loop: true,
+                }}
+              >
+                <CarouselContent>{carouselItems}</CarouselContent>
+                {memoizedImages.length > 1 && (
+                  <>
+                    <CarouselPrevious className="left-4 size-8 bg-white/80 hover:bg-white transition-all duration-300" />
+                    <CarouselNext className="right-4 size-8 bg-white/80 hover:bg-white transition-all duration-300" />
+                  </>
+                )}
+              </Carousel>
+              {memoizedImages.length > 1 && (
+                <div className="text-center text-sm text-gray-500 mt-4">
+                  Image {current + 1} of {count}
                 </div>
               )}
             </div>
 
-            {/* Thumbnail Gallery */}
-            {design.images.length > 1 && (
-              <div className="grid grid-cols-4 gap-2">
-                {design.images.map((image, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedImageIndex(index)}
-                    className={`relative aspect-square bg-gray-100 rounded-md overflow-hidden border-2 transition-all ${selectedImageIndex === index ? "border-[var(--orange)]" : "border-transparent"}`}
-                  >
-                    <img
-                      src={image}
-                      alt={`Thumbnail ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
+            {/* Description */}
+            <div className="text-center max-w-6xl mx-auto mb-8">
+              <p className="text-base font-medium text-gray-700 leading-relaxed tracking-[1.2px]">
+                {memoizedDescription}
+              </p>
+            </div>
+
+            {/* Thumbnails */}
+            {memoizedImages.length > 1 && (
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  All Images
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {thumbnailItems}
+                </div>
               </div>
             )}
           </div>
+        </DrawerContent>
+      </Drawer>
 
-          {/* Design Details */}
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-xl font-semibold">{design.name}</h3>
-              <p className="text-gray-600">{design.description}</p>
-            </div>
+      {/* Dialogs */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 scroll-smooth">
+          <DialogHeader className="px-6 py-4">
+            <DialogTitle className="text-2xl font-bold">
+              <VisuallyHidden>Project Details</VisuallyHidden>
+            </DialogTitle>
+          </DialogHeader>
+          <DetailsCard design={memoizedDesign} />
+        </DialogContent>
+      </Dialog>
 
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger
-                  value="loan"
-                  disabled={!design.isLoanOffer}
-                  className="data-[state=active]:bg-orange-100 data-[state=active]:text-orange-800"
-                >
-                  Loan Info
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="details">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <Home className="h-5 w-5 text-[var(--orange)]" />
-                    <div>
-                      <p className="text-sm text-gray-500">Rooms</p>
-                      <p className="font-medium">{design.number_of_rooms}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Square className="h-5 w-5 text-[var(--orange)]" />
-                    <div>
-                      <p className="text-sm text-gray-500">Area</p>
-                      <p className="font-medium">{design.square_meters} sqm</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-5 w-5 text-[var(--orange)]">₱</span>
-                    <div>
-                      <p className="text-sm text-gray-500">Price</p>
-                      <p className="font-medium">{formatPrice(design.price)}</p>
-                    </div>
-                  </div>
-                  {design.isLoanOffer && (
-                    <div className="flex items-center gap-2">
-                      <span className="h-5 w-5 text-green-600">✓</span>
-                      <div>
-                        <p className="text-sm text-gray-500">Loan Available</p>
-                        <p className="font-medium text-xs">
-                          {formatLoanTerm()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="loan">
-                {design.isLoanOffer ? (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-gray-800 mb-2">
-                        Loan Summary
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-gray-600">Loan Amount</p>
-                          <p className="font-medium">
-                            {formatPrice(design.price)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Interest Rate</p>
-                          <p className="font-medium">
-                            {design.interestRate}%{" "}
-                            {design.interestRateType === "yearly"
-                              ? "per year"
-                              : "per month"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Loan Term</p>
-                          <p className="font-medium">{formatLoanTerm()}</p>
-                        </div>
-                        {loanSummary && (
-                          <div>
-                            <p className="text-sm text-gray-600">
-                              Monthly Payment
-                            </p>
-                            <p className="font-medium">
-                              {formatCurrency(loanSummary.monthlyPayment)}
-                            </p>
-                          </div>
-                        )}
-                        {loanSummary && (
-                          <>
-                            <div>
-                              <p className="text-sm text-gray-600">
-                                Total Interest
-                              </p>
-                              <p className="font-medium">
-                                {formatCurrency(loanSummary.totalInterest)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">
-                                Total Payments
-                              </p>
-                              <p className="font-medium">
-                                {formatCurrency(loanSummary.totalPayments)}
-                              </p>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {paymentSchedule.length > 0 && (
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-gray-800 mb-2">
-                          Amortization Schedule (First 12 Months)
-                        </h4>
-                        <div className="max-h-60 overflow-y-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Month</TableHead>
-                                <TableHead>Payment</TableHead>
-                                <TableHead>Principal</TableHead>
-                                <TableHead>Interest</TableHead>
-                                <TableHead>Balance</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {paymentSchedule.slice(0, 12).map((payment) => (
-                                <TableRow key={payment.month}>
-                                  <TableCell>{payment.month}</TableCell>
-                                  <TableCell>
-                                    {formatCurrency(payment.payment)}
-                                  </TableCell>
-                                  <TableCell>
-                                    {formatCurrency(payment.principal)}
-                                  </TableCell>
-                                  <TableCell>
-                                    {formatCurrency(payment.interest)}
-                                  </TableCell>
-                                  <TableCell>
-                                    {formatCurrency(payment.balance)}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                        {paymentSchedule.length > 12 && (
-                          <p className="text-xs text-gray-500 mt-2">
-                            Showing first 12 months of {paymentSchedule.length}{" "}
-                            payments
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    No loan information available for this design
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-
-            <div className="pt-4 border-t">
-              <Button
-                onClick={() => onInquire(design)}
-                className="w-full bg-[var(--orange)] hover:bg-[var(--orange)]/90"
-              >
-                Inquire About This Design{" "}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      <Dialog open={isLoanDialogOpen} onOpenChange={setIsLoanDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 scroll-smooth">
+          <DialogHeader className="px-6 py-4">
+            <DialogTitle className="text-2xl font-bold">
+              <VisuallyHidden>Quotation</VisuallyHidden>
+            </DialogTitle>
+          </DialogHeader>
+          <QuotationCard design={memoizedDesign} />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

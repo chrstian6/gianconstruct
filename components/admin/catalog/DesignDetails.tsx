@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+"use client";
+
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,88 +9,207 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  ChevronLeft,
   Trash2,
   Pencil,
   MoreHorizontal,
-  DollarSign,
-  ChevronRight,
-  ChevronLeftIcon,
+  X,
+  Info,
+  Calculator,
 } from "lucide-react";
 import { Design } from "@/types/design";
 import { useModalStore } from "@/lib/stores";
 import { deleteDesign } from "@/action/designs";
 import { toast } from "sonner";
-import { calculatePaymentSchedule, formatCurrency } from "@/lib/amortization";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+  type CarouselApi,
+} from "@/components/ui/carousel";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import DetailsCard from "./DetailsCard";
+import QuotationCard from "./QuotationCard";
 
 interface DesignDetailsProps {
-  design: Design;
+  design: Design | null;
   onBack: () => void;
   onDelete: (id: string) => void;
   onEdit: () => void;
+  isOpen: boolean;
 }
+
+// 🔹 Image Cache for Admin
+const adminImageCache = new Map<string, { url: string; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const loadingImages = new Set<string>();
+
+// 🔹 Memoized utility functions
+const capitalizeWords = (str: string | undefined): string => {
+  if (!str) return "Unknown";
+  return str
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+};
+
+// 🔹 Optimized Image Component
+const OptimizedAdminImage = React.memo(function OptimizedAdminImage({
+  src,
+  alt,
+  className,
+  priority = false,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  priority?: boolean;
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState("");
+
+  useEffect(() => {
+    setIsLoaded(false);
+
+    // Check cache first
+    const cached = adminImageCache.get(src);
+    const now = Date.now();
+
+    if (cached && now - cached.timestamp < CACHE_DURATION) {
+      setCurrentSrc(cached.url);
+      setIsLoaded(true);
+      return;
+    }
+
+    // Prevent duplicate loading
+    if (loadingImages.has(src)) {
+      const checkInterval = setInterval(() => {
+        const cached = adminImageCache.get(src);
+        if (cached) {
+          setCurrentSrc(cached.url);
+          setIsLoaded(true);
+          clearInterval(checkInterval);
+        }
+      }, 50);
+      return () => clearInterval(checkInterval);
+    }
+
+    // Mark as loading and load new image
+    loadingImages.add(src);
+    const img = new Image();
+    img.src = src;
+
+    img.onload = () => {
+      adminImageCache.set(src, { url: src, timestamp: Date.now() });
+      loadingImages.delete(src);
+      setCurrentSrc(src);
+      setIsLoaded(true);
+    };
+
+    img.onerror = () => {
+      loadingImages.delete(src);
+      setIsLoaded(true);
+    };
+  }, [src]);
+
+  if (!isLoaded) {
+    return <div className={`bg-gray-200 animate-pulse ${className}`} />;
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      alt={alt}
+      className={className}
+      loading={priority ? "eager" : "lazy"}
+      decoding="async"
+    />
+  );
+});
+
+OptimizedAdminImage.displayName = "OptimizedAdminImage";
 
 export default function DesignDetails({
   design,
   onBack,
   onDelete,
   onEdit,
+  isOpen,
 }: DesignDetailsProps) {
-  const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
-  const [isAnimating, setIsAnimating] = useState<boolean>(false);
-  const [showLoanDetails, setShowLoanDetails] = useState<boolean>(false);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const { isDeleteDesignOpen, setIsDeleteDesignOpen } = useModalStore();
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] =
+    useState<boolean>(false);
+  const [isLoanDialogOpen, setIsLoanDialogOpen] = useState<boolean>(false);
 
-  const ITEMS_PER_PAGE = 12;
+  // Get both the state and the designIdToDelete from the store
+  const { isDeleteDesignOpen, designIdToDelete, setIsDeleteDesignOpen } =
+    useModalStore();
 
-  const capitalizeWords = (str: string | undefined): string => {
-    if (!str) return "Unknown";
-    return str
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-  };
+  // Carousel state
+  const [api, setApi] = React.useState<CarouselApi>();
+  const [current, setCurrent] = React.useState(0);
+  const [count, setCount] = React.useState(0);
 
-  const formatSquareMeters = (square_meters: number): string => {
-    return `${square_meters.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} sqm`;
-  };
+  // 🔹 Preload images when component opens
+  useEffect(() => {
+    if (isOpen && design?.images) {
+      design.images.forEach((image) => {
+        if (!adminImageCache.has(image) && !loadingImages.has(image)) {
+          loadingImages.add(image);
+          const img = new Image();
+          img.src = image;
+          img.onload = () => {
+            adminImageCache.set(image, { url: image, timestamp: Date.now() });
+            loadingImages.delete(image);
+          };
+          img.onerror = () => {
+            loadingImages.delete(image);
+          };
+        }
+      });
+    }
+  }, [isOpen, design?.images]);
 
-  const handlePrevImage = () => {
-    setIsAnimating(true);
-    setCurrentImageIndex((prev) =>
-      prev === 0 ? design.images.length - 1 : prev - 1
-    );
-    setTimeout(() => setIsAnimating(false), 300);
-  };
+  // 🔹 Carousel setup with optimized event handling
+  useEffect(() => {
+    if (!api) return;
 
-  const handleNextImage = () => {
-    setIsAnimating(true);
-    setCurrentImageIndex((prev) =>
-      prev === design.images.length - 1 ? 0 : prev + 1
-    );
-    setTimeout(() => setIsAnimating(false), 300);
-  };
+    setCount(api.scrollSnapList().length);
+    setCurrent(api.selectedScrollSnap());
 
-  const handleThumbnailClick = (index: number) => {
-    setIsAnimating(true);
-    setCurrentImageIndex(index);
-    setTimeout(() => setIsAnimating(false), 300);
-  };
+    const handleSelect = () => {
+      setCurrent(api.selectedScrollSnap());
+    };
 
-  const handleConfirmDelete = async () => {
-    const result = await deleteDesign(design.design_id);
+    api.on("select", handleSelect);
+
+    return () => {
+      api.off("select", handleSelect);
+    };
+  }, [api]);
+
+  // 🔹 Memoized event handlers
+  const handleConfirmDelete = useCallback(async () => {
+    if (!designIdToDelete) {
+      toast.error("No design selected for deletion");
+      setIsDeleteDesignOpen(false);
+      return;
+    }
+
+    const result = await deleteDesign(designIdToDelete);
+
     if (result?.success) {
-      onDelete(design.design_id);
+      onDelete(designIdToDelete);
       toast.success("Design deleted successfully!");
       setIsDeleteDesignOpen(false);
       onBack();
@@ -97,445 +217,245 @@ export default function DesignDetails({
       toast.error(result?.error || "Failed to delete design");
       setIsDeleteDesignOpen(false);
     }
-  };
+  }, [designIdToDelete, onDelete, onBack, setIsDeleteDesignOpen]);
 
-  // Calculate payment schedule with proper validation and null checks
-  const paymentSchedule =
-    design.isLoanOffer &&
-    design.maxLoanTerm !== undefined &&
-    design.maxLoanTerm !== null &&
-    design.maxLoanTerm > 0 &&
-    design.interestRate !== undefined &&
-    design.interestRate !== null &&
-    design.interestRate >= 0
-      ? calculatePaymentSchedule(
-          design.price,
-          design.maxLoanTerm, // Already stored as months in database
-          design.interestRate,
-          design.interestRateType || "yearly",
-          "months" // Always use months since we store in months
-        )
-      : [];
+  const handleThumbnailClick = useCallback(
+    (index: number) => {
+      api?.scrollTo(index);
+    },
+    [api]
+  );
 
-  // Calculate loan summary with null checks
-  const loanSummary =
-    paymentSchedule.length > 0
-      ? {
-          totalInterest: paymentSchedule.reduce(
-            (sum, row) => sum + row.interest,
-            0
-          ),
-          totalAmountPaid:
-            design.price +
-            paymentSchedule.reduce((sum, row) => sum + row.interest, 0),
-          monthlyPayment: paymentSchedule[0]?.payment || 0,
-        }
-      : null;
+  const handleDetailsOpen = useCallback(() => {
+    setIsDetailsDialogOpen(true);
+  }, []);
 
-  // Calculate display term for UI (convert months back to years if needed)
-  const displayTerm =
-    design.maxLoanTerm !== undefined && design.maxLoanTerm !== null
-      ? design.loanTermType === "years"
-        ? `${Math.round(design.maxLoanTerm / 12)} years`
-        : `${design.maxLoanTerm} months`
-      : "N/A";
+  const handleLoanOpen = useCallback(() => {
+    setIsLoanDialogOpen(true);
+  }, []);
 
-  // Pagination logic for payment schedule
-  const totalPages = Math.ceil(paymentSchedule.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentPayments = paymentSchedule.slice(startIndex, endIndex);
+  const handleEditClick = useCallback(() => {
+    onEdit();
+  }, [onEdit]);
 
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
+  const handleDeleteClick = useCallback(() => {
+    if (design) {
+      setIsDeleteDesignOpen(true, design.design_id);
     }
-  };
+  }, [design, setIsDeleteDesignOpen]);
 
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
+  // 🔹 Memoized design data
+  const memoizedDesign = useMemo(() => design, [design]);
 
-  const handlePageClick = (page: number) => {
-    setCurrentPage(page);
-  };
+  // 🔹 Memoized carousel items
+  const carouselItems = useMemo(
+    () =>
+      design?.images.map((image, index) => (
+        <CarouselItem key={index}>
+          <Card className="border-0 shadow-none">
+            <CardContent className="flex items-center justify-center">
+              <OptimizedAdminImage
+                src={image}
+                alt={`${design.name} ${index + 1}`}
+                className="w-full min-h-[500px] max-h-[680px] object-contain rounded-lg p-2 bg-gray-100"
+                priority={index === 0}
+              />
+            </CardContent>
+          </Card>
+        </CarouselItem>
+      )) || [],
+    [design]
+  );
+
+  // 🔹 Memoized thumbnail items
+  const thumbnailItems = useMemo(
+    () =>
+      design?.images.map((image, index) => (
+        <button
+          key={index}
+          onClick={() => handleThumbnailClick(index)}
+          className={`border-2 rounded-lg overflow-hidden transition-all duration-200 ${
+            current - 1 === index
+              ? "border-[var(--orange)] ring-2 ring-[var(--orange)] ring-opacity-50"
+              : "border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          <div className="w-full h-40 relative">
+            <OptimizedAdminImage
+              src={image}
+              alt={`${design.name} thumbnail ${index + 1}`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </button>
+      )) || [],
+    [design, current, handleThumbnailClick]
+  );
+
+  // Early return if design is null
+  if (!design) {
+    return null;
+  }
+
+  const memoizedDescription = useMemo(
+    () => capitalizeWords(design.description),
+    [design.description]
+  );
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="flex items-center gap-2 text-[var(--orange)] hover:bg-orange-50"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to Catalog
-        </Button>
-        <h2 className="text-2xl font-bold text-gray-800">{design.name}</h2>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreHorizontal className="h-5 w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={onEdit}
-              className="text-sm cursor-pointer"
-            >
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setIsDeleteDesignOpen(true)}
-              className="text-sm text-red-600 cursor-pointer"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+    <>
+      {/* Drawer for Image Display */}
+      <Drawer open={isOpen} onOpenChange={onBack}>
+        <DrawerContent className="h-[98vh] max-h-[98vh]">
+          <DrawerTitle asChild>
+            <VisuallyHidden>Design Details - {design.name}</VisuallyHidden>
+          </DrawerTitle>
+          <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+            {/* Header Section */}
+            <div className="w-full max-w-5xl mx-auto flex items-start justify-between mb-6 relative pt-5">
+              <h1 className="text-3xl font-semibold">{design.name}</h1>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onBack}
+                className="h-8 w-8"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
 
-      <div className="space-y-6">
-        <p className="text-sm text-gray-500 text-center">
-          Design ID: {design.design_id}
-        </p>
+            {/* Sticky Actions */}
+            <div className="w-full max-w-6xl p-4 bg-white sticky top-[-25] z-10 mx-auto">
+              <div className="flex justify-between items-center w-full max-w-5xl mx-auto">
+                <Badge
+                  variant="secondary"
+                  className={
+                    design.isLoanOffer
+                      ? "bg-green-100 text-green-800 hover:bg-green-200"
+                      : "bg-gray-100 text-gray-800"
+                  }
+                >
+                  {design.isLoanOffer
+                    ? "Available for Loan"
+                    : "Not Available for Loan"}
+                </Badge>
 
-        {design.images.length > 0 ? (
-          <div className="grid gap-4">
-            <div className="relative">
-              <img
-                src={design.images[currentImageIndex]}
-                alt={`${design.name} ${currentImageIndex + 1}`}
-                className={`h-auto w-full max-h-96 object-contain rounded-lg ${
-                  isAnimating
-                    ? "opacity-0 transition-opacity duration-300"
-                    : "opacity-100 transition-opacity duration-300"
-                }`}
-              />
-              {design.images.length > 1 && (
-                <>
-                  <button
-                    onClick={handlePrevImage}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
+                <div className="flex items-center gap-2">
+                  {/* Project Details Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDetailsOpen}
+                    className="flex items-center gap-2 font-medium cursor-pointer p-3 border-none shadow-none"
                   >
-                    &lt;
-                  </button>
-                  <button
-                    onClick={handleNextImage}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:black/70"
-                  >
-                    &gt;
-                  </button>
-                </>
-              )}
-            </div>
-            {design.images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto py-2">
-                {design.images.map((image, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleThumbnailClick(index)}
-                    className={`flex-shrink-0 ${
-                      index === currentImageIndex
-                        ? "ring-2 ring-[var(--orange)]"
-                        : ""
-                    }`}
-                  >
-                    <img
-                      src={image}
-                      alt={`${design.name} thumbnail ${index + 1}`}
-                      className="h-16 w-16 object-cover rounded"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-            <p className="text-gray-500">No images available</p>
-          </div>
-        )}
+                    <Info className="h-4 w-4" />
+                    Project Details
+                  </Button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Description:
-              </Label>
-              <p className="text-base">{capitalizeWords(design.description)}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Category:
-              </Label>
-              <p className="text-base">{capitalizeWords(design.category)}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Price:
-              </Label>
-              <p className="text-base font-semibold">
-                {formatCurrency(design.price)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Number of Rooms:
-              </Label>
-              <p className="text-base">{design.number_of_rooms}</p>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Area:
-              </Label>
-              <p className="text-base">
-                {formatSquareMeters(design.square_meters)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Loan Offered:
-              </Label>
-              <p className="text-base">{design.isLoanOffer ? "Yes" : "No"}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Created At:
-              </Label>
-              <p className="text-base">
-                {design.createdAt
-                  ? new Date(design.createdAt).toLocaleDateString()
-                  : "N/A"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 min-w-[120px]">
-                Updated At:
-              </Label>
-              <p className="text-base">
-                {design.updatedAt
-                  ? new Date(design.updatedAt).toLocaleDateString()
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {design.isLoanOffer && (
-          <div className="mt-8 bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
-            <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-[var(--orange)]" />
-              <h3 className="text-lg font-bold text-gray-800">
-                Financing Options
-              </h3>
-            </div>
-            <div className="p-4">
-              {loanSummary ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <Label className="text-sm font-medium text-gray-600 block mb-1">
-                        Loan Amount
-                      </Label>
-                      <p className="text-xl font-semibold text-gray-900">
-                        {formatCurrency(design.price)}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <Label className="text-sm font-medium text-gray-600 block mb-1">
-                        Term
-                      </Label>
-                      <p className="text-xl font-semibold text-gray-900">
-                        {displayTerm}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <Label className="text-sm font-medium text-gray-600 block mb-1">
-                        Interest Rate
-                      </Label>
-                      <p className="text-xl font-semibold text-gray-900">
-                        {design.interestRate !== undefined &&
-                        design.interestRate !== null
-                          ? `${design.interestRate}%`
-                          : "N/A"}{" "}
-                        <span className="text-sm text-gray-500">
-                          ({design.interestRateType || "yearly"})
-                        </span>
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <Label className="text-sm font-medium text-gray-600 block mb-1">
-                        Monthly Payment
-                      </Label>
-                      <p className="text-xl font-semibold text-gray-900">
-                        {formatCurrency(loanSummary.monthlyPayment)}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <Label className="text-sm font-medium text-gray-600 block mb-1">
-                        Total Interest
-                      </Label>
-                      <p className="text-xl font-semibold text-gray-900">
-                        {formatCurrency(loanSummary.totalInterest)}
-                      </p>
-                    </div>
-                    <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
-                      <Label className="text-sm font-medium text-orange-700 block mb-1">
-                        Total Cost
-                      </Label>
-                      <p className="text-2xl font-bold text-[var(--orange)]">
-                        {formatCurrency(loanSummary.totalAmountPaid)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
+                  {/* Loan Quotation Button */}
+                  {design.isLoanOffer && (
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        setShowLoanDetails(!showLoanDetails);
-                        setCurrentPage(1); // Reset to first page when showing details
-                      }}
-                      className="text-[var(--orange)] border-[var(--orange)] hover:bg-orange-50"
+                      size="sm"
+                      onClick={handleLoanOpen}
+                      className="flex items-center gap-2 font-medium cursor-pointer p-3 border-none shadow-none"
                     >
-                      {showLoanDetails
-                        ? "Hide Payment Schedule"
-                        : "Show Payment Schedule"}
+                      <Calculator className="h-4 w-4" />
+                      Check Loan Quotation
                     </Button>
+                  )}
 
-                    {showLoanDetails && (
-                      <div className="mt-6 border rounded-lg overflow-hidden">
-                        <Table>
-                          <TableHeader className="bg-gray-50">
-                            <TableRow>
-                              <TableHead className="font-semibold">
-                                Month
-                              </TableHead>
-                              <TableHead className="font-semibold">
-                                Payment
-                              </TableHead>
-                              <TableHead className="font-semibold">
-                                Principal
-                              </TableHead>
-                              <TableHead className="font-semibold">
-                                Interest
-                              </TableHead>
-                              <TableHead className="font-semibold">
-                                Balance
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {currentPayments.map((row) => (
-                              <TableRow key={row.month}>
-                                <TableCell>{row.month}</TableCell>
-                                <TableCell>
-                                  {formatCurrency(row.payment)}
-                                </TableCell>
-                                <TableCell>
-                                  {formatCurrency(row.principal)}
-                                </TableCell>
-                                <TableCell>
-                                  {formatCurrency(row.interest)}
-                                </TableCell>
-                                <TableCell>
-                                  {formatCurrency(row.balance)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                  {/* Action Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={handleEditClick}
+                        className="text-sm cursor-pointer"
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleDeleteClick}
+                        className="text-sm text-red-600 cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </div>
 
-                        {/* Pagination Controls */}
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between p-4 bg-gray-50 border-t">
-                            <div className="text-sm text-[var(--orange)]">
-                              Showing {startIndex + 1}-
-                              {Math.min(endIndex, paymentSchedule.length)} of{" "}
-                              {paymentSchedule.length} payments
-                            </div>
-                            <div className="flex items-center gap-2 ">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handlePrevPage}
-                                disabled={currentPage === 1}
-                                className="h-8 w-8 p-0"
-                              >
-                                <ChevronLeftIcon className="h-4 w-4" />
-                              </Button>
-
-                              {Array.from(
-                                { length: Math.min(5, totalPages) },
-                                (_, i) => {
-                                  let pageNum;
-                                  if (totalPages <= 5) {
-                                    pageNum = i + 1;
-                                  } else if (currentPage <= 3) {
-                                    pageNum = i + 1;
-                                  } else if (currentPage >= totalPages - 2) {
-                                    pageNum = totalPages - 4 + i;
-                                  } else {
-                                    pageNum = currentPage - 2 + i;
-                                  }
-
-                                  return (
-                                    <Button
-                                      key={pageNum}
-                                      variant={
-                                        currentPage === pageNum
-                                          ? "default"
-                                          : "outline"
-                                      }
-                                      size="sm"
-                                      onClick={() => handlePageClick(pageNum)}
-                                      className="h-8 w-8 p-0 "
-                                    >
-                                      {pageNum}
-                                    </Button>
-                                  );
-                                }
-                              )}
-
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleNextPage}
-                                disabled={currentPage === totalPages}
-                                className="h-8 w-8 p-0 "
-                              >
-                                <ChevronRight className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-4 text-[var(--orange)]">
-                  <p className="text-gray-500">
-                    {design.maxLoanTerm !== undefined &&
-                    design.maxLoanTerm !== null &&
-                    design.interestRate !== undefined &&
-                    design.interestRate !== null
-                      ? "Invalid loan configuration. Please check term or interest rate."
-                      : "Loan details are not fully configured"}
-                  </p>
+            {/* Image Carousel */}
+            <div className="w-full mb-6">
+              <Carousel setApi={setApi} className="w-full max-w-6xl mx-auto">
+                <CarouselContent>{carouselItems}</CarouselContent>
+                {design.images.length > 1 && (
+                  <>
+                    <CarouselPrevious className="left-4 size-8 bg-white/80 hover:bg-white transition-all duration-300" />
+                    <CarouselNext className="right-4 size-8 bg-white/80 hover:bg-white transition-all duration-300" />
+                  </>
+                )}
+              </Carousel>
+              {design.images.length > 1 && (
+                <div className="text-center text-sm text-gray-500 mt-4">
+                  Image {current} of {count}
                 </div>
               )}
             </div>
+
+            {/* Description */}
+            <div className="text-center max-w-6xl mx-auto mb-8">
+              <p className="text-base font-medium text-gray-700 leading-relaxed tracking-[1.2px]">
+                {memoizedDescription}
+              </p>
+            </div>
+
+            {/* Dynamic Image Grid for Additional Images */}
+            {design.images.length > 1 && (
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  All Images
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {thumbnailItems}
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Dialog for Project Details */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 font-geist scroll-smooth">
+          <DialogHeader className="px-6 py-4">
+            <DialogTitle>
+              <VisuallyHidden></VisuallyHidden>
+            </DialogTitle>
+          </DialogHeader>
+          <DetailsCard design={design} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for Loan Quotation */}
+      <Dialog open={isLoanDialogOpen} onOpenChange={setIsLoanDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 font-geist scroll-smooth">
+          <DialogHeader className="px-6 py-4">
+            <DialogTitle>
+              <VisuallyHidden></VisuallyHidden>
+            </DialogTitle>
+          </DialogHeader>
+          <QuotationCard design={design} />
+        </DialogContent>
+      </Dialog>
 
       <ConfirmationModal
         isOpen={isDeleteDesignOpen}
@@ -546,6 +466,6 @@ export default function DesignDetails({
         confirmText="Delete"
         cancelText="Cancel"
       />
-    </div>
+    </>
   );
 }

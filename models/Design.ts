@@ -25,10 +25,11 @@ const DesignSchema: Schema = new Schema(
       required: true,
       min: 0,
     },
-    number_of_rooms: {
+    estimated_downpayment: {
+      // NEW FIELD
       type: Number,
       required: true,
-      min: 1,
+      min: 0,
     },
     square_meters: {
       type: Number,
@@ -108,13 +109,12 @@ const DesignSchema: Schema = new Schema(
 );
 
 // Zod schema for pre-save validation (only user-controlled fields)
-
 const DesignPreSaveZodSchema = z.object({
   design_id: z.string().min(1, "Design ID is required"),
   name: z.string().min(1, "Name is required").trim(),
   description: z.string().min(1, "Description is required").trim(),
   price: z.number().min(0, "Price must be positive"),
-  number_of_rooms: z.number().min(1, "At least one room required"),
+  estimated_downpayment: z.number().min(0, "Downpayment must be positive"), // NEW FIELD
   square_meters: z.number().min(0, "Area must be positive"),
   category: z.string().min(1, "Category is required").trim(),
   images: z.array(z.string().url()).min(1, "At least one image required"),
@@ -151,7 +151,7 @@ DesignSchema.pre("save", function (next) {
       name: doc.name,
       description: doc.description,
       price: doc.price,
-      number_of_rooms: doc.number_of_rooms,
+      estimated_downpayment: doc.estimated_downpayment, // NEW
       square_meters: doc.square_meters,
       category: doc.category,
       images: doc.images,
@@ -197,7 +197,7 @@ DesignSchema.pre("findOneAndUpdate", async function (next) {
       name: updatedDoc.name,
       description: updatedDoc.description,
       price: updatedDoc.price,
-      number_of_rooms: updatedDoc.number_of_rooms,
+      estimated_downpayment: updatedDoc.estimated_downpayment, // NEW
       square_meters: updatedDoc.square_meters,
       category: updatedDoc.category,
       images: updatedDoc.images,

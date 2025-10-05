@@ -254,23 +254,6 @@ export default function EditingCatalog({
         <div className="space-y-4">
           <div>
             <Label
-              htmlFor="number_of_rooms"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Number of Rooms
-            </Label>
-            <Input
-              id="number_of_rooms"
-              name="number_of_rooms"
-              type="number"
-              defaultValue={design.number_of_rooms}
-              className="w-full"
-              min="1"
-              required
-            />
-          </div>
-          <div>
-            <Label
               htmlFor="square_meters"
               className="block text-sm font-medium text-gray-700 mb-1"
             >

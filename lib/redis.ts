@@ -1,3 +1,4 @@
+// lib/redis.ts
 "use server";
 
 import { Redis } from "@upstash/redis";
@@ -7,6 +8,7 @@ interface SessionData {
   userId: string;
   email: string;
   user_id: string;
+  firstName: string;
   role: string;
   createdAt: string;
 }
@@ -15,6 +17,7 @@ interface VerificationData {
   userId: string;
   email: string;
   user_id: string;
+  firstName: string;
 }
 
 const redis = new Redis({
@@ -107,5 +110,23 @@ export async function deleteVerificationToken(token: string): Promise<void> {
       error
     );
     throw new Error("Failed to delete verification token");
+  }
+}
+// lib/redis.ts - ADD THIS FUNCTION
+export async function getVerificationToken(token: string): Promise<any> {
+  try {
+    const verificationData = await redis.get(`verify:${token}`);
+    if (!verificationData) return null;
+
+    if (typeof verificationData === "string") {
+      return JSON.parse(verificationData);
+    }
+    return verificationData;
+  } catch (error) {
+    console.error(
+      "Error getting verification token from Upstash Redis:",
+      error
+    );
+    throw new Error("Failed to get verification token");
   }
 }

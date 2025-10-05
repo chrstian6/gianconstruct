@@ -1,8 +1,9 @@
 "use client";
 
-import { Sidebar } from "@/components/admin/Sidebar";
+import { AppSidebar } from "@/components/admin/Sidebar"; // Corrected path and default import
 import { Header } from "@/components/admin/Header";
 import { Toaster } from "sonner";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 export default function AdminLayout({
   children,
@@ -10,17 +11,13 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen bg-background font-inter">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden font-inter">
-        {/* Header */}
-        <Header />
-        {children}
-        <Toaster position="top-right" richColors />
-      </div>
-    </div>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+          <Header />
+        <main>{children}</main>
+      </SidebarInset>
+      <Toaster />
+    </SidebarProvider>
   );
 }

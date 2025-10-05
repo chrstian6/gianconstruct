@@ -6,13 +6,13 @@ import dbConnect from "@/lib/db";
 import DesignModel from "@/models/Design";
 import { supabase } from "@/lib/supabase";
 import { nanoid } from "nanoid";
-import mongoose from "mongoose";
 import {
   AddDesignResponse,
   DeleteDesignResponse,
   GetDesignsResponse,
   UpdateDesignResponse,
   Design,
+  PaginatedDesignsResponse,
   RevalidatePath,
 } from "@/types/design";
 
@@ -22,7 +22,7 @@ type LeanDesign = {
   name: string;
   description: string;
   price: number;
-  number_of_rooms: number;
+  estimated_downpayment: number; // UPDATED: Replaced number_of_rooms
   square_meters: number;
   category: string;
   images: string[];
@@ -47,7 +47,9 @@ export async function addDesign(
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const price = parseFloat(formData.get("price") as string);
-    const number_of_rooms = parseInt(formData.get("number_of_rooms") as string);
+    const estimated_downpayment = parseFloat(
+      formData.get("estimated_downpayment") as string
+    ); // UPDATED
     const square_meters = parseInt(formData.get("square_meters") as string);
     const category = formData.get("category") as string;
     const images = formData.getAll("images") as File[];
@@ -106,16 +108,19 @@ export async function addDesign(
       name,
       description,
       price,
-      number_of_rooms,
+      estimated_downpayment, // UPDATED
       square_meters,
       category,
       images: imageUrls,
       createdBy,
       isLoanOffer,
-      maxLoanTerm: isLoanOffer ? maxLoanTerm : null,
-      loanTermType: isLoanOffer ? loanTermType : null,
-      interestRate: isLoanOffer ? interestRate : null,
-      interestRateType: isLoanOffer ? interestRateType : null,
+      // Only include loan-related fields if isLoanOffer is true
+      ...(isLoanOffer && {
+        maxLoanTerm,
+        loanTermType,
+        interestRate,
+        interestRateType,
+      }),
       design_id: nanoid(10),
     };
 
@@ -131,7 +136,7 @@ export async function addDesign(
       name: cleanDesign.name,
       description: cleanDesign.description,
       price: cleanDesign.price,
-      number_of_rooms: cleanDesign.number_of_rooms,
+      estimated_downpayment: cleanDesign.estimated_downpayment, // UPDATED
       square_meters: cleanDesign.square_meters,
       category: cleanDesign.category,
       images: cleanDesign.images,
@@ -174,7 +179,9 @@ export async function updateDesign(
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
     const price = parseFloat(formData.get("price") as string);
-    const number_of_rooms = parseInt(formData.get("number_of_rooms") as string);
+    const estimated_downpayment = parseFloat(
+      formData.get("estimated_downpayment") as string
+    ); // UPDATED
     const square_meters = parseInt(formData.get("square_meters") as string);
     const category = formData.get("category") as string;
     const existingImages = JSON.parse(
@@ -236,16 +243,26 @@ export async function updateDesign(
       name,
       description,
       price,
-      number_of_rooms,
+      estimated_downpayment, // UPDATED
       square_meters,
       category,
       images: [...existingImages, ...newImageUrls],
       createdBy,
       isLoanOffer,
-      maxLoanTerm: isLoanOffer ? maxLoanTerm : null,
-      loanTermType: isLoanOffer ? loanTermType : null,
-      interestRate: isLoanOffer ? interestRate : null,
-      interestRateType: isLoanOffer ? interestRateType : null,
+      // Only include loan-related fields if isLoanOffer is true, otherwise set to undefined
+      ...(isLoanOffer
+        ? {
+            maxLoanTerm,
+            loanTermType,
+            interestRate,
+            interestRateType,
+          }
+        : {
+            maxLoanTerm: undefined,
+            loanTermType: undefined,
+            interestRate: undefined,
+            interestRateType: undefined,
+          }),
     };
 
     const updatedDesign = await DesignModel.findOneAndUpdate(
@@ -267,7 +284,7 @@ export async function updateDesign(
       name: cleanDesign.name,
       description: cleanDesign.description,
       price: cleanDesign.price,
-      number_of_rooms: cleanDesign.number_of_rooms,
+      estimated_downpayment: cleanDesign.estimated_downpayment, // UPDATED
       square_meters: cleanDesign.square_meters,
       category: cleanDesign.category,
       images: cleanDesign.images,
@@ -356,7 +373,7 @@ export async function getDesigns(): Promise<GetDesignsResponse> {
       name: design.name,
       description: design.description,
       price: design.price,
-      number_of_rooms: design.number_of_rooms,
+      estimated_downpayment: design.estimated_downpayment, // UPDATED
       square_meters: design.square_meters,
       category: design.category,
       images: design.images,
@@ -379,6 +396,219 @@ export async function getDesigns(): Promise<GetDesignsResponse> {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to fetch designs",
+    };
+  }
+}
+
+export async function getDesignsPaginated(params: {
+  page: number;
+  limit: number;
+  category?: string;
+  search?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minDownpayment?: number; // UPDATED: Replaced minRooms
+  maxDownpayment?: number; // UPDATED: Replaced maxRooms
+}): Promise<GetDesignsResponse> {
+  try {
+    await dbConnect();
+
+    const {
+      page = 1,
+      limit = 12,
+      category,
+      search,
+      minPrice,
+      maxPrice,
+      minDownpayment, // UPDATED
+      maxDownpayment, // UPDATED
+    } = params;
+    const skip = (page - 1) * limit;
+
+    // Build filter query
+    const filter: any = {};
+
+    if (category && category !== "all") {
+      filter.category = { $regex: category, $options: "i" };
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (minPrice !== undefined) {
+      filter.price = { ...filter.price, $gte: minPrice };
+    }
+
+    if (maxPrice !== undefined) {
+      filter.price = { ...filter.price, $lte: maxPrice };
+    }
+
+    // UPDATED: Replace rooms filters with downpayment filters
+    if (minDownpayment !== undefined) {
+      filter.estimated_downpayment = {
+        ...filter.estimated_downpayment,
+        $gte: minDownpayment,
+      };
+    }
+
+    if (maxDownpayment !== undefined) {
+      filter.estimated_downpayment = {
+        ...filter.estimated_downpayment,
+        $lte: maxDownpayment,
+      };
+    }
+
+    // Get total count for pagination
+    const totalCount = await DesignModel.countDocuments(filter);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get paginated designs
+    const designs = await DesignModel.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .exec();
+
+    const resultDesigns: Design[] = designs.map((design: any) => ({
+      design_id: design.design_id,
+      name: design.name,
+      description: design.description,
+      price: design.price,
+      estimated_downpayment: design.estimated_downpayment, // UPDATED
+      square_meters: design.square_meters,
+      category: design.category,
+      images: design.images,
+      createdBy: design.createdBy,
+      isLoanOffer: design.isLoanOffer,
+      maxLoanTerm: design.maxLoanTerm ?? null,
+      loanTermType: design.loanTermType ?? null,
+      interestRate: design.interestRate ?? null,
+      interestRateType: design.interestRateType ?? null,
+      createdAt: design.createdAt,
+      updatedAt: design.updatedAt,
+    }));
+
+    return {
+      success: true,
+      data: {
+        designs: resultDesigns,
+        totalCount,
+        totalPages,
+        currentPage: page,
+      },
+    };
+  } catch (error) {
+    console.error("Get paginated designs error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to fetch designs",
+    };
+  }
+}
+
+export async function getDesignsCount(): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  try {
+    await dbConnect();
+    const count = await DesignModel.countDocuments();
+    return { success: true, count };
+  } catch (error) {
+    console.error("Get designs count error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to count designs",
+    };
+  }
+}
+
+// Delete multiple designs
+export async function deleteMultipleDesigns(
+  designIds: string[]
+): Promise<DeleteDesignResponse> {
+  try {
+    await dbConnect();
+
+    if (!designIds || designIds.length === 0) {
+      return {
+        success: false,
+        error: "No design IDs provided",
+      };
+    }
+
+    // Find all designs to be deleted
+    const designs = await DesignModel.find({ design_id: { $in: designIds } });
+
+    if (designs.length === 0) {
+      return {
+        success: false,
+        error: "No designs found to delete",
+      };
+    }
+
+    // Collect all image URLs from all designs for deletion
+    const allImageUrls: string[] = [];
+
+    designs.forEach((design) => {
+      if (design.images && design.images.length > 0) {
+        allImageUrls.push(...design.images);
+      }
+    });
+
+    // Delete all images from Supabase storage
+    if (allImageUrls.length > 0) {
+      const imagePaths = allImageUrls
+        .map((url: string) => {
+          // Extract the filename from the URL
+          const urlParts = url.split("/");
+          return urlParts[urlParts.length - 1];
+        })
+        .filter(
+          (path: string | undefined): path is string =>
+            path !== undefined && path !== ""
+        );
+
+      if (imagePaths.length > 0) {
+        const { error } = await supabase.storage
+          .from("gianconstructimage")
+          .remove(imagePaths);
+
+        if (error) {
+          console.error("Error deleting design images from storage:", error);
+          // Continue with design deletion even if image deletion fails
+        }
+      }
+    }
+
+    // Delete all designs from database
+    const { deletedCount } = await DesignModel.deleteMany({
+      design_id: { $in: designIds },
+    });
+
+    if (deletedCount === 0) {
+      return {
+        success: false,
+        error: "Failed to delete designs",
+      };
+    }
+
+    revalidatePath(ADMIN_CATALOG_PATH);
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("Delete multiple designs error:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to delete designs",
     };
   }
 }

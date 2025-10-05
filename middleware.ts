@@ -3,7 +3,13 @@ import { verifySession } from "@/lib/redis";
 
 const protectedAdminRoutes = ["/admin/:path*"];
 const protectedUserRoutes = ["/user/:path*"];
-const publicRoutes = ["/", "/catalog"];
+const publicRoutes = [
+  "/",
+  "/catalog",
+  "/authentication-login",
+  "/authentication-login/otp",
+  "/authentication-login/signup",
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -56,5 +62,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/user/:path*", "/", "/catalog"], // Explicitly include /catalog
+  matcher: [
+    "/admin/:path*",
+    "/user/:path*",
+    "/",
+    "/catalog",
+    "/authentication-login",
+    "/authentication-login/otp",
+    "/authentication-login/signup",
+  ], // Explicitly include /catalog
 };

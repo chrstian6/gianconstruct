@@ -1,40 +1,93 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar";
+import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { NotificationSheet } from "@/components/admin/NotificationSheet";
+import { getNotifications } from "@/action/inquiries";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAuthStore } from "@/lib/stores";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Separator } from "@/components/ui/separator";
 import {
-  Calendar,
-  ChevronLeft,
   ChevronRight,
+  LayoutDashboard,
+  Calendar,
+  Briefcase,
+  Users,
+  CalendarDays,
+  BookOpen,
+  Warehouse,
+  Bell,
+  Settings,
+  UserCog,
+  Boxes,
+  Truck,
+  ClipboardList,
   Clock,
-  Folder,
-  Home,
-  MessageSquare,
-  User,
+  Building,
+  CalendarCheck,
 } from "lucide-react";
-import Link from "next/link";
-import { useState, useEffect } from "react";
-import { NotificationSheet } from "@/components/admin/NotificationSheet";
-import { getNotifications } from "@/action/inquiries";
-import { motion } from "framer-motion"; // Import Framer Motion
 
-export function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+interface MenuItem {
+  name: string;
+  href?: string;
+  onClick?: () => void;
+  description?: string;
+  isDropdown?: boolean;
+  dropdownItems?: { name: string; href: string; description: string }[];
+  icon: React.ReactNode;
+}
+
+interface MenuSection {
+  section: string;
+  items: MenuItem[];
+}
+
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isNotificationSheetOpen, setIsNotificationSheetOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  const pathname = usePathname();
+  const { user, loading, initialized, initialize } = useAuthStore();
+
+  // Initialize auth only once when component mounts
+  useEffect(() => {
+    if (!initialized) {
+      initialize();
+    }
+  }, [initialize, initialized]);
 
   useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
         const result = await getNotifications();
         if (result.success) {
-          const unread = result.notifications.filter((n) => !n.isRead).length;
+          const unread = result.notifications.filter(
+            (n: any) => !n.isRead
+          ).length;
           setUnreadCount(unread);
         }
       } catch (error) {
@@ -44,157 +97,305 @@ export function Sidebar() {
     fetchUnreadCount();
   }, []);
 
-  const menuItems = [
-    {
-      section: "Quick Actions",
-      items: [
-        {
-          name: "Set Appointment",
-          href: "/admin/appointments",
-          icon: Calendar,
-        },
-      ],
-    },
-    {
-      section: "Main",
-      items: [
-        { name: "Dashboard", href: "/admin/admindashboard", icon: Home },
-        { name: "Projects", href: "/admin/projects", icon: Folder },
-        { name: "Meetings", href: "/admin/meetings", icon: MessageSquare },
-        { name: "Schedules", href: "/admin/schedules", icon: Clock },
-        { name: "Catalog", href: "/admin/catalog", icon: Folder },
-        {
-          name: "Notifications",
-          onClick: () => setIsNotificationSheetOpen(true),
-          icon: MessageSquare,
-        },
-        { name: "User Management", href: "/admin/usermanagement", icon: User },
-      ],
-    },
-  ];
-
-  // Framer Motion variants for sidebar collapse/expand animation
-  const sidebarVariants = {
-    expanded: { width: 256 }, // 64px (w-64)
-    collapsed: { width: 64 }, // 16px (w-16)
+  const data = {
+    navMain: [
+      {
+        section: "Quick Actions",
+        items: [
+          {
+            name: "Set Appointment",
+            href: "/admin/appointments",
+            description: "Schedule client meetings",
+            icon: <Calendar className="h-4 w-4" />,
+          },
+        ],
+      },
+      {
+        section: "Main Navigation",
+        items: [
+          {
+            name: "Dashboard",
+            href: "/admin/admindashboard",
+            description: "Overview and analytics",
+            icon: <LayoutDashboard className="h-4 w-4" />,
+          },
+          {
+            name: "Appointments",
+            href: "/admin/appointments",
+            description: "Manage client appointments and consultations",
+            icon: <CalendarCheck className="h-4 w-4" />,
+          },
+          {
+            name: "Projects",
+            href: "/admin/admin-project",
+            description: "Manage construction projects",
+            icon: <Briefcase className="h-4 w-4" />,
+          },
+          {
+            name: "Meetings",
+            href: "/admin/meetings",
+            description: "Client meetings and discussions",
+            icon: <Users className="h-4 w-4" />,
+          },
+          {
+            name: "Schedules",
+            href: "/admin/schedules",
+            description: "Timeline and calendar",
+            icon: <CalendarDays className="h-4 w-4" />,
+          },
+          {
+            name: "Catalog",
+            href: "/admin/catalog",
+            description: "Design catalog management",
+            icon: <BookOpen className="h-4 w-4" />,
+          },
+          {
+            name: "Inventory",
+            isDropdown: true,
+            description: "Manage inventory items",
+            icon: <Warehouse className="h-4 w-4" />,
+            dropdownItems: [
+              {
+                name: "Materials",
+                href: "/admin/main-inventory",
+                description: "Manage company inventory",
+              },
+              {
+                name: "Client Inventory",
+                href: "/admin/client-inventory",
+                description: "View client inventory",
+              },
+              {
+                name: "Suppliers",
+                href: "/admin/suppliers",
+                description: "Manage suppliers",
+              },
+            ],
+          },
+          {
+            name: "Notifications",
+            onClick: () => setIsNotificationSheetOpen(true),
+            description: "View alerts and messages",
+            icon: <Bell className="h-4 w-4" />,
+          },
+          {
+            name: "User Management",
+            href: "/admin/usermanagement",
+            description: "Team and user administration",
+            icon: <UserCog className="h-4 w-4" />,
+          },
+          {
+            name: "Settings",
+            href: "/admin/settings",
+            description: "System configuration",
+            icon: <Settings className="h-4 w-4" />,
+          },
+        ],
+      },
+    ],
   };
 
-  // Micro animation variants for icons
-  const iconVariants = {
-    initial: { scale: 1, rotate: 0 },
-    animate: {
-      scale: [1, 1.1, 1], // Slight scale up and back
-      rotate: [0, 5, -5, 0], // Subtle rotation
-    },
+  // Check if a menu item is active
+  const isActive = (href?: string) => {
+    if (!href) return false;
+
+    // Exact match for dashboard
+    if (href === "/admin/admindashboard") {
+      return pathname === href;
+    }
+
+    // For other routes, check if the pathname starts with the href
+    return pathname.startsWith(href);
+  };
+
+  // Check if any dropdown item is active
+  const isDropdownActive = (dropdownItems: { href: string }[] = []) => {
+    return dropdownItems.some((item) => isActive(item.href));
+  };
+
+  // Get user display information
+  const getUserDisplayInfo = () => {
+    if (loading && !initialized) {
+      return { initial: "L", name: "Loading...", role: "Loading..." };
+    }
+
+    if (!user) {
+      return { initial: "A", name: "Admin", role: "Administrator" };
+    }
+
+    const initial = user.firstName?.[0] || "A";
+    const name = user.firstName || "Admin";
+    const role = user.role
+      ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
+      : "Administrator";
+
+    return { initial, name, role };
+  };
+
+  const { initial, name, role } = getUserDisplayInfo();
+
+  // Icons for dropdown items
+  const getDropdownIcon = (name: string) => {
+    switch (name) {
+      case "Materials":
+        return <Boxes className="h-3.5 w-3.5" />;
+      case "Client Inventory":
+        return <ClipboardList className="h-3.5 w-3.5" />;
+      case "Suppliers":
+        return <Truck className="h-3.5 w-3.5" />;
+      default:
+        return <Boxes className="h-3.5 w-3.5" />;
+    }
   };
 
   return (
-    <div className="flex h-screen">
-      <motion.div
-        className="flex flex-col h-full bg-background border-r relative"
-        variants={sidebarVariants}
-        initial="expanded"
-        animate={isCollapsed ? "collapsed" : "expanded"}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4">
-          {!isCollapsed && (
-            <Link href="/" className="text-xl font-bold text-accent">
-              GianConstruct®
-            </Link>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="ml-auto"
-          >
-            {isCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-        <Separator />   
-
-        {/* Menu Items */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          {menuItems.map((section, index) => (
-            <Collapsible key={index} defaultOpen>
-              <CollapsibleTrigger className="flex items-center w-full text-left">
-                {!isCollapsed && (
-                  <span className="text-sm font-semibold text-muted-foreground">
-                    {section.section}
-                  </span>
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="space-y-1 mt-2">
-                  {section.items.map((item) => (
-                    <div
-                      key={item.name}
-                      className={`flex items-center rounded-md text-sm font-medium text-accent hover:bg-accent hover:text-accent-foreground ${isCollapsed ? "justify-start" : "justify-start"}`}
-                    >
-                      {item.href ? (
-                        <Link
-                          href={item.href}
-                          className="flex items-center gap-2 w-full p-2"
-                        >
-                          <div className="flex-shrink-0 w-6 flex justify-center">
-                            <motion.div
-                              variants={iconVariants}
-                              initial="initial"
-                              animate={isCollapsed ? "initial" : "animate"}
-                              transition={{ duration: 0.3, ease: "easeOut" }}
-                            >
-                              <item.icon className="h-4 w-4" />
-                            </motion.div>
-                          </div>
-                          {!isCollapsed && <span>{item.name}</span>}
-                        </Link>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          className={`flex items-center gap-2 w-full p-2 relative ${isCollapsed ? "justify-start" : "justify-start"}`}
-                          onClick={item.onClick}
-                        >
-                          <div className="flex-shrink-0 w-6 flex justify-center relative">
-                            <motion.div
-                              variants={iconVariants}
-                              initial="initial"
-                              animate={isCollapsed ? "initial" : "animate"}
-                              transition={{ duration: 0.3, ease: "easeOut" }}
-                            >
-                              <item.icon className="h-4 w-4" />
-                            </motion.div>
-                            {item.name === "Notifications" &&
-                              unreadCount > 0 && (
-                                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-xs font-medium">
-                                  {unreadCount}
-                                </span>
-                              )}
-                          </div>
-                          {!isCollapsed && <span>{item.name}</span>}
-                        </Button>
-                      )}
+    <TooltipProvider delayDuration={300}>
+      <Sidebar {...props} className="border-none">
+        <SidebarHeader className="border-b">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <div className="flex items-center justify-between w-full">
+                <SidebarMenuButton size="lg" asChild>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                      <span className="text-sm font-medium">{initial}</span>
                     </div>
+                    <div className="flex flex-col gap-0.5 leading-none">
+                      <span className="font-bold">{name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {role}
+                      </span>
+                    </div>
+                  </div>
+                </SidebarMenuButton>
+              </div>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent className="text-xs font-medium text-900 pl-2">
+          {data.navMain.map((item) => (
+            <SidebarGroup key={item.section}>
+              <SidebarGroupLabel className="text-xs">
+                {item.section}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {item.items.map((subItem) => (
+                    <SidebarMenuItem key={subItem.name} className="text-md">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {subItem.isDropdown ? (
+                            <Collapsible
+                              open={isInventoryOpen}
+                              onOpenChange={setIsInventoryOpen}
+                              className="w-full"
+                            >
+                              <CollapsibleTrigger asChild>
+                                <SidebarMenuButton
+                                  isActive={isDropdownActive(
+                                    subItem.dropdownItems
+                                  )}
+                                  className={cn(
+                                    "text-md flex items-center justify-between w-full",
+                                    isDropdownActive(subItem.dropdownItems) &&
+                                      "text-gray-900 font-semibold tracking-relaxed"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {subItem.icon}
+                                    <span>{subItem.name}</span>
+                                  </div>
+                                  <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                </SidebarMenuButton>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <SidebarMenu className="ml-4 border-l border-border pl-2 text-md">
+                                  {subItem.dropdownItems?.map(
+                                    (dropdownItem) => (
+                                      <SidebarMenuItem key={dropdownItem.name}>
+                                        <SidebarMenuButton
+                                          asChild
+                                          isActive={isActive(dropdownItem.href)}
+                                          className={cn(
+                                            "text-md flex items-center gap-2",
+                                            isActive(dropdownItem.href) &&
+                                              "bg-gray-300 text-gray-900 !font-semibold"
+                                          )}
+                                        >
+                                          <a href={dropdownItem.href}>
+                                            {getDropdownIcon(dropdownItem.name)}
+                                            {dropdownItem.name}
+                                          </a>
+                                        </SidebarMenuButton>
+                                      </SidebarMenuItem>
+                                    )
+                                  )}
+                                </SidebarMenu>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          ) : subItem.onClick ? (
+                            <SidebarMenuButton
+                              onClick={subItem.onClick}
+                              isActive={isActive(subItem.href)}
+                              className={cn(
+                                "text-md flex items-center gap-2",
+                                isActive(subItem.href) &&
+                                  "bg-gray-300 text-gray-900 font-semibold"
+                              )}
+                            >
+                              {subItem.icon}
+                              <span>{subItem.name}</span>
+                              {subItem.name === "Notifications" &&
+                                unreadCount > 0 && (
+                                  <Badge className="ml-auto bg-red-500 text-white text-xs h-5 w-5 p-0 flex items-center justify-center">
+                                    {unreadCount > 9 ? "9+" : unreadCount}
+                                  </Badge>
+                                )}
+                            </SidebarMenuButton>
+                          ) : (
+                            <SidebarMenuButton
+                              asChild
+                              isActive={isActive(subItem.href)}
+                              className={cn(
+                                "flex items-center gap-2 text-md",
+                                isActive(subItem.href) &&
+                                  "bg-gray-300 text-gray-900 !font-semibold"
+                              )}
+                            >
+                              <a href={subItem.href}>
+                                {subItem.icon}
+                                {subItem.name}
+                              </a>
+                            </SidebarMenuButton>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          className="bg-gray-800 text-white text-xs px-2 py-1 border-0"
+                          sideOffset={5}
+                        >
+                          <p className="font-medium">{subItem.name}</p>
+                          {subItem.description && (
+                            <p className="text-gray-300 mt-1">
+                              {subItem.description}
+                            </p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    </SidebarMenuItem>
                   ))}
-                </div>
-              </CollapsibleContent>
-              {index < menuItems.length - 1 && <Separator className="my-4" />}
-            </Collapsible>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
           ))}
-        </nav>
-      </motion.div>
-
-      {/* Notification Sheet */}
-      <NotificationSheet
-        open={isNotificationSheetOpen}
-        onOpenChange={setIsNotificationSheetOpen}
-        isCollapsed={isCollapsed}
-      />
-    </div>
+        </SidebarContent>
+        <SidebarRail />
+        <NotificationSheet
+          open={isNotificationSheetOpen}
+          onOpenChange={setIsNotificationSheetOpen}
+          isCollapsed={false}
+        />
+      </Sidebar>
+    </TooltipProvider>
   );
 }
