@@ -587,3 +587,19 @@ export async function clearAllNotifications() {
     };
   }
 }
+// Mark notification as read
+export async function markAsRead(
+  notificationId: string
+): Promise<{ success: boolean; error?: string }> {
+  await dbConnect();
+
+  try {
+    await Notification.findByIdAndUpdate(notificationId, { isRead: true });
+    return { success: true };
+  } catch (error) {
+    console.error("Error marking notification as read:", error);
+    return { success: false, error: "Failed to mark notification as read" };
+  }
+}
+
+// Delete notification

@@ -123,8 +123,9 @@
   .font-geist {
     background-color: var(--background);
     font-family:
-      "Segoe UI",
+      "sans-serif",
       system-ui,
+      Giest,
       -apple-system,
       sans-serif;
   }

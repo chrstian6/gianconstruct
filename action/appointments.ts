@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import dbConnect from "@/lib/db";
 import { Inquiry } from "@/models/Inquiry";
 import { Timeslot } from "@/models/Timeslots";
+import User from "@/models/User";
 import { InquiryActionResponse, InquiriesResponse } from "@/types/inquiry";
 import {
   TimeslotsResponse,
@@ -20,32 +21,45 @@ export async function getInquiries(): Promise<InquiriesResponse> {
     const inquiries = await Inquiry.find().sort({ submittedAt: -1 }).lean();
 
     // Transform the data to match our TypeScript interface with proper status types
-    const transformedInquiries = inquiries.map((inquiry) => ({
-      _id: inquiry._id.toString(),
-      name: inquiry.name,
-      email: inquiry.email,
-      phone: inquiry.phone,
-      message: inquiry.message,
-      preferredDate: inquiry.preferredDate,
-      preferredTime: inquiry.preferredTime,
-      meetingType: inquiry.meetingType as "phone" | "onsite" | "video",
-      design: {
-        id: inquiry.design.id,
-        name: inquiry.design.name,
-        price: (inquiry.design as any).price,
-        square_meters: (inquiry.design as any).square_meters,
-      },
-      submittedAt: inquiry.submittedAt,
-      status: inquiry.status as
-        | "pending"
-        | "confirmed"
-        | "cancelled"
-        | "rescheduled"
-        | "completed",
-      notes: (inquiry as any).notes,
-      cancellationReason: (inquiry as any).cancellationReason,
-      rescheduleNotes: (inquiry as any).rescheduleNotes,
-    }));
+    const transformedInquiries = await Promise.all(
+      inquiries.map(async (inquiry) => {
+        // Check if the user exists and their role
+        const user = await User.findOne({ email: inquiry.email });
+        const isGuest = !user || (user && user.role !== "user");
+        const userType: "guest" | "registered" = isGuest
+          ? "guest"
+          : "registered";
+
+        return {
+          _id: inquiry._id.toString(),
+          name: inquiry.name,
+          email: inquiry.email,
+          phone: inquiry.phone,
+          message: inquiry.message,
+          preferredDate: inquiry.preferredDate,
+          preferredTime: inquiry.preferredTime,
+          meetingType: inquiry.meetingType as "phone" | "onsite" | "video",
+          design: {
+            id: inquiry.design.id,
+            name: inquiry.design.name,
+            price: (inquiry.design as any).price,
+            square_meters: (inquiry.design as any).square_meters,
+          },
+          submittedAt: inquiry.submittedAt,
+          status: inquiry.status as
+            | "pending"
+            | "confirmed"
+            | "cancelled"
+            | "rescheduled"
+            | "completed",
+          notes: (inquiry as any).notes,
+          cancellationReason: (inquiry as any).cancellationReason,
+          rescheduleNotes: (inquiry as any).rescheduleNotes,
+          userType: userType, // Explicitly typed
+          userRole: user?.role || "guest",
+        };
+      })
+    );
 
     return {
       success: true,
@@ -71,6 +85,11 @@ export async function completeInquiry(
     if (!inquiry) {
       return { success: false, error: "Inquiry not found" };
     }
+
+    // Check user type for the inquiry
+    const user = await User.findOne({ email: inquiry.email });
+    const isGuest = !user || (user && user.role !== "user");
+    const userType: "guest" | "registered" = isGuest ? "guest" : "registered";
 
     // Update inquiry status to completed
     const updatedInquiry = await Inquiry.findByIdAndUpdate(
@@ -109,6 +128,8 @@ export async function completeInquiry(
       notes: (updatedInquiry as any).notes,
       cancellationReason: (updatedInquiry as any).cancellationReason,
       rescheduleNotes: (updatedInquiry as any).rescheduleNotes,
+      userType: userType,
+      userRole: user?.role || "guest",
     };
 
     revalidatePath("/admin/appointments");
@@ -133,6 +154,11 @@ export async function confirmInquiry(
     if (!inquiry) {
       return { success: false, error: "Inquiry not found" };
     }
+
+    // Check user type for the inquiry
+    const user = await User.findOne({ email: inquiry.email });
+    const isGuest = !user || (user && user.role !== "user");
+    const userType: "guest" | "registered" = isGuest ? "guest" : "registered";
 
     // Check if timeslot is already taken
     const existingTimeslot = await Timeslot.findOne({
@@ -194,6 +220,8 @@ export async function confirmInquiry(
       notes: (updatedInquiry as any).notes,
       cancellationReason: (updatedInquiry as any).cancellationReason,
       rescheduleNotes: (updatedInquiry as any).rescheduleNotes,
+      userType: userType,
+      userRole: user?.role || "guest",
     };
 
     revalidatePath("/admin/appointments");
@@ -219,6 +247,11 @@ export async function cancelInquiry(
     if (!inquiry) {
       return { success: false, error: "Inquiry not found" };
     }
+
+    // Check user type for the inquiry
+    const user = await User.findOne({ email: inquiry.email });
+    const isGuest = !user || (user && user.role !== "user");
+    const userType: "guest" | "registered" = isGuest ? "guest" : "registered";
 
     // Free up the timeslot
     await Timeslot.findOneAndUpdate(
@@ -270,6 +303,8 @@ export async function cancelInquiry(
       notes: (updatedInquiry as any).notes,
       cancellationReason: (updatedInquiry as any).cancellationReason,
       rescheduleNotes: (updatedInquiry as any).rescheduleNotes,
+      userType: userType,
+      userRole: user?.role || "guest",
     };
 
     revalidatePath("/admin/appointments");
@@ -297,6 +332,11 @@ export async function rescheduleInquiry(
     if (!inquiry) {
       return { success: false, error: "Inquiry not found" };
     }
+
+    // Check user type for the inquiry
+    const user = await User.findOne({ email: inquiry.email });
+    const isGuest = !user || (user && user.role !== "user");
+    const userType: "guest" | "registered" = isGuest ? "guest" : "registered";
 
     // Check if new timeslot is available
     const existingTimeslot = await Timeslot.findOne({
@@ -379,6 +419,8 @@ export async function rescheduleInquiry(
       notes: (updatedInquiry as any).notes,
       cancellationReason: (updatedInquiry as any).cancellationReason,
       rescheduleNotes: (updatedInquiry as any).rescheduleNotes,
+      userType: userType,
+      userRole: user?.role || "guest",
     };
 
     revalidatePath("/admin/appointments");
@@ -392,7 +434,6 @@ export async function rescheduleInquiry(
   }
 }
 
-// Get available timeslots for a specific date
 // Get available timeslots for a specific date
 export async function getAvailableTimeslots(
   date: string
@@ -462,7 +503,6 @@ export async function getTimeslots(
   }
 }
 
-// Initialize timeslots for a date range
 export async function initializeTimeslots(
   startDate: string,
   endDate: string,
@@ -474,6 +514,12 @@ export async function initializeTimeslots(
     const timeslots = [];
     const currentDate = new Date(startDate);
     const end = new Date(endDate);
+
+    // First, delete existing timeslots for the date range that are available (not booked)
+    await Timeslot.deleteMany({
+      date: { $gte: startDate, $lte: endDate },
+      isAvailable: true,
+    });
 
     while (currentDate <= end) {
       const dayOfWeek = currentDate.getDay();
@@ -528,14 +574,14 @@ export async function initializeTimeslots(
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Bulk insert timeslots (ignore duplicates due to unique index)
+    // Bulk insert timeslots
     if (timeslots.length > 0) {
       await Timeslot.insertMany(timeslots, { ordered: false });
     }
 
     return {
       success: true,
-      message: `Initialized ${timeslots.length} timeslots`,
+      message: `Initialized ${timeslots.length} timeslots for ${settings.workingDays.length} working days with ${settings.slotDuration}-minute slots`,
     };
   } catch (error) {
     console.error("Error initializing timeslots:", error);
@@ -600,6 +646,78 @@ export async function deleteInquiries(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred while deleting inquiries",
+    };
+  }
+}
+
+// Add this new server action to cleanup timeslots for non-working days
+export async function cleanupTimeslots(
+  workingDays: number[]
+): Promise<AvailabilityResponse> {
+  await dbConnect();
+
+  try {
+    // Get all timeslots within the next 2 weeks
+    const today = new Date().toISOString().split("T")[0];
+    const twoWeeksFromNow = new Date();
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+    const endDate = twoWeeksFromNow.toISOString().split("T")[0];
+
+    // Find timeslots that are on non-working days and are available (not booked)
+    const timeslotsToDelete = await Timeslot.find({
+      date: { $gte: today, $lte: endDate },
+      isAvailable: true, // Only delete available slots, keep booked ones
+    });
+
+    let deletedCount = 0;
+
+    for (const timeslot of timeslotsToDelete) {
+      const date = new Date(timeslot.date);
+      const dayOfWeek = date.getDay();
+
+      // If this day is not in the working days, delete the timeslot
+      if (!workingDays.includes(dayOfWeek)) {
+        await Timeslot.findByIdAndDelete(timeslot._id);
+        deletedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      message: `Cleaned up ${deletedCount} timeslots from non-working days`,
+    };
+  } catch (error) {
+    console.error("Error cleaning up timeslots:", error);
+    return { success: false, error: "Failed to cleanup timeslots" };
+  }
+}
+
+// Add this function to update timeslots when duration changes
+export async function updateTimeslotsForNewDuration(
+  settings: AvailabilitySettings
+): Promise<AvailabilityResponse> {
+  await dbConnect();
+
+  try {
+    // Get the date range for the next 2 weeks
+    const today = new Date().toISOString().split("T")[0];
+    const twoWeeksFromNow = new Date();
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+    const endDate = twoWeeksFromNow.toISOString().split("T")[0];
+
+    // Delete all available timeslots in this range
+    await Timeslot.deleteMany({
+      date: { $gte: today, $lte: endDate },
+      isAvailable: true,
+    });
+
+    // Recreate timeslots with new duration
+    return await initializeTimeslots(today, endDate, settings);
+  } catch (error) {
+    console.error("Error updating timeslots for new duration:", error);
+    return {
+      success: false,
+      error: "Failed to update timeslots for new duration",
     };
   }
 }

@@ -53,3 +53,8 @@ export interface TimeslotFilters {
   isAvailable?: boolean;
   meetingType?: "phone" | "onsite" | "video";
 }
+
+export interface dateRange {
+  startDate: string;
+  endDate: string;
+}

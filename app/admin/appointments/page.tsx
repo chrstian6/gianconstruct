@@ -37,6 +37,7 @@ import {
   Trash2,
   CheckSquare,
   X,
+  Calendar,
 } from "lucide-react";
 
 // Server Actions
@@ -50,6 +51,8 @@ import {
   getAvailableTimeslots,
   initializeTimeslots,
   deleteInquiries,
+  cleanupTimeslots, // Add this new action
+  updateTimeslotsForNewDuration,
 } from "@/action/appointments";
 
 // Components
@@ -58,183 +61,18 @@ import AppointmentDetails from "@/components/admin/appointments/AppointmentDetai
 import CalendarCard from "@/components/admin/appointments/CalendarCard";
 import AvailabilityCard from "@/components/admin/appointments/AvailabilityCard";
 import ConfirmationModal from "@/components/ConfirmationModal";
-import NotFound from "@/components/admin/NotFound"; // Import the NotFound component
+import NotFound from "@/components/admin/NotFound";
+
+// Skeleton Components
+import {
+  AppointmentCardSkeleton,
+  CalendarSkeleton,
+  AvailabilitySkeleton,
+} from "@/components/admin/appointments/skeleton";
 
 // Types
 import { Inquiry } from "@/types/inquiry";
 import { TimeSlot, AvailabilitySettings } from "@/types/timeslot";
-
-// Skeleton Components (keep your existing skeleton components)
-const AppointmentCardSkeleton = ({ index = 0 }: { index?: number }) => {
-  const stackAnimation = {
-    transform: `translateY(${index * 2}px)`,
-    zIndex: 100 - index,
-    opacity: 1 - index * 0.02,
-  };
-
-  return (
-    <Card
-      className="hover:shadow-md transition-all duration-300 border-l-4 border-l-gray-300 rounded-none"
-      style={stackAnimation}
-    >
-      <CardContent className="p-0">
-        <div className="flex">
-          {/* Left Column - Date Skeleton */}
-          <div className="w-32 border-r border-gray-200 flex flex-col items-center justify-center p-3">
-            <div className="text-center w-full">
-              <div className="h-3 bg-gray-200 rounded w-3/4 mx-auto mb-2 animate-pulse"></div>
-              <div className="h-8 bg-gray-200 rounded w-3/4 mx-auto mb-2 animate-pulse"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto mb-3 animate-pulse"></div>
-              <div className="flex items-center justify-center gap-1 mt-2">
-                <div className="h-3 w-3 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-3 bg-gray-200 rounded w-16 animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column - Content Skeleton */}
-          <div className="flex-1 p-3">
-            {/* Header Skeleton */}
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <div className="h-3 w-3 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-3 bg-gray-200 rounded w-20 animate-pulse"></div>
-                </div>
-                <div className="text-gray-400 mx-1">•</div>
-                <div className="flex items-center gap-1">
-                  <div className="h-3 w-3 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-                </div>
-              </div>
-              <div className="h-6 bg-gray-200 rounded w-20 animate-pulse"></div>
-            </div>
-
-            {/* Design Info Skeleton */}
-            <div className="mb-2">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="h-3 w-3 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
-                <div className="h-3 bg-gray-200 rounded w-16 animate-pulse"></div>
-              </div>
-              <div className="flex items-start gap-1 mt-1">
-                <div className="h-3 w-3 bg-gray-200 rounded mt-0.5 animate-pulse"></div>
-                <div className="h-3 bg-gray-200 rounded w-full animate-pulse"></div>
-              </div>
-            </div>
-
-            {/* Contact Info Skeleton */}
-            <div className="flex items-center gap-3 text-xs mb-3">
-              <div className="flex items-center gap-1">
-                <div className="h-3 w-3 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-3 bg-gray-200 rounded w-24 animate-pulse"></div>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="h-3 w-3 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-3 bg-gray-200 rounded w-20 animate-pulse"></div>
-              </div>
-            </div>
-
-            {/* Actions Skeleton */}
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-              <div className="h-7 bg-gray-200 rounded w-16 animate-pulse"></div>
-              <div className="h-7 bg-gray-200 rounded w-20 animate-pulse"></div>
-              <div className="h-7 bg-gray-200 rounded w-16 animate-pulse"></div>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-const CalendarSkeleton = () => {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
-        </CardTitle>
-        <CardDescription>
-          <div className="h-4 bg-gray-200 rounded w-48 animate-pulse"></div>
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-8 bg-gray-200 rounded animate-pulse"
-              ></div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: 35 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-8 bg-gray-200 rounded animate-pulse"
-              ></div>
-            ))}
-          </div>
-          <div className="space-y-2">
-            <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-            <div className="space-y-1">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-4 bg-gray-200 rounded animate-pulse"
-                ></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-const AvailabilitySkeleton = () => {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>
-              <div className="h-6 bg-gray-200 rounded w-40 animate-pulse"></div>
-            </CardTitle>
-            <CardDescription>
-              <div className="h-4 bg-gray-200 rounded w-56 animate-pulse"></div>
-            </CardDescription>
-          </div>
-          <div className="h-9 bg-gray-200 rounded w-20 animate-pulse"></div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
-              <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-            </div>
-          ))}
-          <div className="space-y-2">
-            <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-            <div className="grid grid-cols-2 gap-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-10 bg-gray-200 rounded animate-pulse"
-                ></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
 
 export default function AppointmentsPage() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -274,9 +112,17 @@ export default function AppointmentsPage() {
       breaks: [{ start: "12:00", end: "13:00" }],
       workingDays: [1, 2, 3, 4, 5],
     });
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+
+  // Dynamic availability states
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date().toISOString().split("T")[0],
+    endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0],
+  });
+  const [isInitializingTimeslots, setIsInitializingTimeslots] = useState(false);
 
   // Status tags
   const statusTags = [
@@ -288,6 +134,18 @@ export default function AppointmentsPage() {
     { value: "completed", label: "Completed" },
     { value: "all", label: "All Appointments" },
   ];
+
+  // Calculate max date (2 weeks from current date)
+  const getMaxDate = () => {
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 14);
+    return maxDate.toISOString().split("T")[0];
+  };
+
+  // Calculate min date (today)
+  const getMinDate = () => {
+    return new Date().toISOString().split("T")[0];
+  };
 
   // Multi-select functions
   const toggleSelectMode = () => {
@@ -353,8 +211,8 @@ export default function AppointmentsPage() {
     }
   };
 
-  // Generate time slots based on availability settings
-  const generateTimeSlots = () => {
+  // Generate time slots for preview only (not for actual booking)
+  const generatePreviewTimeSlots = (): TimeSlot[] => {
     const slots: TimeSlot[] = [];
     const [startHour, startMinute] = availabilitySettings.startTime
       .split(":")
@@ -402,26 +260,83 @@ export default function AppointmentsPage() {
       slots.push({
         value: timeValue,
         label: `${displayHours}:${mins.toString().padStart(2, "0")} ${period}`,
-        enabled: !isDuringBreak, // For instant preview, we show breaks as unavailable
+        enabled: !isDuringBreak,
       });
     }
 
-    setTimeSlots(slots);
+    return slots;
+  };
+
+  // Initialize timeslots for the date range
+  const handleInitializeTimeslots = async () => {
+    if (!dateRange.startDate || !dateRange.endDate) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+
+    const startDate = new Date(dateRange.startDate);
+    const endDate = new Date(dateRange.endDate);
+    const today = new Date();
+
+    // Validate date range
+    if (startDate < today) {
+      toast.error("Start date cannot be in the past");
+      return;
+    }
+
+    if (endDate > new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)) {
+      toast.error("Date range cannot exceed 2 weeks from today");
+      return;
+    }
+
+    if (startDate > endDate) {
+      toast.error("Start date cannot be after end date");
+      return;
+    }
+
+    setIsInitializingTimeslots(true);
+    try {
+      const result = await initializeTimeslots(
+        dateRange.startDate,
+        dateRange.endDate,
+        availabilitySettings
+      );
+
+      if (result.success) {
+        toast.success(result.message || "Timeslots initialized successfully");
+        fetchAvailableSlots(); // Refresh available slots from database
+      } else {
+        toast.error(result.error || "Failed to initialize timeslots");
+      }
+    } catch (error) {
+      console.error("Error initializing timeslots:", error);
+      toast.error("Failed to initialize timeslots");
+    } finally {
+      setIsInitializingTimeslots(false);
+    }
+  };
+
+  // Clean up timeslots that are no longer in working days
+  const cleanupNonWorkingDayTimeslots = async () => {
+    try {
+      const result = await cleanupTimeslots(availabilitySettings.workingDays);
+      if (result.success) {
+        console.log("Cleaned up timeslots for non-working days");
+        fetchAvailableSlots(); // Refresh the slots
+      }
+    } catch (error) {
+      console.error("Error cleaning up timeslots:", error);
+    }
   };
 
   useEffect(() => {
     fetchInquiries();
-    generateTimeSlots();
-    fetchAvailableSlots();
+    fetchAvailableSlots(); // Only fetch from database initially
   }, []);
 
   useEffect(() => {
     filterInquiries();
   }, [inquiries, searchTerm, statusFilter]);
-
-  useEffect(() => {
-    generateTimeSlots();
-  }, [availabilitySettings]);
 
   useEffect(() => {
     fetchAvailableSlots();
@@ -433,10 +348,6 @@ export default function AppointmentsPage() {
       setSelectedInquiries(new Set());
     }
   }, [filteredInquiries, statusFilter, searchTerm]);
-
-  useEffect(() => {
-    generateTimeSlots();
-  }, [availabilitySettings]);
 
   const fetchInquiries = async () => {
     try {
@@ -463,9 +374,13 @@ export default function AppointmentsPage() {
 
       if (result.success && result.timeslots) {
         setAvailableSlots(result.timeslots);
+      } else {
+        // If no timeslots found for this date, set empty array
+        setAvailableSlots([]);
       }
     } catch (error) {
       console.error("Error fetching available slots:", error);
+      setAvailableSlots([]);
     }
   };
 
@@ -655,25 +570,49 @@ export default function AppointmentsPage() {
     return bookedInquiries.map((inquiry) => inquiry.preferredTime);
   };
 
+  const [previewTimeSlots, setPreviewTimeSlots] = useState<TimeSlot[]>([]);
+
+  useEffect(() => {
+    const newPreviewSlots = generatePreviewTimeSlots();
+    setPreviewTimeSlots(newPreviewSlots);
+  }, [availabilitySettings]);
+
+  // Initialize preview slots on component mount
+  useEffect(() => {
+    const initialPreviewSlots = generatePreviewTimeSlots();
+    setPreviewTimeSlots(initialPreviewSlots);
+  }, []);
+
   const handleSaveAvailability = async () => {
     try {
       const result = await updateAvailability(availabilitySettings);
       if (result.success) {
         toast.success("Availability settings updated successfully");
         setIsEditingAvailability(false);
-        generateTimeSlots(); // Regenerate slots immediately
 
-        const startDate = new Date().toISOString().split("T")[0];
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 30);
-        const endDateStr = endDate.toISOString().split("T")[0];
+        // Update preview slots to ensure consistency
+        const newPreviewSlots = generatePreviewTimeSlots();
+        setPreviewTimeSlots(newPreviewSlots);
 
-        // This can happen in the background
-        initializeTimeslots(startDate, endDateStr, availabilitySettings)
-          .then(() => {
-            fetchAvailableSlots(); // Refresh database slots
-          })
-          .catch(console.error);
+        // Check if slot duration changed significantly (more than 5 minutes difference)
+        const previousSettings = availabilitySettings; // You might want to track previous settings
+        const durationChanged = true; // For now, always assume it changed for safety
+
+        if (durationChanged) {
+          // Use the new function to update timeslots for duration changes
+          const updateResult =
+            await updateTimeslotsForNewDuration(availabilitySettings);
+          if (updateResult.success) {
+            toast.success("Timeslots updated with new duration");
+          } else {
+            toast.error("Failed to update timeslots with new duration");
+          }
+        } else {
+          // Just cleanup non-working days
+          await cleanupNonWorkingDayTimeslots();
+        }
+
+        fetchAvailableSlots(); // Refresh database slots
       } else {
         toast.error(result.error || "Failed to update availability");
       }
@@ -708,6 +647,8 @@ export default function AppointmentsPage() {
     setSelectedInquiry(inquiry);
     setIsCancelOpen(true);
   };
+
+  // Generate preview slots for the availability card (not for actual booking)
 
   return (
     <div className="container mx-auto py-6 space-y-6 px-10 h-screen flex flex-col">
@@ -935,8 +876,10 @@ export default function AppointmentsPage() {
               <CalendarCard
                 selectedDate={selectedDate}
                 onDateChange={setSelectedDate}
-                availableSlots={timeSlots}
+                availableSlots={availableSlots} // Use only database slots
                 bookedSlots={getBookedSlotsForDate(selectedDate)}
+                availabilitySettings={availabilitySettings}
+                dateRange={dateRange}
               />
             )}
 
@@ -949,7 +892,13 @@ export default function AppointmentsPage() {
                 isEditingAvailability={isEditingAvailability}
                 onEditingChange={setIsEditingAvailability}
                 onSaveAvailability={handleSaveAvailability}
-                timeSlots={timeSlots}
+                timeSlots={previewTimeSlots} // Use preview slots only
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
+                onInitializeTimeslots={handleInitializeTimeslots}
+                isInitializingTimeslots={isInitializingTimeslots}
+                getMinDate={getMinDate}
+                getMaxDate={getMaxDate}
               />
             )}
           </div>
@@ -1066,7 +1015,8 @@ export default function AppointmentsPage() {
                   <SelectValue placeholder="Select time" />
                 </SelectTrigger>
                 <SelectContent>
-                  {timeSlots
+                  {/* Use availableSlots from database for actual booking */}
+                  {availableSlots
                     .filter((slot) => slot.enabled)
                     .map((time) => (
                       <SelectItem key={time.value} value={time.value}>

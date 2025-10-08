@@ -15,8 +15,6 @@ import {
 } from "@/components/ui/sidebar";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { NotificationSheet } from "@/components/admin/NotificationSheet";
-import { getNotifications } from "@/action/inquiries";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -36,19 +34,15 @@ import {
   LayoutDashboard,
   Calendar,
   Briefcase,
-  Users,
-  CalendarDays,
   BookOpen,
   Warehouse,
-  Bell,
-  Settings,
   UserCog,
+  Settings,
   Boxes,
   Truck,
   ClipboardList,
-  Clock,
-  Building,
   CalendarCheck,
+  Receipt,
 } from "lucide-react";
 
 interface MenuItem {
@@ -67,8 +61,6 @@ interface MenuSection {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [isNotificationSheetOpen, setIsNotificationSheetOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const pathname = usePathname();
   const { user, loading, initialized, initialize } = useAuthStore();
@@ -79,23 +71,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       initialize();
     }
   }, [initialize, initialized]);
-
-  useEffect(() => {
-    const fetchUnreadCount = async () => {
-      try {
-        const result = await getNotifications();
-        if (result.success) {
-          const unread = result.notifications.filter(
-            (n: any) => !n.isRead
-          ).length;
-          setUnreadCount(unread);
-        }
-      } catch (error) {
-        console.error("Error fetching unread notifications:", error);
-      }
-    };
-    fetchUnreadCount();
-  }, []);
 
   const data = {
     navMain: [
@@ -126,22 +101,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             icon: <CalendarCheck className="h-4 w-4" />,
           },
           {
+            name: "Transactions",
+            href: "/admin/transaction",
+            description: "Process client payments and generate receipts",
+            icon: <Receipt className="h-4 w-4" />,
+          },
+          {
             name: "Projects",
             href: "/admin/admin-project",
             description: "Manage construction projects",
             icon: <Briefcase className="h-4 w-4" />,
-          },
-          {
-            name: "Meetings",
-            href: "/admin/meetings",
-            description: "Client meetings and discussions",
-            icon: <Users className="h-4 w-4" />,
-          },
-          {
-            name: "Schedules",
-            href: "/admin/schedules",
-            description: "Timeline and calendar",
-            icon: <CalendarDays className="h-4 w-4" />,
           },
           {
             name: "Catalog",
@@ -171,12 +140,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 description: "Manage suppliers",
               },
             ],
-          },
-          {
-            name: "Notifications",
-            onClick: () => setIsNotificationSheetOpen(true),
-            description: "View alerts and messages",
-            icon: <Bell className="h-4 w-4" />,
           },
           {
             name: "User Management",
@@ -333,25 +296,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 </SidebarMenu>
                               </CollapsibleContent>
                             </Collapsible>
-                          ) : subItem.onClick ? (
-                            <SidebarMenuButton
-                              onClick={subItem.onClick}
-                              isActive={isActive(subItem.href)}
-                              className={cn(
-                                "text-md flex items-center gap-2",
-                                isActive(subItem.href) &&
-                                  "bg-gray-300 text-gray-900 font-semibold"
-                              )}
-                            >
-                              {subItem.icon}
-                              <span>{subItem.name}</span>
-                              {subItem.name === "Notifications" &&
-                                unreadCount > 0 && (
-                                  <Badge className="ml-auto bg-red-500 text-white text-xs h-5 w-5 p-0 flex items-center justify-center">
-                                    {unreadCount > 9 ? "9+" : unreadCount}
-                                  </Badge>
-                                )}
-                            </SidebarMenuButton>
                           ) : (
                             <SidebarMenuButton
                               asChild
@@ -390,11 +334,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           ))}
         </SidebarContent>
         <SidebarRail />
-        <NotificationSheet
-          open={isNotificationSheetOpen}
-          onOpenChange={setIsNotificationSheetOpen}
-          isCollapsed={false}
-        />
       </Sidebar>
     </TooltipProvider>
   );

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Eye, Save, Plus, Trash2 } from "lucide-react";
+import { Settings, Eye, Save, Plus, Trash2, Calendar } from "lucide-react";
 import { AvailabilitySettings, TimeSlot } from "@/types/timeslot";
 
 interface AvailabilityCardProps {
@@ -26,6 +26,18 @@ interface AvailabilityCardProps {
   onEditingChange: (editing: boolean) => void;
   onSaveAvailability: () => void;
   timeSlots: TimeSlot[];
+  dateRange: {
+    startDate: string;
+    endDate: string;
+  };
+  onDateRangeChange: (dateRange: {
+    startDate: string;
+    endDate: string;
+  }) => void;
+  onInitializeTimeslots: () => void;
+  isInitializingTimeslots: boolean;
+  getMinDate: () => string;
+  getMaxDate: () => string;
 }
 
 export default function AvailabilityCard({
@@ -35,6 +47,12 @@ export default function AvailabilityCard({
   onEditingChange,
   onSaveAvailability,
   timeSlots,
+  dateRange,
+  onDateRangeChange,
+  onInitializeTimeslots,
+  isInitializingTimeslots,
+  getMinDate,
+  getMaxDate,
 }: AvailabilityCardProps) {
   const addBreak = () => {
     onAvailabilitySettingsChange({
@@ -141,6 +159,67 @@ export default function AvailabilityCard({
       <CardContent>
         {isEditingAvailability ? (
           <div className="space-y-4">
+            {/* Date Range Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Date Range (Max 2 weeks from today)
+              </Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start-date" className="text-xs">
+                    Start Date
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={dateRange.startDate}
+                    min={getMinDate()}
+                    max={getMaxDate()}
+                    onChange={(e) =>
+                      onDateRangeChange({
+                        ...dateRange,
+                        startDate: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-date" className="text-xs">
+                    End Date
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={dateRange.endDate}
+                    min={dateRange.startDate}
+                    max={getMaxDate()}
+                    onChange={(e) =>
+                      onDateRangeChange({
+                        ...dateRange,
+                        endDate: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={onInitializeTimeslots}
+                disabled={isInitializingTimeslots}
+                className="w-full gap-2"
+                variant="outline"
+              >
+                <Calendar className="h-4 w-4" />
+                {isInitializingTimeslots
+                  ? "Initializing..."
+                  : "Initialize Timeslots"}
+              </Button>
+              <div className="text-xs text-muted-foreground">
+                Initialize timeslots for the selected date range. Max 2 weeks
+                from today.
+              </div>
+            </div>
+
             {/* Working Hours */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -343,12 +422,18 @@ export default function AvailabilityCard({
                   <span>Working days:</span>
                   <span>{availabilitySettings.workingDays.length}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span>Date range:</span>
+                  <span>
+                    {dateRange.startDate} to {dateRange.endDate}
+                  </span>
+                </div>
               </div>
             </div>
 
             <Button onClick={onSaveAvailability} className="w-full gap-2">
               <Save className="h-4 w-4" />
-              Save Availability
+              Save Availability Settings
             </Button>
           </div>
         ) : (

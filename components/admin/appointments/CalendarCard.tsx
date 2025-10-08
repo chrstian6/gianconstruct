@@ -10,13 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { TimeSlot } from "@/types/timeslot";
+import { TimeSlot, AvailabilitySettings } from "@/types/timeslot";
 
 interface CalendarCardProps {
   selectedDate: Date;
+  dateRange: { startDate: string; endDate: string };
   onDateChange: (date: Date) => void;
   availableSlots: TimeSlot[];
   bookedSlots?: string[]; // Array of booked time values like ["08:00", "09:30"]
+  onSlotSelect?: (slot: TimeSlot) => void;
+  availabilitySettings?: AvailabilitySettings; // Add this prop
 }
 
 interface TimeSlotGroup {
@@ -33,6 +36,9 @@ export default function CalendarCard({
   onDateChange,
   availableSlots,
   bookedSlots = [],
+  onSlotSelect,
+  dateRange,
+  availabilitySettings, // Add this prop
 }: CalendarCardProps) {
   const navigateDate = (direction: "prev" | "next") => {
     const newDate = new Date(selectedDate);
@@ -41,12 +47,89 @@ export default function CalendarCard({
     } else {
       newDate.setDate(newDate.getDate() + 1);
     }
-    onDateChange(newDate);
+
+    // Don't allow navigation beyond 2 weeks from today
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 14);
+
+    if (newDate <= maxDate) {
+      onDateChange(newDate);
+    }
   };
 
+  // Updated isWorkingDay to use availability settings
+  // In the CalendarCard component, update the isWorkingDay function:
+
+  // Updated isWorkingDay to use availability settings and check if date has timeslots
   const isWorkingDay = () => {
+    if (
+      !availabilitySettings ||
+      availabilitySettings.workingDays.length === 0
+    ) {
+      // Default to Mon-Fri if no settings provided
+      const dayOfWeek = selectedDate.getDay();
+      return dayOfWeek >= 1 && dayOfWeek <= 5;
+    }
+
     const dayOfWeek = selectedDate.getDay();
-    return dayOfWeek >= 1 && dayOfWeek <= 5;
+    const isConfiguredWorkingDay =
+      availabilitySettings.workingDays.includes(dayOfWeek);
+
+    // Also check if there are actually timeslots for this date
+    const hasSlotsForDate = availableSlots.length > 0;
+
+    return isConfiguredWorkingDay && hasSlotsForDate;
+  };
+
+  // Also update the getCalendarDescription function:
+  // Check if date is within allowed range (2 weeks from today)
+  const isDateInRange = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of day for comparison
+
+    const maxDate = new Date();
+    maxDate.setDate(today.getDate() + 14);
+    maxDate.setHours(23, 59, 59, 999); // Set to end of day
+
+    return date >= today && date <= maxDate;
+  };
+
+  // Get day name for display
+  const getDayName = (day: number) => {
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    return days[day];
+  };
+
+  // Get working days description
+  const getWorkingDaysDescription = () => {
+    if (
+      !availabilitySettings ||
+      availabilitySettings.workingDays.length === 0
+    ) {
+      return "Weekdays (Mon-Fri)";
+    }
+
+    const workingDays = availabilitySettings.workingDays.sort();
+
+    if (workingDays.length === 7) {
+      return "Every day";
+    } else if (
+      workingDays.length === 5 &&
+      workingDays[0] === 1 &&
+      workingDays[4] === 5
+    ) {
+      return "Weekdays (Mon-Fri)";
+    } else {
+      return workingDays.map((day) => getDayName(day).slice(0, 3)).join(", ");
+    }
   };
 
   // Group consecutive break times into ranges
@@ -189,6 +272,26 @@ export default function CalendarCard({
   const breakInfo = getBreakInfo();
 
   const groupedSlots = getGroupedTimeSlots();
+  const canNavigatePrev = isDateInRange(
+    new Date(selectedDate.getTime() - 24 * 60 * 60 * 1000)
+  );
+  const canNavigateNext = isDateInRange(
+    new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000)
+  );
+
+  // Get appropriate description based on working days and date range
+  const getCalendarDescription = () => {
+    if (!isDateInRange(selectedDate)) {
+      return "Date is outside available range (2 weeks from today)";
+    }
+
+    if (!isWorkingDay()) {
+      const dayName = getDayName(selectedDate.getDay());
+      return `${dayName} - Not a working day`;
+    }
+
+    return `Available slots for ${selectedDate.toLocaleDateString("en-US", { weekday: "long" })}`;
+  };
 
   return (
     <Card>
@@ -198,9 +301,12 @@ export default function CalendarCard({
           Calendar
         </CardTitle>
         <CardDescription>
-          {isWorkingDay()
-            ? `Available slots for ${selectedDate.toLocaleDateString("en-US", { weekday: "long" })}`
-            : "Weekend - No appointments available"}
+          {getCalendarDescription()}
+          {availabilitySettings && (
+            <div className="text-xs mt-1 text-muted-foreground">
+              Working days: {getWorkingDaysDescription()}
+            </div>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -210,6 +316,7 @@ export default function CalendarCard({
             variant="outline"
             size="icon"
             onClick={() => navigateDate("prev")}
+            disabled={!canNavigatePrev}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -229,6 +336,7 @@ export default function CalendarCard({
             variant="outline"
             size="icon"
             onClick={() => navigateDate("next")}
+            disabled={!canNavigateNext}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -285,19 +393,28 @@ export default function CalendarCard({
         <div className="space-y-3">
           <Label className="text-sm font-medium">Available Time Slots</Label>
           <div className="space-y-2 max-h-60 overflow-y-auto">
-            {!isWorkingDay() ? (
+            {!isDateInRange(selectedDate) ? (
               <div className="text-center py-6 space-y-2 rounded-lg border border-dashed">
                 <div className="text-muted-foreground">
-                  Weekend dates are not available for appointments
+                  Date is outside available range
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Please select a weekday (Monday - Friday)
+                  Please select a date within the next 2 weeks
+                </div>
+              </div>
+            ) : !isWorkingDay() ? (
+              <div className="text-center py-6 space-y-2 rounded-lg border border-dashed">
+                <div className="text-muted-foreground">
+                  {getDayName(selectedDate.getDay())} is not a working day
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Working days: {getWorkingDaysDescription()}
                 </div>
               </div>
             ) : totalSlots === 0 ? (
               <div className="text-center py-6 border border-dashed">
                 <p className="text-muted-foreground">
-                  No time slots configured
+                  No time slots configured for this date
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Update availability settings to see time slots
@@ -335,11 +452,16 @@ export default function CalendarCard({
                   return (
                     <div
                       key={`slot-${group.startTime}-${index}`}
-                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors cursor-pointer ${
                         group.status === "available"
-                          ? "border-border bg-card hover:bg-muted/50"
-                          : "border-border bg-card hover:bg-muted/50"
+                          ? "border-border bg-card hover:bg-muted/50 hover:border-primary"
+                          : "border-border bg-card opacity-60"
                       }`}
+                      onClick={() =>
+                        group.status === "available" &&
+                        group.slot &&
+                        onSlotSelect?.(group.slot)
+                      }
                     >
                       <div className="flex items-center gap-3">
                         <span className="font-regular text-sm text-foreground">
@@ -367,7 +489,7 @@ export default function CalendarCard({
         </div>
 
         {/* Status Footer */}
-        {isWorkingDay() && totalSlots > 0 && (
+        {isWorkingDay() && isDateInRange(selectedDate) && totalSlots > 0 && (
           <div className="pt-3 border-t border-border">
             <div className="text-sm text-center font-medium text-foreground">
               {availableCount > 0 ? (
