@@ -158,7 +158,7 @@ export default function PublicCatalog() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-12 pt-16">
+    <div className="container mx-auto px-10 min-h-screen">
       {showConfetti && (
         <Confetti
           width={window.innerWidth}
@@ -175,18 +175,9 @@ export default function PublicCatalog() {
       )}
 
       {/* Header Section */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl tracking-tight font-black text-[var(--orange)] mb-4">
-          Our Design Catalog
-        </h1>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-          Explore our collection of modern home designs tailored to your
-          lifestyle
-        </p>
-      </div>
 
       {/* Category Tags Only - UPDATED WITH ORANGE COLORS */}
-      <div className="flex flex-wrap gap-2 mb-2 border-t py-4">
+      <div className="flex flex-wrap gap-2 mb-2 py-4">
         {categories.map((category) => (
           <button
             key={category}
@@ -281,8 +272,8 @@ export default function PublicCatalog() {
                         isActive={currentPage === page}
                         className={
                           currentPage === page
-                            ? "bg-gray-900 text-white hover:bg-gray-800"
-                            : "text-gray-700 hover:bg-gray-100"
+                            ? "bg-orange-500 text-white hover:bg-orange-400"
+                            : "text-background hover:bg-gray-100"
                         }
                       >
                         {page}

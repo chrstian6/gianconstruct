@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { UserManagementTable } from "@/components/admin/usermanagement/UserManagementTable";
 import { UserForm } from "@/components/admin/usermanagement/UserForm";
 import { EditUserModal } from "@/components/admin/usermanagement/EditUserModal";
+import { CreateUserFormModal } from "@/components/admin/usermanagement/CreateUserFormModal";
 import { getUsers } from "@/action/userManagement";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -98,10 +99,10 @@ export default function UserManagementPage() {
     createdAt: true,
     actions: true,
   });
-  const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const { setIsEditUserOpen } = useModalStore();
+  const { isCreateAccountOpen, setIsCreateAccountOpen, createAccountData } =
+    useModalStore();
 
   // Fetch users on mount
   useEffect(() => {
@@ -199,7 +200,6 @@ export default function UserManagementPage() {
   // Handle user addition
   const handleAddUser = (user: User) => {
     setUsers([...users, user]);
-    setShowAddUserForm(false);
     toast.success("User added successfully");
   };
 
@@ -319,11 +319,11 @@ export default function UserManagementPage() {
   };
 
   const handleAddUserClick = () => {
-    setShowAddUserForm(true);
+    setIsCreateAccountOpen(true);
   };
 
   const handleCancelAddUser = () => {
-    setShowAddUserForm(false);
+    setIsCreateAccountOpen(false);
   };
 
   return (
@@ -334,7 +334,6 @@ export default function UserManagementPage() {
         </h1>
       </div>
 
-      {/* Stats Cards Section */}
       {/* Stats Cards Section */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Card className="rounded-sm shadow-none border">
@@ -385,338 +384,305 @@ export default function UserManagementPage() {
       </div>
 
       {/* Main Content Area */}
-      {showAddUserForm ? (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-text-secondary">
-              Add New User
-            </h2>
-            <Button
-              onClick={handleCancelAddUser}
-              variant="outline"
-              size="sm"
-              className="rounded-sm font-geist"
-            >
-              Back to User List
-            </Button>
-          </div>
-          <div className="flex justify-start">
-            <UserForm
-              onAddUser={handleAddUser}
-              onCancel={handleCancelAddUser}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Search and Filter Bar */}
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              {/* Search Input */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                <Input
-                  placeholder="Search users by name, email, ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-10 rounded-sm border-gray-200 border-1 border-b-0 font-geist h-8 text-sm"
+      <div className="space-y-6">
+        {/* Search and Filter Bar */}
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search users by name, email, ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-10 rounded-sm border-gray-200 border-1 border-b-0 font-geist h-8 text-sm"
+              />
+              {searchTerm && (
+                <X
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 cursor-pointer hover:text-gray-700"
+                  onClick={() => setSearchTerm("")}
                 />
-                {searchTerm && (
-                  <X
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 cursor-pointer hover:text-gray-700"
-                    onClick={() => setSearchTerm("")}
-                  />
-                )}
-              </div>
-
-              <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="rounded-sm gap-2 font-geist"
-                  >
-                    <Filter className="h-4 w-4" />
-                    Filters
-                    {hasActiveFilters && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center bg-gray-900 text-white"
-                      >
-                        !
-                      </Badge>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-56 bg-white font-geist"
-                  align="start"
-                >
-                  <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      className={statusFilter === "all" ? "bg-gray-100" : ""}
-                      onClick={() => setStatusFilter("all")}
-                    >
-                      All Users
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "verified" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("verified")}
-                    >
-                      Verified
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "unverified" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("unverified")}
-                    >
-                      Unverified
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-
-                  {roles.length > 0 && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Filter by Role</DropdownMenuLabel>
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem
-                          className={roleFilter === "all" ? "bg-gray-100" : ""}
-                          onClick={() => setRoleFilter("all")}
-                        >
-                          All Roles
-                        </DropdownMenuItem>
-                        {roles.map((role) => (
-                          <DropdownMenuItem
-                            key={role}
-                            className={roleFilter === role ? "bg-gray-100" : ""}
-                            onClick={() => setRoleFilter(role)}
-                          >
-                            {role}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuGroup>
-                    </>
-                  )}
-
-                  {hasActiveFilters && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={clearFilters}>
-                        Clear Filters
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="rounded-sm text-gray-600 hover:text-gray-900 font-geist"
-                >
-                  Clear
-                  <X className="ml-1 h-4 w-4" />
-                </Button>
               )}
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleExportCSV}
-                className="rounded-sm font-geist gap-2"
-                disabled={filteredUsers.length === 0}
-                title={filteredUsers.length === 0 ? "No users to export" : ""}
+            <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="rounded-sm gap-2 font-geist"
+                >
+                  <Filter className="h-4 w-4" />
+                  Filters
+                  {hasActiveFilters && (
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center bg-gray-900 text-white"
+                    >
+                      !
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-56 bg-white font-geist"
+                align="start"
               >
-                <Download className="h-4 w-4" />
-                Export
-              </Button>
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    className={statusFilter === "all" ? "bg-gray-100" : ""}
+                    onClick={() => setStatusFilter("all")}
+                  >
+                    All Users
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={statusFilter === "verified" ? "bg-gray-100" : ""}
+                    onClick={() => setStatusFilter("verified")}
+                  >
+                    Verified
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={
+                      statusFilter === "unverified" ? "bg-gray-100" : ""
+                    }
+                    onClick={() => setStatusFilter("unverified")}
+                  >
+                    Unverified
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+
+                {roles.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Filter by Role</DropdownMenuLabel>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        className={roleFilter === "all" ? "bg-gray-100" : ""}
+                        onClick={() => setRoleFilter("all")}
+                      >
+                        All Roles
+                      </DropdownMenuItem>
+                      {roles.map((role) => (
+                        <DropdownMenuItem
+                          key={role}
+                          className={roleFilter === role ? "bg-gray-100" : ""}
+                          onClick={() => setRoleFilter(role)}
+                        >
+                          {role}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </>
+                )}
+
+                {hasActiveFilters && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={clearFilters}>
+                      Clear Filters
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {hasActiveFilters && (
               <Button
-                onClick={handleAddUserClick}
-                variant="default"
+                variant="ghost"
                 size="sm"
-                className="rounded-sm whitespace-nowrap font-geist"
+                onClick={clearFilters}
+                className="rounded-sm text-gray-600 hover:text-gray-900 font-geist"
               >
-                <Plus className="mr-2 h-4 w-4" /> Add User
+                Clear
+                <X className="ml-1 h-4 w-4" />
               </Button>
-            </div>
+            )}
           </div>
 
-          {/* User Table Content */}
-          {isLoading ? (
-            <Card className="w-full">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
-                  <div>
-                    <CardTitle className="text-foreground-900 font-geist">
-                      User Management
-                    </CardTitle>
-                    <CardDescription className="font-geist">
-                      Loading users...
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <TableSkeleton />
-              </CardContent>
-            </Card>
-          ) : filteredUsers.length === 0 ? (
-            users.length === 0 ? (
-              <NotFound
-                title="No users found in the system"
-                description="Get started by adding your first user to manage your construction team and clients."
-              />
-            ) : (
-              <Card className="max-w-md mx-auto rounded-sm shadow-none border">
-                <CardContent className="pt-2">
-                  <div className="text-center p-8">
-                    <h3 className="text-xl font-semibold text-gray-900 font-geist">
-                      No users found
-                    </h3>
-                    <p className="text-gray-600 mt-2 font-geist">
-                      {hasActiveFilters
-                        ? "Try adjusting your filters or search query."
-                        : "No users match your current criteria."}
-                    </p>
-                    {hasActiveFilters && (
-                      <Button
-                        onClick={clearFilters}
-                        variant="default"
-                        size="sm"
-                        className="mt-4 rounded-sm font-geist"
-                      >
-                        Clear Filters
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          ) : (
-            <Card className="w-full rounded-sm shadow-none border">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
-                  <div>
-                    <CardTitle className="text-foreground-900 font-geist">
-                      User Management
-                    </CardTitle>
-                    <CardDescription className="font-geist">
-                      View and manage all users in your system
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-sm font-geist gap-2"
-                        >
-                          Columns <ChevronDown className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.user_id}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("user_id")
-                          }
-                        >
-                          User ID
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.firstName}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("firstName")
-                          }
-                        >
-                          First Name
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.lastName}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("lastName")
-                          }
-                        >
-                          Last Name
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.email}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("email")
-                          }
-                        >
-                          Email
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.role}
-                          onCheckedChange={() => toggleColumnVisibility("role")}
-                        >
-                          Role
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.contactNo}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("contactNo")
-                          }
-                        >
-                          Contact No
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.verified}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("verified")
-                          }
-                        >
-                          Verified
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.createdAt}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("createdAt")
-                          }
-                        >
-                          Created At
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.actions}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("actions")
-                          }
-                        >
-                          Actions
-                        </DropdownMenuCheckboxItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="w-full rounded-sm border">
-                  <UserManagementTable
-                    users={filteredUsers}
-                    onUpdate={handleUpdate}
-                    onToggleStatus={handleToggleStatus}
-                    columnVisibility={columnVisibility}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleExportCSV}
+              className="rounded-sm font-geist gap-2"
+              disabled={filteredUsers.length === 0}
+              title={filteredUsers.length === 0 ? "No users to export" : ""}
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            <Button
+              onClick={handleAddUserClick}
+              variant="default"
+              size="sm"
+              className="rounded-sm whitespace-nowrap font-geist"
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add User
+            </Button>
+          </div>
         </div>
-      )}
+
+        {/* User Table Content */}
+        {isLoading ? (
+          <Card className="w-full">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
+                <div>
+                  <CardTitle className="text-foreground-900 font-geist">
+                    User Management
+                  </CardTitle>
+                  <CardDescription className="font-geist">
+                    Loading users...
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <TableSkeleton />
+            </CardContent>
+          </Card>
+        ) : filteredUsers.length === 0 ? (
+          users.length === 0 ? (
+            <NotFound
+              title="No users found in the system"
+              description="Get started by adding your first user to manage your construction team and clients."
+            />
+          ) : (
+            <Card className="max-w-md mx-auto rounded-sm shadow-none border">
+              <CardContent className="pt-2">
+                <div className="text-center p-8">
+                  <h3 className="text-xl font-semibold text-gray-900 font-geist">
+                    No users found
+                  </h3>
+                  <p className="text-gray-600 mt-2 font-geist">
+                    {hasActiveFilters
+                      ? "Try adjusting your filters or search query."
+                      : "No users match your current criteria."}
+                  </p>
+                  {hasActiveFilters && (
+                    <Button
+                      onClick={clearFilters}
+                      variant="default"
+                      size="sm"
+                      className="mt-4 rounded-sm font-geist"
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        ) : (
+          <Card className="w-full rounded-sm shadow-none border">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
+                <div>
+                  <CardTitle className="text-foreground-900 font-geist">
+                    User Management
+                  </CardTitle>
+                  <CardDescription className="font-geist">
+                    View and manage all users in your system
+                  </CardDescription>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-sm font-geist gap-2"
+                    >
+                      Columns <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.user_id}
+                      onCheckedChange={() => toggleColumnVisibility("user_id")}
+                    >
+                      User ID
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.firstName}
+                      onCheckedChange={() =>
+                        toggleColumnVisibility("firstName")
+                      }
+                    >
+                      First Name
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.lastName}
+                      onCheckedChange={() => toggleColumnVisibility("lastName")}
+                    >
+                      Last Name
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.email}
+                      onCheckedChange={() => toggleColumnVisibility("email")}
+                    >
+                      Email
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.role}
+                      onCheckedChange={() => toggleColumnVisibility("role")}
+                    >
+                      Role
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.contactNo}
+                      onCheckedChange={() =>
+                        toggleColumnVisibility("contactNo")
+                      }
+                    >
+                      Contact No
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.verified}
+                      onCheckedChange={() => toggleColumnVisibility("verified")}
+                    >
+                      Verified
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.createdAt}
+                      onCheckedChange={() =>
+                        toggleColumnVisibility("createdAt")
+                      }
+                    >
+                      Created At
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.actions}
+                      onCheckedChange={() => toggleColumnVisibility("actions")}
+                    >
+                      Actions
+                    </DropdownMenuCheckboxItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="w-full rounded-sm border">
+                <UserManagementTable
+                  users={filteredUsers}
+                  onUpdate={handleUpdate}
+                  onToggleStatus={handleToggleStatus}
+                  columnVisibility={columnVisibility}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Edit User Modal */}
       <EditUserModal onUpdate={handleUpdate} />
+
+      {/* Create User Form Modal */}
+      <CreateUserFormModal />
     </div>
   );
 }

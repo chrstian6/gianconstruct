@@ -9,7 +9,10 @@ export async function manageSession(
   userId: string,
   email: string,
   user_id: string,
-  firstName: string
+  firstName: string,
+  lastName: string,
+  contactNo: string,
+  avatar: string
 ) {
   try {
     const sessionId = nanoid(32);
@@ -22,6 +25,9 @@ export async function manageSession(
       email,
       user_id,
       firstName,
+      lastName,
+      contactNo,
+      avatar,
       role: user.role,
       createdAt: new Date().toISOString(),
     };

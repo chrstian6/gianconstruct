@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/lib/stores";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { loginUser } from "@/action/login";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { initiateEmailSignup } from "@/action/otp-signup";
@@ -24,6 +24,15 @@ export default function LoginForm({
   const [isEmailSignup, setIsEmailSignup] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check for signup query parameter on component mount
+  useEffect(() => {
+    const signupParam = searchParams.get("signup");
+    if (signupParam === "email") {
+      setIsEmailSignup(true);
+    }
+  }, [searchParams]);
 
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

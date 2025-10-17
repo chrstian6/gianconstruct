@@ -2,19 +2,17 @@
 
 import * as React from "react";
 import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
+  Home,
+  Search,
   Settings2,
-  SquareTerminal,
+  Folder,
+  CheckCircle,
+  Clock,
+  WalletMinimal,
 } from "lucide-react";
-
+import { usePathname } from "next/navigation";
 import { TeamSwitcher } from "@/components/user/team-switcher";
+import { SettingsDialog } from "@/components/user/Settings";
 import {
   Sidebar,
   SidebarContent,
@@ -36,125 +34,38 @@ const data = {
     email: "m@example.com",
     avatar: "/avatars/shadcn.jpg",
   },
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: GalleryVerticalEnd,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
-    },
-  ],
   navMain: [
     {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
+      title: "Home",
+      url: "/user/userdashboard",
+      icon: Home,
     },
     {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
+      title: "Explore Catalog",
+      url: "/user/catalog",
+      icon: Search,
     },
     {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
+      title: "Transactions",
+      url: "/user/userdashboard",
+      icon: WalletMinimal,
     },
     {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
+      title: "Loan",
+      url: "/user/userdashboard",
+      icon: WalletMinimal,
     },
   ],
   projects: [
     {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
+      name: "Active Projects",
+      url: "/user/projects/active",
+      icon: Clock,
     },
     {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
+      name: "Completed Projects",
+      url: "/user/projects/completed",
+      icon: CheckCircle,
     },
   ],
 };
@@ -162,72 +73,84 @@ const data = {
 export default function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
-  return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Platform</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {data.navMain.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={item.isActive}>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const pathname = usePathname();
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Projects</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {data.projects.map((project) => (
-                <SidebarMenuItem key={project.name}>
-                  <SidebarMenuButton asChild>
-                    <a href={project.url}>
-                      <project.icon />
-                      <span>{project.name}</span>
-                    </a>
+  // Function to check if a menu item is active
+  const isActive = (url: string) => {
+    return pathname === url || pathname.startsWith(url + "/");
+  };
+
+  return (
+    <>
+      <Sidebar collapsible="icon" className="border" {...props}>
+        <SidebarHeader>
+          <TeamSwitcher />
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-orange-400">
+              Platform
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {data.navMain.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      className="text-foreground-500"
+                    >
+                      <a href={item.url}>
+                        <item.icon className="text-foreground-500" />
+                        <span>{item.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+                {/* Settings Menu Item */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="text-foreground-500 cursor-pointer"
+                  >
+                    <Settings2 className="text-foreground-500" />
+                    <span>Settings</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a href="#">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <img
-                    alt={data.user.name}
-                    src={data.user.avatar}
-                    className="aspect-square size-full rounded-lg"
-                  />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">
-                    {data.user.name}
-                  </span>
-                  <span className="truncate text-xs">{data.user.email}</span>
-                </div>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-orange-400">
+              Projects
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {data.projects.map((project) => (
+                  <SidebarMenuItem key={project.name}>
+                    <SidebarMenuButton
+                      asChild
+                      className="text-foreground"
+                      isActive={isActive(project.url)}
+                    >
+                      <a href={project.url}>
+                        <project.icon className="text-foreground" />
+                        <span>{project.name}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarRail />
+      </Sidebar>
+
+      {/* Settings Dialog */}
+      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+    </>
   );
 }

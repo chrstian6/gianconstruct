@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { getSession, setSession, deleteSession } from "@/lib/redis";
 
 // ---------------------------
-// GET /api/session
+// GET /api/auth/session
 // ---------------------------
 export async function GET() {
   try {
@@ -27,7 +27,10 @@ export async function GET() {
         user_id: sessionData.user_id,
         email: sessionData.email,
         name: sessionData.firstName,
+        lastName: sessionData.lastName || "",
+        contactNo: sessionData.contactNo || "",
         role: sessionData.role || "user",
+        avatar: sessionData.avatar || "",
       },
     });
   } catch (error) {
@@ -40,7 +43,7 @@ export async function GET() {
 }
 
 // ---------------------------
-// POST /api/session
+// POST /api/auth/session
 // Not used, as login is handled by actions/login.ts
 // ---------------------------
 export async function POST() {
@@ -51,7 +54,7 @@ export async function POST() {
 }
 
 // ---------------------------
-// DELETE /api/session
+// DELETE /api/auth/session
 // Log out
 // ---------------------------
 export async function DELETE() {

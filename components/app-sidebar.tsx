@@ -138,7 +138,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="flex items-center justify-between w-full">
                 <SidebarMenuButton size="lg" asChild>
                   <div className="flex items-center gap-2">
-                    <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <div className="bg-orange-500 text-background flex aspect-square size-8 items-center justify-center rounded-lg">
                       <span className="text-sm font-medium">
                         {user?.firstName?.[0] || "A"}
                       </span>

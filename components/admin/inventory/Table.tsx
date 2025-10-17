@@ -132,67 +132,67 @@ export function InventoryTable({
           <TableHeader>
             <TableRow>
               {columnVisibility.id && (
-                <TableHead className="px-2 text-left min-w-[60px]">
+                <TableHead className="px-4 text-left min-w-[60px]">
                   ID
                 </TableHead>
               )}
               {columnVisibility.sku && (
-                <TableHead className="px-2 text-left min-w-[80px]">
+                <TableHead className="px-4 text-left min-w-[80px]">
                   SKU
                 </TableHead>
               )}
               {columnVisibility.name && (
-                <TableHead className="px-2 text-left min-w-[100px]">
+                <TableHead className="px-4 text-left min-w-[100px]">
                   Name
                 </TableHead>
               )}
               {columnVisibility.category && (
-                <TableHead className="px-2 text-left min-w-[80px]">
+                <TableHead className="px-4 text-left min-w-[80px]">
                   Category
                 </TableHead>
               )}
               {columnVisibility.quantity && (
-                <TableHead className="px-2 text-right min-w-[60px]">
+                <TableHead className="px-4 text-right min-w-[60px]">
                   Qty
                 </TableHead>
               )}
               {columnVisibility.unit && (
-                <TableHead className="px-2 text-left min-w-[60px]">
+                <TableHead className="px-4 text-left min-w-[60px]">
                   Unit
                 </TableHead>
               )}
               {columnVisibility.unitCost && (
-                <TableHead className="px-2 text-right min-w-[80px]">
+                <TableHead className="px-4 text-right min-w-[80px]">
                   Cost
                 </TableHead>
               )}
               {columnVisibility.totalCost && (
-                <TableHead className="px-2 text-right min-w-[80px]">
+                <TableHead className="px-4 text-right min-w-[80px]">
                   Total
                 </TableHead>
               )}
               {columnVisibility.location && (
-                <TableHead className="px-2 text-left min-w-[100px]">
+                <TableHead className="px-4 text-left min-w-[100px]">
                   Location
                 </TableHead>
               )}
               {columnVisibility.supplier && (
-                <TableHead className="px-2 text-left min-w-[100px]">
+                <TableHead className="px-4 text-left min-w-[100px]">
                   Supplier
                 </TableHead>
               )}
               {columnVisibility.reorderPoint && (
-                <TableHead className="px-2 text-right min-w-[80px]">
+                <TableHead className="px-4 text-right min-w-[80px]">
                   Reorder
                 </TableHead>
               )}
               {columnVisibility.status && (
-                <TableHead className="px-2 text-left min-w-[80px]">
+                <TableHead className="px-4 text-left min-w-[80px]">
                   Status
                 </TableHead>
               )}
               {columnVisibility.actions && (
-                <TableHead className="px-2 text-right min-w-[80px]">
+                <TableHead className="px-4 text-right min-w-[80px]">
                   Actions
                 </TableHead>
               )}
@@ -204,7 +204,7 @@ export function InventoryTable({
                 {Object.values(columnVisibility)
                   .filter((visible) => visible)
                   .map((_, cellIndex) => (
-                    <TableCell key={cellIndex} className="px-2">
+                    <TableCell key={cellIndex} className="px-4 py-4">
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
                   ))}
@@ -252,63 +252,63 @@ export function InventoryTable({
         <TableHeader>
           <TableRow>
             {columnVisibility.id && (
-              <TableHead className="px-2 text-left min-w-[60px]">ID</TableHead>
+              <TableHead className="px-4 text-left min-w-[60px]">ID</TableHead>
             )}
             {columnVisibility.sku && (
-              <TableHead className="px-2 text-left min-w-[80px]">SKU</TableHead>
+              <TableHead className="px-4 text-left min-w-[80px]">SKU</TableHead>
             )}
             {columnVisibility.name && (
-              <TableHead className="px-2 text-left min-w-[100px]">
+              <TableHead className="px-4 text-left min-w-[100px]">
                 Name
               </TableHead>
             )}
             {columnVisibility.category && (
-              <TableHead className="px-2 text-left min-w-[80px]">
+              <TableHead className="px-4 text-left min-w-[80px]">
                 Category
               </TableHead>
             )}
             {columnVisibility.quantity && (
-              <TableHead className="px-2 text-right min-w-[60px]">
+              <TableHead className="px-4 text-right min-w-[60px]">
                 Qty
               </TableHead>
             )}
             {columnVisibility.unit && (
-              <TableHead className="px-2 text-left min-w-[60px]">
+              <TableHead className="px-4 text-left min-w-[60px]">
                 Unit
               </TableHead>
             )}
             {columnVisibility.unitCost && (
-              <TableHead className="px-2 text-right min-w-[80px]">
+              <TableHead className="px-4 text-right min-w-[80px]">
                 Cost
               </TableHead>
             )}
             {columnVisibility.totalCost && (
-              <TableHead className="px-2 text-right min-w-[80px]">
+              <TableHead className="px-4 text-right min-w-[80px]">
                 Total
               </TableHead>
             )}
             {columnVisibility.location && (
-              <TableHead className="px-2 text-left min-w-[100px]">
+              <TableHead className="px-4 text-left min-w-[100px]">
                 Location
               </TableHead>
             )}
             {columnVisibility.supplier && (
-              <TableHead className="px-2 text-left min-w-[100px]">
+              <TableHead className="px-4 text-left min-w-[100px]">
                 Supplier
               </TableHead>
             )}
             {columnVisibility.reorderPoint && (
-              <TableHead className="px-2 text-right min-w-[80px]">
+              <TableHead className="px-4 text-right min-w-[80px]">
                 Reorder
               </TableHead>
             )}
             {columnVisibility.status && (
-              <TableHead className="px-2 text-left min-w-[80px]">
+              <TableHead className="px-4 text-left min-w-[80px]">
                 Status
               </TableHead>
             )}
             {columnVisibility.actions && (
-              <TableHead className="px-2 text-right min-w-[80px]">
+              <TableHead className="px-4 text-right min-w-[80px]">
                 Actions
               </TableHead>
             )}
@@ -346,7 +346,7 @@ export function InventoryTable({
                   onClick={() => toggleRowExpansion(item.item_id)}
                 >
                   {columnVisibility.id && (
-                    <TableCell className="px-2 py-2 font-mono text-xs text-left">
+                    <TableCell className="px-4 py-4 font-mono text-xs text-left">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -363,7 +363,7 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.sku && (
-                    <TableCell className="px-2 py-2 font-mono text-xs text-left">
+                    <TableCell className="px-4 py-4 font-mono text-xs text-left">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -380,7 +380,7 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.name && (
-                    <TableCell className="px-2 py-2 min-w-[100px] text-left">
+                    <TableCell className="px-4 py-4 min-w-[100px] text-left">
                       <div className="flex flex-col">
                         <span className="font-medium text-sm truncate">
                           {item.name}
@@ -395,7 +395,7 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.category && (
-                    <TableCell className="px-2 py-2 text-left">
+                    <TableCell className="px-4 py-4 text-left">
                       <Badge variant="outline" className="text-xs">
                         {item.category}
                       </Badge>
@@ -403,7 +403,7 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.quantity && (
-                    <TableCell className="px-2 py-2 text-right font-medium">
+                    <TableCell className="px-4 py-4 text-right font-medium">
                       <div className="flex flex-col items-end">
                         <span>{item.quantity.toLocaleString()}</span>
                         {isLowStock && (
@@ -416,25 +416,25 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.unit && (
-                    <TableCell className="px-2 py-2 text-sm uppercase text-left">
+                    <TableCell className="px-4 py-4 text-sm uppercase text-left">
                       {item.unit}
                     </TableCell>
                   )}
 
                   {columnVisibility.unitCost && (
-                    <TableCell className="px-2 py-2 text-right">
+                    <TableCell className="px-4 py-4 text-right">
                       ₱{unitCost.toLocaleString()}
                     </TableCell>
                   )}
 
                   {columnVisibility.totalCost && (
-                    <TableCell className="px-2 py-2 text-right font-medium">
+                    <TableCell className="px-4 py-4 text-right font-medium">
                       ₱{calculatedTotalCost.toLocaleString()}
                     </TableCell>
                   )}
 
                   {columnVisibility.location && (
-                    <TableCell className="px-2 py-2 text-left">
+                    <TableCell className="px-4 py-4 text-left">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -454,7 +454,7 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.supplier && (
-                    <TableCell className="px-2 py-2 text-left">
+                    <TableCell className="px-4 py-4 text-left">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -474,13 +474,13 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.reorderPoint && (
-                    <TableCell className="px-2 py-2 text-right text-sm">
+                    <TableCell className="px-4 py-4 text-right text-sm">
                       {reorderPoint.toLocaleString()}
                     </TableCell>
                   )}
 
                   {columnVisibility.status && (
-                    <TableCell className="px-2 py-2 text-left">
+                    <TableCell className="px-4 py-4 text-left">
                       <Badge variant={getStatusVariant()} className="text-xs">
                         {getStatusText()}
                       </Badge>
@@ -488,7 +488,7 @@ export function InventoryTable({
                   )}
 
                   {columnVisibility.actions && (
-                    <TableCell className="px-2 py-2 text-right">
+                    <TableCell className="px-4 py-4 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -556,7 +556,7 @@ export function InventoryTable({
                           (visible) => visible
                         ).length
                       }
-                      className="px-2 py-2"
+                      className="px-4 py-4"
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div className="flex items-start gap-2">

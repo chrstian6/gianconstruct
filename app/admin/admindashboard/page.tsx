@@ -44,8 +44,6 @@ export default function AdminDashboardPage() {
 
   return (
     <main className="flex-1 overflow-y-auto p-6 font-inter">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Admin Dashboard</h1>
-
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
