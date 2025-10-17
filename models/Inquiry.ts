@@ -6,6 +6,9 @@ export interface Inquiry {
   email: string;
   phone: string;
   message: string;
+  preferredDate: string;
+  preferredTime: string;
+  meetingType: "phone" | "onsite" | "video";
   design: {
     id: string;
     name: string;
@@ -23,6 +26,13 @@ const InquirySchema: Schema<InquiryDocument> = new Schema({
   email: { type: String, required: true },
   phone: { type: String, required: true },
   message: { type: String, required: true },
+  preferredDate: { type: String, required: true },
+  preferredTime: { type: String, required: true },
+  meetingType: {
+    type: String,
+    required: true,
+    enum: ["phone", "onsite", "video"],
+  },
   design: {
     id: { type: String, required: true },
     name: { type: String, required: true },

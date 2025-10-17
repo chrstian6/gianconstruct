@@ -11,18 +11,57 @@ import {
 } from "../lib/redis";
 import { sendEmail } from "../lib/nodemailer";
 
+// Helper function to clean and format strings
+function cleanString(str: string): string {
+  return str
+    .trim()
+    .replace(/\s+/g, " ") // Replace multiple spaces with single space
+    .replace(/\b\w/g, (char) => char.toUpperCase()) // Capitalize first letter of each word
+    .replace(/\s+/g, " ") // Ensure single spaces again
+    .trim();
+}
+
+// Helper function to clean email
+function cleanEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// Helper function to clean contact number
+function cleanContactNumber(contactNo: string): string {
+  return contactNo.trim().replace(/\s+/g, ""); // Remove all spaces
+}
+
+// Helper function to clean address
+function cleanAddress(address: string): string {
+  return address
+    .trim()
+    .replace(/\s+/g, " ") // Replace multiple spaces with single space
+    .replace(/\b\w/g, (char) => char.toUpperCase()) // Capitalize first letter of each word
+    .trim();
+}
+
 const emailSchema = z.object({
   email: z.string().email("Invalid email address"),
 });
 
 const profileSchema = z
   .object({
-    firstName: z.string().min(1, "First name is required"),
-    lastName: z.string().min(1, "Last name is required"),
-    address: z.string().min(1, "Address is required"),
+    firstName: z
+      .string()
+      .min(1, "First name is required")
+      .transform((val) => cleanString(val)),
+    lastName: z
+      .string()
+      .min(1, "Last name is required")
+      .transform((val) => cleanString(val)),
+    address: z
+      .string()
+      .min(1, "Address is required")
+      .transform((val) => cleanAddress(val)),
     contactNo: z
       .string()
       .regex(/^\d{10,11}$/, "Invalid contact number")
+      .transform((val) => cleanContactNumber(val))
       .optional(),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string().min(1, "Confirm password is required"),
@@ -69,8 +108,9 @@ export async function initiateEmailSignup(formData: FormData) {
     await dbConnect();
 
     const email = formData.get("email") as string;
+    const cleanedEmail = cleanEmail(email);
 
-    const validatedData = emailSchema.safeParse({ email });
+    const validatedData = emailSchema.safeParse({ email: cleanedEmail });
     if (!validatedData.success) {
       // Return first error found
       const errors = validatedData.error.flatten().fieldErrors;
@@ -84,7 +124,7 @@ export async function initiateEmailSignup(formData: FormData) {
     }
 
     // Check if email already exists and is verified
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await User.findOne({ email: cleanedEmail });
     if (existingUser && existingUser.verified) {
       return {
         success: false,
@@ -103,7 +143,7 @@ export async function initiateEmailSignup(formData: FormData) {
       const user_id = await generateUserId();
       user = new User({
         user_id,
-        email: email.toLowerCase(),
+        email: cleanedEmail,
         verified: false,
         role: "user",
         timeStamp: new Date().toISOString(),
@@ -281,9 +321,20 @@ export async function completeUserProfile(
   try {
     await dbConnect();
 
+    // Clean the input data before validation
+    const cleanedProfileData = {
+      firstName: cleanString(profileData.firstName),
+      lastName: cleanString(profileData.lastName),
+      address: cleanAddress(profileData.address),
+      contactNo: profileData.contactNo
+        ? cleanContactNumber(profileData.contactNo)
+        : undefined,
+      password: profileData.password,
+    };
+
     const validatedData = profileSchema.safeParse({
-      ...profileData,
-      confirmPassword: profileData.password,
+      ...cleanedProfileData,
+      confirmPassword: cleanedProfileData.password,
     });
 
     if (!validatedData.success) {
@@ -308,9 +359,10 @@ export async function completeUserProfile(
       };
     }
 
-    if (profileData.contactNo) {
+    // Check for duplicate contact number with cleaned data
+    if (validatedData.data.contactNo) {
       const existingContact = await User.findOne({
-        contactNo: profileData.contactNo,
+        contactNo: validatedData.data.contactNo,
         _id: { $ne: userId },
       });
       if (existingContact) {
@@ -323,17 +375,18 @@ export async function completeUserProfile(
       }
     }
 
-    user.firstName = profileData.firstName;
-    user.lastName = profileData.lastName;
-    user.address = profileData.address;
-    user.contactNo = profileData.contactNo;
+    // Update user with cleaned and validated data
+    user.firstName = validatedData.data.firstName;
+    user.lastName = validatedData.data.lastName;
+    user.address = validatedData.data.address;
+    user.contactNo = validatedData.data.contactNo;
 
     // Hash password with error handling
     if (typeof user.hashPassword !== "function") {
       console.error("hashPassword is not a function on user instance");
       throw new Error("Password hashing method is unavailable");
     }
-    await user.hashPassword(profileData.password);
+    await user.hashPassword(validatedData.data.password);
 
     user.verified = true;
     user.updatedAt = new Date();
@@ -358,6 +411,77 @@ export async function completeUserProfile(
           `Profile completion failed: ${error.message || "Unknown error"}`,
         ],
       } as ErrorResponse,
+    };
+  }
+}
+
+// Additional utility function for cleaning existing user data (optional)
+export async function cleanExistingUserData() {
+  try {
+    await dbConnect();
+
+    const users = await User.find({});
+    let cleanedCount = 0;
+
+    for (const user of users) {
+      let needsUpdate = false;
+
+      if (user.firstName) {
+        const cleanedFirstName = cleanString(user.firstName);
+        if (cleanedFirstName !== user.firstName) {
+          user.firstName = cleanedFirstName;
+          needsUpdate = true;
+        }
+      }
+
+      if (user.lastName) {
+        const cleanedLastName = cleanString(user.lastName);
+        if (cleanedLastName !== user.lastName) {
+          user.lastName = cleanedLastName;
+          needsUpdate = true;
+        }
+      }
+
+      if (user.address) {
+        const cleanedAddress = cleanAddress(user.address);
+        if (cleanedAddress !== user.address) {
+          user.address = cleanedAddress;
+          needsUpdate = true;
+        }
+      }
+
+      if (user.contactNo) {
+        const cleanedContactNo = cleanContactNumber(user.contactNo);
+        if (cleanedContactNo !== user.contactNo) {
+          user.contactNo = cleanedContactNo;
+          needsUpdate = true;
+        }
+      }
+
+      if (user.email) {
+        const cleanedEmail = cleanEmail(user.email);
+        if (cleanedEmail !== user.email) {
+          user.email = cleanedEmail;
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        await user.save();
+        cleanedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      message: `Cleaned data for ${cleanedCount} users`,
+      cleanedCount,
+    };
+  } catch (error: any) {
+    console.error("Error cleaning existing user data:", error);
+    return {
+      success: false,
+      error: error.message,
     };
   }
 }
