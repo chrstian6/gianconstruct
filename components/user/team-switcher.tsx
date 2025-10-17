@@ -1,87 +1,101 @@
+// components/user/team-switcher.tsx
 "use client";
 
-import * as React from "react";
-import { ChevronsUpDown, Plus } from "lucide-react";
-
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/stores";
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { LogOut, Settings, User } from "lucide-react";
 
-export function TeamSwitcher({
-  teams,
-}: {
-  teams: {
-    name: string;
-    logo: React.ElementType;
-    plan: string;
-  }[];
-}) {
-  const { isMobile } = useSidebar();
-  const [activeTeam, setActiveTeam] = React.useState(teams[0]);
+interface UserWithAvatar {
+  user_id: string;
+  firstName?: string;
+  email: string;
+  role: string;
+  avatar?: string;
+}
 
-  if (!activeTeam) {
-    return null;
-  }
+export function TeamSwitcher() {
+  const router = useRouter();
+  const { user, clearUser } = useAuthStore();
+
+  const userWithAvatar = user as UserWithAvatar | null;
+
+  const handleLogout = async () => {
+    try {
+      await clearUser();
+      router.replace("/");
+      router.refresh();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  const initial =
+    userWithAvatar?.firstName?.[0] || userWithAvatar?.email?.[0] || "U";
+  const name = userWithAvatar?.firstName || userWithAvatar?.email || "User";
+  const role = userWithAvatar?.role
+    ? userWithAvatar.role.charAt(0).toUpperCase() +
+      userWithAvatar.role.slice(1).toLowerCase()
+    : "Member";
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                <activeTeam.logo className="size-4" />
+            <SidebarMenuButton size="lg" className="w-full cursor-pointer">
+              <div className="flex items-center gap-3 w-full min-w-0">
+                <Avatar className="h-10 w-10 flex-shrink-0">
+                  <AvatarImage src={userWithAvatar?.avatar} />
+                  <AvatarFallback className="bg-orange-500 text-white text-sm font-medium">
+                    {initial}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col gap-0.5 leading-none min-w-0 flex-1">
+                  <span className="font-bold text-sm truncate">{name}</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {role}
+                  </span>
+                </div>
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{activeTeam.name}</span>
-                <span className="truncate text-xs">{activeTeam.plan}</span>
-              </div>
-              <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-56"
             align="start"
-            side={isMobile ? "bottom" : "right"}
-            sideOffset={4}
+            side="right"
+            sideOffset={10}
           >
-            <DropdownMenuLabel className="text-muted-foreground text-xs">
-              Teams
-            </DropdownMenuLabel>
-            {teams.map((team, index) => (
-              <DropdownMenuItem
-                key={team.name}
-                onClick={() => setActiveTeam(team)}
-                className="gap-2 p-2"
-              >
-                <div className="flex size-6 items-center justify-center rounded-md border">
-                  <team.logo className="size-3.5 shrink-0" />
-                </div>
-                {team.name}
-                <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2">
-              <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
-                <Plus className="size-4" />
-              </div>
-              <div className="text-muted-foreground font-medium">Add team</div>
+            <DropdownMenuItem className="cursor-pointer">
+              <User className="h-4 w-4 mr-2" />
+              <span>Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer">
+              <Settings className="h-4 w-4 mr-2" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="cursor-pointer text-red-600 focus:text-red-600"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              <span>Sign Out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

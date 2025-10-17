@@ -62,6 +62,8 @@ export async function loginUser(formData: FormData) {
       verified: user.verified,
       role: user.role,
       firstName: user.firstName,
+      lastName: user.lastName,
+      contactNo: user.contactNo,
     });
 
     if (data.password) {
@@ -87,6 +89,9 @@ export async function loginUser(formData: FormData) {
         email: user.email,
         user_id: user.user_id,
         firstName: user.firstName,
+        lastName: user.lastName || "",
+        contactNo: user.contactNo || "",
+        avatar: user.avatar || "",
       });
 
       try {
@@ -168,7 +173,10 @@ export async function loginUser(formData: FormData) {
       user._id.toString(),
       user.email,
       user.user_id,
-      user.firstName
+      user.firstName,
+      user.lastName || "",
+      user.contactNo || "",
+      user.avatar || ""
     );
 
     // Set sessionId cookie
@@ -181,19 +189,16 @@ export async function loginUser(formData: FormData) {
       maxAge: 24 * 60 * 60,
     });
 
-    console.log("Login successful, session created:", {
-      sessionId,
-      email: user.email,
-      firstName: user.firstName,
-    });
-
     return {
       success: true,
       user: {
         user_id: user.user_id,
         firstName: user.firstName,
+        lastName: user.lastName || "",
+        contactNo: user.contactNo || "",
         email: user.email,
         role: user.role,
+        avatar: user.avatar || "",
       },
       sessionId,
       instructions:
@@ -207,5 +212,3 @@ export async function loginUser(formData: FormData) {
     };
   }
 }
-
-

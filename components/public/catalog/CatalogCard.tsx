@@ -39,23 +39,45 @@ export function CatalogCard({
       return;
     }
 
-    try {
-      // Calculate default loan values
-      const downpaymentAmount =
-        design.estimated_downpayment || design.price * 0.2;
-      const selectedTerm = design.maxLoanTerm || 60; // Default to 5 years if not specified
+    // Check if loan configuration is valid (same as QuotationCard)
+    const isValidLoanConfiguration =
+      design.isLoanOffer &&
+      design.maxLoanTerm &&
+      design.maxLoanTerm > 0 &&
+      design.interestRate !== undefined &&
+      design.interestRate !== null &&
+      design.interestRate >= 0;
 
-      // Calculate payment schedule
+    if (!isValidLoanConfiguration) {
+      console.warn("Invalid loan configuration, falling back to inquire");
+      onInquire(design);
+      return;
+    }
+
+    try {
+      // Initialize selected term and downpayment (same as QuotationCard)
+      const selectedTerm = design.maxLoanTerm || 0;
+
+      // Initialize downpayment with design's estimated_downpayment or calculate 20% default
+      let downpaymentAmount = 0;
+      if (design.estimated_downpayment && design.estimated_downpayment > 0) {
+        downpaymentAmount = design.estimated_downpayment;
+      } else if (design.price > 0) {
+        // Default to 20% if no downpayment is specified
+        downpaymentAmount = design.price * 0.2;
+      }
+
+      // Calculate payment schedule (same parameters as QuotationCard)
       const loanCalculation = calculatePaymentSchedule(
         design.price,
         downpaymentAmount,
         selectedTerm,
-        design.interestRate || 0,
+        design.interestRate!,
         design.interestRateType || "yearly",
         "months"
       );
 
-      // Use PDF formatter to generate and download PDF
+      // Use PDF formatter to generate and download PDF (same as QuotationCard)
       const { exportToPDF } = PDFFormatter({
         design,
         selectedTerm,
@@ -78,10 +100,10 @@ export function CatalogCard({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 group">
       {/* Image Section - Separate Card */}
       <div
-        className="bg-white rounded-sm overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer relative group"
+        className="bg-white rounded-sm overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer relative"
         onClick={handleCardClick}
       >
         <div className="relative">
@@ -126,41 +148,46 @@ export function CatalogCard({
               {capitalizeFirstLetter(design.name)}
             </p>
 
-            {/* Room, Square Meters, and Loan Available Info */}
+            {/* Payment Method Info */}
             <div className="flex items-center gap-4 text-xs text-gray-500">
-              {/* Loan Available Text - Only show when loan is available */}
-              {design.isLoanOffer && (
+              {design.isLoanOffer ? (
                 <div className="flex items-center gap-1 text-green-600 font-medium">
                   <span>Loan Available</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-gray-600 font-medium">
+                  <span>Cash Only</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Get Quotation Button - Shows PDF icon when loan is available */}
-          {design.isLoanOffer ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-shrink-0 text-xs h-8 px-3 border-green-600 text-green-600 hover:bg-green-600 hover:text-white flex items-center gap-1"
-              onClick={handleGetQuotation}
-            >
-              <FileText className="h-3 w-3" />
-              Get Quotation
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-shrink-0 text-xs h-8 px-3 border-[var(--orange)] text-[var(--orange)] hover:bg-[var(--orange)] hover:text-white"
-              onClick={(e) => {
-                e.stopPropagation();
-                onInquire(design);
-              }}
-            >
-              Inquire
-            </Button>
-          )}
+          <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            {design.isLoanOffer ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-3 border-green-600 text-green-600 hover:bg-green-600 hover:text-white flex items-center gap-1"
+                onClick={handleGetQuotation}
+              >
+                <FileText className="h-3 w-3" />
+                Get Quotation
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-3 border-[var(--orange)] text-[var(--orange)] hover:bg-[var(--orange)] hover:text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onInquire(design);
+                }}
+              >
+                Inquire
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

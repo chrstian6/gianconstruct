@@ -19,6 +19,13 @@ interface User {
   updatedAt: string;
 }
 
+interface CreateAccountData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+}
+
 interface ModalStore {
   // Auth modals
   isLoginOpen: boolean;
@@ -41,6 +48,9 @@ interface ModalStore {
   isEditUserOpen: boolean;
   editingUser: User | null;
 
+  // Create account from notification
+  createAccountData: CreateAccountData | null;
+
   // Modal control methods
   setIsLoginOpen: (open: boolean) => void;
   setIsCreateAccountOpen: (open: boolean) => void;
@@ -52,14 +62,18 @@ interface ModalStore {
     inventory?: IInventory | null
   ) => void;
   setIsEditUserOpen: (open: boolean, user?: User | null) => void;
+  setCreateAccountData: (data: CreateAccountData | null) => void;
 }
 
 interface AuthStore {
   user: {
     user_id: string;
     firstName?: string;
+    lastName?: string;
+    contactNo?: string;
     email: string;
     role: string;
+    avatar?: string;
   } | null;
   loading: boolean;
   initialized: boolean;
@@ -67,8 +81,11 @@ interface AuthStore {
     user: {
       user_id: string;
       firstName?: string;
+      lastName?: string;
+      contactNo?: string;
       email: string;
       role: string;
+      avatar?: string;
     } | null
   ) => Promise<void>;
   setLoading: (loading: boolean) => void;
@@ -90,6 +107,7 @@ export const useModalStore = create<ModalStore>((set) => ({
   editingProject: null,
   editingInventory: null,
   editingUser: null,
+  createAccountData: null,
 
   // Modal control methods
   setIsLoginOpen: (open: boolean) => {
@@ -98,6 +116,9 @@ export const useModalStore = create<ModalStore>((set) => ({
 
   setIsCreateAccountOpen: (open: boolean) => {
     set({ isCreateAccountOpen: open });
+    if (!open) {
+      set({ createAccountData: null });
+    }
   },
 
   setIsDeleteDesignOpen: (open: boolean, designId?: string) => {
@@ -146,6 +167,10 @@ export const useModalStore = create<ModalStore>((set) => ({
       window.location.reload();
     }
   },
+
+  setCreateAccountData: (data: CreateAccountData | null) => {
+    set({ createAccountData: data });
+  },
 }));
 
 export const useAuthStore = create<AuthStore>()(
@@ -159,17 +184,20 @@ export const useAuthStore = create<AuthStore>()(
         user: {
           user_id: string;
           firstName?: string;
+          lastName?: string;
+          contactNo?: string;
           email: string;
           role: string;
+          avatar?: string;
         } | null
       ) => {
-        set({ user, loading: false });
+        set({ user, loading: false, initialized: true });
       },
 
       setLoading: (loading: boolean) => set({ loading }),
 
       clearUser: async () => {
-        set({ user: null, initialized: false, loading: false });
+        set({ user: null, initialized: true, loading: false });
         try {
           const response = await fetch("/api/auth/session", {
             method: "DELETE",
@@ -187,36 +215,38 @@ export const useAuthStore = create<AuthStore>()(
       initialize: async () => {
         const { initialized } = get();
 
+        // If already initialized, don't do anything
         if (initialized) {
-          set({ loading: false });
           return;
         }
 
-        set({ loading: true });
         try {
           const response = await fetch("/api/auth/session", {
             credentials: "include",
           });
-          if (!response.ok) {
-            set({ loading: false, initialized: true });
-            return;
+
+          if (response.ok) {
+            const data = await response.json();
+            set({
+              user: data.user
+                ? {
+                    user_id: data.user.user_id,
+                    firstName: data.user.name,
+                    lastName: data.user.lastName || "",
+                    contactNo: data.user.contactNo || "",
+                    email: data.user.email,
+                    role: data.user.role || "user",
+                    avatar: data.user.avatar || "",
+                  }
+                : null,
+              initialized: true,
+            });
+          } else {
+            set({ initialized: true });
           }
-          const data = await response.json();
-          set({
-            user: data.user
-              ? {
-                  user_id: data.user.user_id,
-                  firstName: data.user.name,
-                  email: data.user.email,
-                  role: data.user.role || "user",
-                }
-              : null,
-            loading: false,
-            initialized: true,
-          });
         } catch (error) {
           console.error("Failed to initialize session:", error);
-          set({ loading: false, initialized: true });
+          set({ initialized: true });
         }
       },
     }),

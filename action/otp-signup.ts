@@ -10,6 +10,7 @@ import {
   deleteVerificationToken,
 } from "../lib/redis";
 import { sendEmail } from "../lib/nodemailer";
+import { generateEmailTemplate } from "../lib/email-templates";
 
 // Helper function to clean and format strings
 function cleanString(str: string): string {
@@ -154,64 +155,42 @@ export async function initiateEmailSignup(formData: FormData) {
       isNewUser = true;
     }
 
-    // Generate OTP
+    // Generate OTP with 2-minute expiration
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpires = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 
     user.otp = otp;
     user.otpExpires = otpExpires;
     await user.save();
 
-    // Send OTP email
+    // Send OTP email using the email template system
     try {
+      const emailData = {
+        title: "Email Verification Code",
+        message: `We've sent a verification code to your email address. This code will expire in <strong>2 minutes</strong> for security purposes.<br><br>Please enter the following code to complete your registration:`,
+        details: `
+          <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #f97316; padding: 20px 0;">
+              ${otp}
+            </div>
+            <div style="color: #6b7280; font-size: 14px; margin-top: 10px;">
+              This code expires in 2 minutes
+            </div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Email Address</div>
+            <div class="detail-value">${user.email}</div>
+          </div>
+        `,
+        nextSteps:
+          "Enter this code in the verification form to complete your registration. If you didn't request this code, please ignore this email.",
+        showButton: false,
+      };
+
       await sendEmail({
         to: user.email,
-        subject: "Your GianConstruct Verification Code",
-        html: `
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Verify Your Email</title>
-          </head>
-          <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td align="center" style="padding: 40px 0;">
-                  <table width="100%" max-width="400" style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                    <tr>
-                      <td align="center" style="padding-bottom: 20px;">
-                        <h2 style="color: #f97316; margin: 0;">GianConstruct</h2>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td align="center" style="padding-bottom: 20px;">
-                        <h3 style="margin: 0 0 10px 0;">Your Verification Code</h3>
-                        <p style="color: #666; margin: 0;">Enter this code to verify your email address</p>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td align="center" style="padding-bottom: 30px;">
-                        <div style="background: #f97316; color: white; font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 15px 30px; border-radius: 6px; display: inline-block;">
-                          ${otp}
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td align="center">
-                        <p style="color: #999; font-size: 12px; margin: 0;">
-                          This code will expire in 10 minutes. If you didn't request this, please ignore this email.
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </body>
-          </html>
-        `,
+        subject: `Your GianConstruct Verification Code: ${otp}`,
+        html: generateEmailTemplate(emailData),
       });
     } catch (emailError: any) {
       if (isNewUser) {
@@ -225,19 +204,24 @@ export async function initiateEmailSignup(formData: FormData) {
       };
     }
 
-    // Store verification token in Redis
+    // Store verification token in Redis with all required properties
     const token = nanoid(32);
     await setVerificationToken(token, {
       userId: user._id.toString(),
       email: user.email,
       user_id: user.user_id,
       firstName: "",
+      lastName: "", // Add empty lastName
+      contactNo: "", // Add empty contactNo
+      avatar: "", // Add empty avatar
+      otpExpires: otpExpires.getTime(),
     });
 
     return {
       success: true,
       token,
       userId: user._id.toString(),
+      otpExpires: otpExpires.getTime(),
       message: "OTP sent to your email",
     };
   } catch (error: any) {
@@ -392,6 +376,69 @@ export async function completeUserProfile(
     user.updatedAt = new Date();
     await user.save();
 
+    // Send welcome email using the email template system
+    try {
+      const welcomeEmailData = {
+        title: "Welcome to GianConstruct!",
+        message: `Dear <strong>${user.firstName} ${user.lastName}</strong>,<br><br>Welcome to GianConstruct! Your account has been successfully created and verified. We're excited to have you join our community of homeowners and construction enthusiasts.<br><br>Your account has been created with the following details:`,
+        details: `
+          <div class="detail-row">
+            <div class="detail-label">User ID</div>
+            <div class="detail-value">${user.user_id}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Full Name</div>
+            <div class="detail-value">${user.firstName} ${user.lastName}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Email Address</div>
+            <div class="detail-value">${user.email}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Address</div>
+            <div class="detail-value">${user.address}</div>
+          </div>
+          ${
+            user.contactNo
+              ? `
+          <div class="detail-row">
+            <div class="detail-label">Contact Number</div>
+            <div class="detail-value">${user.contactNo}</div>
+          </div>
+          `
+              : ""
+          }
+          <div class="detail-row">
+            <div class="detail-label">Account Type</div>
+            <div class="detail-value">Registered User</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Registration Date</div>
+            <div class="detail-value">${new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}</div>
+          </div>
+        `,
+        nextSteps:
+          "You can now log in to your account to browse our design catalog, schedule consultations, and manage your construction projects. Explore our platform to discover how we can help bring your dream home to life.",
+        showButton: true,
+        buttonText: "Access Your Dashboard",
+        buttonUrl: "https://gianconstruct.com/user/userdashboard",
+      };
+
+      await sendEmail({
+        to: user.email,
+        subject: "Welcome to GianConstruct - Your Account is Ready!",
+        html: generateEmailTemplate(welcomeEmailData),
+      });
+    } catch (emailError) {
+      console.error("Failed to send welcome email:", emailError);
+      // Don't fail the registration process if welcome email fails
+    }
+
     return {
       success: true,
       user: {
@@ -399,6 +446,7 @@ export async function completeUserProfile(
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        contactNo: user.contactNo,
         role: user.role,
       },
     };
@@ -409,6 +457,133 @@ export async function completeUserProfile(
       errors: {
         general: [
           `Profile completion failed: ${error.message || "Unknown error"}`,
+        ],
+      } as ErrorResponse,
+    };
+  }
+}
+
+export async function resendOTP(token: string) {
+  try {
+    await dbConnect();
+
+    const verificationData = await getVerificationToken(token);
+    if (!verificationData) {
+      return {
+        success: false,
+        errors: {
+          general: ["Invalid or expired verification session"],
+        } as ErrorResponse,
+      };
+    }
+
+    const user = await User.findById(verificationData.userId);
+    if (!user) {
+      return {
+        success: false,
+        errors: {
+          general: ["User not found"],
+        } as ErrorResponse,
+      };
+    }
+
+    // Generate new OTP with 2-minute expiration
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
+
+    user.otp = otp;
+    user.otpExpires = otpExpires;
+    await user.save();
+
+    // Send new OTP email using the email template system
+    try {
+      const emailData = {
+        title: "New Verification Code",
+        message: `We've generated a new verification code for your email address. This code will expire in <strong>2 minutes</strong> for security purposes.<br><br>Please enter the following code to complete your registration:`,
+        details: `
+          <div style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #f97316; padding: 20px 0;">
+              ${otp}
+            </div>
+            <div style="color: #6b7280; font-size: 14px; margin-top: 10px;">
+              This code expires in 2 minutes
+            </div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Email Address</div>
+            <div class="detail-value">${user.email}</div>
+          </div>
+        `,
+        nextSteps:
+          "Enter this new code in the verification form to complete your registration. If you didn't request this code, please ignore this email.",
+        showButton: false,
+      };
+
+      await sendEmail({
+        to: user.email,
+        subject: `Your New GianConstruct Verification Code: ${otp}`,
+        html: generateEmailTemplate(emailData),
+      });
+    } catch (emailError: any) {
+      return {
+        success: false,
+        errors: {
+          general: [`Failed to send OTP: ${emailError.message}`],
+        } as ErrorResponse,
+      };
+    }
+
+    return {
+      success: true,
+      message: "New OTP sent to your email",
+      otpExpires: otpExpires.getTime(),
+    };
+  } catch (error: any) {
+    console.error("Resend OTP error:", error);
+    return {
+      success: false,
+      errors: {
+        general: [`Failed to resend OTP: ${error.message || "Unknown error"}`],
+      } as ErrorResponse,
+    };
+  }
+}
+
+export async function getOTPExpiration(token: string) {
+  try {
+    await dbConnect();
+
+    const verificationData = await getVerificationToken(token);
+    if (!verificationData) {
+      return {
+        success: false,
+        errors: {
+          general: ["Invalid or expired verification session"],
+        } as ErrorResponse,
+      };
+    }
+
+    const user = await User.findById(verificationData.userId);
+    if (!user || !user.otpExpires) {
+      return {
+        success: false,
+        errors: {
+          general: ["OTP not found or expired"],
+        } as ErrorResponse,
+      };
+    }
+
+    return {
+      success: true,
+      otpExpires: user.otpExpires.getTime(),
+    };
+  } catch (error: any) {
+    console.error("Get OTP expiration error:", error);
+    return {
+      success: false,
+      errors: {
+        general: [
+          `Failed to get OTP expiration: ${error.message || "Unknown error"}`,
         ],
       } as ErrorResponse,
     };

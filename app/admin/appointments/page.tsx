@@ -51,7 +51,7 @@ import {
   getAvailableTimeslots,
   initializeTimeslots,
   deleteInquiries,
-  cleanupTimeslots, // Add this new action
+  cleanupTimeslots,
   updateTimeslotsForNewDuration,
 } from "@/action/appointments";
 
@@ -124,16 +124,77 @@ export default function AppointmentsPage() {
   });
   const [isInitializingTimeslots, setIsInitializingTimeslots] = useState(false);
 
-  // Status tags
-  const statusTags = [
-    { value: "upcoming", label: "Upcoming" },
-    { value: "pending", label: "Pending" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "cancelled", label: "Cancelled" },
-    { value: "rescheduled", label: "Rescheduled" },
-    { value: "completed", label: "Completed" },
-    { value: "all", label: "All Appointments" },
-  ];
+  // Status tags with counts
+  const [statusTags, setStatusTags] = useState<
+    { value: string; label: string; count: number }[]
+  >([
+    { value: "upcoming", label: "Upcoming", count: 0 },
+    { value: "pending", label: "Pending", count: 0 },
+    { value: "confirmed", label: "Confirmed", count: 0 },
+    { value: "cancelled", label: "Cancelled", count: 0 },
+    { value: "rescheduled", label: "Rescheduled", count: 0 },
+    { value: "completed", label: "Completed", count: 0 },
+    { value: "all", label: "All Appointments", count: 0 },
+  ]);
+
+  // Calculate status counts
+  const calculateStatusCounts = (inquiriesList: Inquiry[]) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    const pendingCount = inquiriesList.filter(
+      (inquiry) => inquiry.status === "pending"
+    ).length;
+
+    // FIXED: Include both confirmed AND rescheduled appointments in upcoming
+    const upcomingCount = inquiriesList.filter(
+      (inquiry) =>
+        (inquiry.status === "confirmed" || inquiry.status === "rescheduled") &&
+        inquiry.preferredDate >= today
+    ).length;
+
+    const confirmedCount = inquiriesList.filter(
+      (inquiry) => inquiry.status === "confirmed"
+    ).length;
+    const cancelledCount = inquiriesList.filter(
+      (inquiry) => inquiry.status === "cancelled"
+    ).length;
+    const rescheduledCount = inquiriesList.filter(
+      (inquiry) => inquiry.status === "rescheduled"
+    ).length;
+    const completedCount = inquiriesList.filter(
+      (inquiry) => inquiry.status === "completed"
+    ).length;
+    const totalCount = inquiriesList.length;
+
+    return {
+      pendingCount,
+      upcomingCount,
+      confirmedCount,
+      cancelledCount,
+      rescheduledCount,
+      completedCount,
+      totalCount,
+    };
+  };
+
+  // Update status tags with counts
+  const updateStatusTags = (
+    counts: ReturnType<typeof calculateStatusCounts>
+  ) => {
+    setStatusTags([
+      { value: "upcoming", label: "Upcoming", count: counts.upcomingCount },
+      { value: "pending", label: "Pending", count: counts.pendingCount },
+      { value: "confirmed", label: "Confirmed", count: counts.confirmedCount },
+      { value: "cancelled", label: "Cancelled", count: counts.cancelledCount },
+      {
+        value: "rescheduled",
+        label: "Rescheduled",
+        count: counts.rescheduledCount,
+      },
+      { value: "completed", label: "Completed", count: counts.completedCount },
+      { value: "all", label: "All Appointments", count: counts.totalCount },
+    ]);
+  };
 
   // Calculate max date (2 weeks from current date)
   const getMaxDate = () => {
@@ -342,6 +403,12 @@ export default function AppointmentsPage() {
     fetchAvailableSlots();
   }, [selectedDate]);
 
+  // Update status counts when inquiries change
+  useEffect(() => {
+    const counts = calculateStatusCounts(inquiries);
+    updateStatusTags(counts);
+  }, [inquiries]);
+
   // Reset selection when filtered inquiries change
   useEffect(() => {
     if (isSelectMode) {
@@ -400,13 +467,16 @@ export default function AppointmentsPage() {
     if (statusFilter !== "all") {
       if (statusFilter === "upcoming") {
         const today = new Date().toISOString().split("T")[0];
+        // FIXED: Show both confirmed AND rescheduled appointments in upcoming
         filtered = filtered.filter(
           (inquiry) =>
-            (inquiry.status === "pending" ||
-              inquiry.status === "confirmed" ||
+            (inquiry.status === "confirmed" ||
               inquiry.status === "rescheduled") &&
             inquiry.preferredDate >= today
         );
+      } else if (statusFilter === "pending") {
+        // Only show pending appointments in pending (not confirmed ones)
+        filtered = filtered.filter((inquiry) => inquiry.status === "pending");
       } else {
         filtered = filtered.filter(
           (inquiry) => inquiry.status === statusFilter
@@ -415,6 +485,22 @@ export default function AppointmentsPage() {
     }
 
     setFilteredInquiries(filtered);
+  };
+
+  // FIXED: Get booked slots including both confirmed and rescheduled appointments
+  const getBookedSlotsForDate = (date: Date): string[] => {
+    const dateStr = date.toISOString().split("T")[0];
+
+    // Filter inquiries that are booked for this specific date
+    // Include both confirmed and rescheduled appointments (completed appointments free up slots)
+    const bookedInquiries = inquiries.filter(
+      (inquiry) =>
+        inquiry.preferredDate === dateStr &&
+        (inquiry.status === "confirmed" || inquiry.status === "rescheduled")
+    );
+
+    // Return the time values of booked appointments
+    return bookedInquiries.map((inquiry) => inquiry.preferredTime);
   };
 
   const handleConfirmInquiry = async (inquiryId: string) => {
@@ -461,6 +547,8 @@ export default function AppointmentsPage() {
         );
         setIsCompleteOpen(false);
         setSelectedInquiry(null);
+        // FIXED: Refresh available slots when appointment is completed
+        fetchAvailableSlots();
       } else {
         toast.error(result.error || "Failed to complete appointment");
       }
@@ -555,21 +643,6 @@ export default function AppointmentsPage() {
     }
   };
 
-  const getBookedSlotsForDate = (date: Date): string[] => {
-    const dateStr = date.toISOString().split("T")[0];
-
-    // Filter inquiries that are booked for this specific date
-    // Include both confirmed and rescheduled appointments
-    const bookedInquiries = inquiries.filter(
-      (inquiry) =>
-        inquiry.preferredDate === dateStr &&
-        (inquiry.status === "confirmed" || inquiry.status === "rescheduled")
-    );
-
-    // Return the time values of booked appointments
-    return bookedInquiries.map((inquiry) => inquiry.preferredTime);
-  };
-
   const [previewTimeSlots, setPreviewTimeSlots] = useState<TimeSlot[]>([]);
 
   useEffect(() => {
@@ -647,8 +720,6 @@ export default function AppointmentsPage() {
     setSelectedInquiry(inquiry);
     setIsCancelOpen(true);
   };
-
-  // Generate preview slots for the availability card (not for actual booking)
 
   return (
     <div className="container mx-auto py-6 space-y-6 px-10 h-screen flex flex-col">
@@ -759,13 +830,21 @@ export default function AppointmentsPage() {
                       <SelectValue placeholder="Filter by status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="upcoming">Upcoming</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                      <SelectItem value="rescheduled">Rescheduled</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="all">All Appointments</SelectItem>
+                      {statusTags.map((tag) => (
+                        <SelectItem key={tag.value} value={tag.value}>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{tag.label}</span>
+                            {tag.count > 0 && (
+                              <Badge
+                                variant="secondary"
+                                className="ml-2 h-5 min-w-5 text-xs"
+                              >
+                                {tag.count}
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -777,13 +856,25 @@ export default function AppointmentsPage() {
                   <button
                     key={tag.value}
                     onClick={() => setStatusFilter(tag.value)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
                       statusFilter === tag.value
                         ? "bg-gray-900 text-white"
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
-                    {tag.label}
+                    <span>{tag.label}</span>
+                    {tag.count > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className={`h-5 min-w-5 text-xs ${
+                          statusFilter === tag.value
+                            ? "bg-white text-gray-900"
+                            : "bg-gray-200 text-gray-700"
+                        }`}
+                      >
+                        {tag.count}
+                      </Badge>
+                    )}
                   </button>
                 ))}
               </div>

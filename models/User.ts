@@ -1,8 +1,15 @@
 // models/User.ts
 import mongoose, { Schema, Document } from "mongoose";
-import { scryptSync, randomBytes } from "crypto";
+import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 
-export interface IUserDocument extends Document {
+// Define the methods interface
+export interface IUserMethods {
+  hashPassword(password: string): Promise<void>;
+  comparePassword(candidatePassword: string): Promise<boolean>;
+}
+
+// Combine Document and Methods interfaces
+export interface IUserDocument extends Document, IUserMethods {
   _id: string;
   user_id: string;
   firstName: string;
@@ -13,9 +20,9 @@ export interface IUserDocument extends Document {
   password: string;
   role: string;
   verified: boolean;
+  avatar?: string;
   otp?: string;
   otpExpires?: Date;
-  hashPassword: (password: string) => Promise<void>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +38,7 @@ const userSchema = new Schema<IUserDocument>(
     password: { type: String },
     role: { type: String, default: "user" },
     verified: { type: Boolean, default: false },
+    avatar: { type: String },
     otp: { type: String },
     otpExpires: { type: Date },
   },
@@ -50,6 +58,32 @@ userSchema.method("hashPassword", async function (password: string) {
   }
 });
 
+userSchema.method(
+  "comparePassword",
+  async function (candidatePassword: string) {
+    try {
+      const [salt, hashedPassword] = this.password.split(":");
+
+      if (!salt || !hashedPassword) {
+        return false;
+      }
+
+      const candidateHash = scryptSync(candidatePassword, salt, 64);
+      const storedHash = Buffer.from(hashedPassword, "hex");
+
+      return timingSafeEqual(candidateHash, storedHash);
+    } catch (error) {
+      console.error("Password comparison error:", error);
+      return false;
+    }
+  }
+);
+
+// Use Model type with the methods
+type UserModel = mongoose.Model<IUserDocument, {}, IUserMethods>;
+
 const User =
-  mongoose.models.User || mongoose.model<IUserDocument>("User", userSchema);
+  (mongoose.models.User as UserModel) ||
+  mongoose.model<IUserDocument, UserModel>("User", userSchema);
+
 export default User;

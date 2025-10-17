@@ -1,3 +1,4 @@
+// components/admin/Header.tsx - Add the imports and functionality
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,10 @@ import {
   Check,
   Trash2,
   Eye,
+  UserPlus,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
-import { useAuthStore } from "@/lib/stores";
+import { useAuthStore, useModalStore } from "@/lib/stores";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -91,6 +93,7 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const { clearUser } = useAuthStore();
+  const { setIsCreateAccountOpen, setCreateAccountData } = useModalStore();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -300,6 +303,34 @@ export function Header() {
 
   const getInitials = (name: string) => {
     return name.charAt(0).toUpperCase();
+  };
+
+  // NEW FUNCTION: Handle creating account from notification
+  const handleCreateAccount = (notification: Notification) => {
+    // Extract name parts from the notification
+    const nameParts = notification.inquiryDetails.name.split(" ");
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+
+    // Set the data for the create account form
+    setCreateAccountData({
+      firstName,
+      lastName,
+      email: notification.userEmail,
+      phone: notification.inquiryDetails.phone || "",
+    });
+
+    // Close notification dropdown and detail dialog
+    setIsNotificationOpen(false);
+    setSelectedNotification(null);
+
+    // Redirect to user management page
+    router.push("/admin/usermanagement");
+
+    // Open the create account modal
+    setTimeout(() => {
+      setIsCreateAccountOpen(true);
+    }, 100);
   };
 
   return (
@@ -721,7 +752,7 @@ export function Header() {
                   </p>
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setSelectedNotification(null)}
@@ -729,6 +760,19 @@ export function Header() {
                 >
                   Close
                 </Button>
+
+                {/* Show Create Account button only for guest users */}
+                {selectedNotification.isGuest && (
+                  <Button
+                    variant="default"
+                    onClick={() => handleCreateAccount(selectedNotification)}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Create Account for Guest
+                  </Button>
+                )}
+
                 <Button
                   variant="default"
                   onClick={async () => {

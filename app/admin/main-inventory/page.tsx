@@ -28,11 +28,15 @@ import {
   Plus,
   X,
   Filter,
-  Download,
+  FileText,
   Rows4,
   Grid3X3,
   BarChart3,
   ChevronDown,
+  Package,
+  CheckCircle,
+  AlertTriangle,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmationModal from "@/components/ConfirmationModal";
@@ -49,6 +53,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CategoryBarChart } from "@/components/admin/inventory/CategoryBarChart";
 import { motion, AnimatePresence } from "framer-motion";
+import { PDFFormatter } from "@/components/admin/inventory/pdf/Formatter";
 
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
 type CategoryFilter = "all" | string;
@@ -173,12 +178,37 @@ export default function MainInventory() {
     const restockNeeded = filteredItems.filter(
       (item) => item.quantity <= item.reorderPoint
     ).length;
+
+    // Calculate total inventory value
+    const totalInventoryValue = filteredItems.reduce(
+      (total, item) => total + item.quantity * (item.unitCost || 0),
+      0
+    );
+
+    // Calculate category statistics for PDF
+    const categoryStats = Array.from(
+      filteredItems.reduce((acc, item) => {
+        const category = item.category || "Uncategorized";
+        const current = acc.get(category) || { count: 0, totalValue: 0 };
+        current.count += 1;
+        current.totalValue += item.quantity * (item.unitCost || 0);
+        acc.set(category, current);
+        return acc;
+      }, new Map())
+    ).map(([category, data]) => ({
+      category,
+      count: data.count,
+      totalValue: data.totalValue,
+    }));
+
     return {
       inStock,
       lowStock,
       outOfStock,
       restockNeeded,
       total: filteredItems.length,
+      totalValue: totalInventoryValue,
+      categoryStats,
     };
   }, [filteredItems]);
 
@@ -271,110 +301,24 @@ export default function MainInventory() {
     }
   };
 
-  // Export to CSV - professional format with custom header
-  const handleExportCSV = useCallback(() => {
-    const formatDateForExport = (dateString: string | undefined): string => {
-      if (!dateString) return "";
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-      } catch {
-        return "";
-      }
-    };
+  // Export to PDF using the PDF formatter
+  const handleExportPDF = useCallback(async () => {
+    try {
+      const { exportToPDF } = PDFFormatter({
+        inventoryItems: filteredItems,
+        categoryStats: inventoryStats.categoryStats,
+        totalItems: inventoryStats.total,
+        inStockCount: inventoryStats.inStock,
+        restockNeededCount: inventoryStats.restockNeeded,
+      });
 
-    const headers = [
-      columnVisibility.id && "Item ID",
-      columnVisibility.sku && "SKU",
-      columnVisibility.name && "Name",
-      columnVisibility.category && "Category",
-      columnVisibility.quantity && "Quantity",
-      columnVisibility.unit && "Unit",
-      "Description",
-      columnVisibility.supplier && "Supplier",
-      columnVisibility.reorderPoint && "Reorder Point",
-      "Safety Stock",
-      columnVisibility.location && "Location",
-      columnVisibility.unitCost && "Unit Cost",
-      columnVisibility.totalCost && "Total Value",
-      "Created At",
-      "Updated At",
-    ].filter(Boolean) as string[];
-
-    const rows = filteredItems.map((item) => {
-      const unitCost = item.unitCost ?? 0;
-      const calculatedTotalCost = item.quantity * unitCost;
-
-      return [
-        columnVisibility.id && item.item_id,
-        columnVisibility.sku && item.sku,
-        columnVisibility.name && item.name,
-        columnVisibility.category && item.category,
-        columnVisibility.quantity && item.quantity.toString(),
-        columnVisibility.unit && item.unit,
-        item.description || "",
-        columnVisibility.supplier && (item.supplier || ""),
-        columnVisibility.reorderPoint && item.reorderPoint.toString(),
-        (item.safetyStock ?? 0).toString(),
-        columnVisibility.location && (item.location || ""),
-        columnVisibility.unitCost && `₱${unitCost.toLocaleString()}`,
-        columnVisibility.totalCost &&
-          `₱${calculatedTotalCost.toLocaleString()}`,
-        formatDateForExport(item.createdAt || item.timeCreated),
-        formatDateForExport(item.lastUpdated || item.timeUpdated),
-      ].filter((cell, index) => headers[index] !== undefined && cell !== false);
-    });
-
-    // Professional header information
-    const exportDate = new Date().toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // Calculate total inventory value
-    const totalInventoryValue = filteredItems.reduce(
-      (total, item) => total + item.quantity * (item.unitCost || 0),
-      0
-    );
-
-    const customHeader = [
-      "GIAN CONSTRUCTION & SUPPLIES",
-      "JY Pereze Avenue, Kabankalan City",
-      "INVENTORY REPORT",
-      "",
-      `Report Date: ${exportDate}`,
-      `Total Items: ${filteredItems.length}`,
-      `Total Inventory Value: ₱${totalInventoryValue.toLocaleString()}`,
-      "", // Empty line for spacing
-    ];
-
-    const csvContent = [
-      ...customHeader.map((line) => `"${line}"`),
-      headers.join(","),
-      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `Gian_Construction_Inventory_Report_${new Date().toISOString().split("T")[0]}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("Inventory report exported to CSV");
-  }, [filteredItems, columnVisibility]);
+      await exportToPDF();
+      toast.success("Inventory report exported to PDF");
+    } catch (error) {
+      console.error("Error exporting PDF:", error);
+      toast.error("Failed to export PDF");
+    }
+  }, [filteredItems, inventoryStats]);
 
   const handleDeleteClick = useCallback((item: IInventory) => {
     setItemToDelete(item);
@@ -407,20 +351,100 @@ export default function MainInventory() {
   };
 
   return (
-    <div className="flex flex-col font-geist">
+    <div className="flex flex-col font-geist px-10">
       {/* Header Section */}
       <div className="flex-shrink-0">
         <div className="p-6">
           <div className="flex justify-between items-start gap-4">
             <div className="flex-1">
-              <div className="flex gap-4 mt-1 text-sm text-gray-600">
-                <p>Total Items: {inventoryStats.total}</p>
-                <p>In Stock: {inventoryStats.inStock}</p>
-                <p>Restock Needed: {inventoryStats.restockNeeded}</p>
-              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+                Inventory Management
+              </h1>
+              <p className="text-gray-600 mt-2">
+                Manage and track all inventory items in your system
+              </p>
             </div>
           </div>
         </div>
+
+        {/* Stats Cards Section - Updated to match user management style */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-6 pb-6">
+          {/* Total Items Card */}
+          <Card className="rounded-sm shadow-none border">
+            <CardContent className="p-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  {inventoryStats.total}
+                </p>
+                <p className="text-sm font-semibold text-gray-600">
+                  Total Items
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* In Stock Card */}
+          <Card className="rounded-sm shadow-none border">
+            <CardContent className="p-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  {inventoryStats.inStock}
+                </p>
+                <p className="text-sm font-semibold text-gray-600">In Stock</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Restock Needed Card */}
+          <Card className="rounded-sm shadow-none border">
+            <CardContent className="p-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  {inventoryStats.restockNeeded}
+                </p>
+                <p className="text-sm font-semibold text-gray-600">
+                  Restock Needed
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Total Value Card */}
+          <Card className="rounded-sm shadow-none border">
+            <CardContent className="p-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">
+                  ₱{inventoryStats.totalValue.toLocaleString()}
+                </p>
+                <p className="text-sm font-semibold text-gray-600">
+                  Total Value
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Chart Section - Positioned below stats cards */}
+        <AnimatePresence>
+          {showChart && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="overflow-hidden px-6 pb-6"
+            >
+              <motion.div
+                initial={{ y: -20 }}
+                animate={{ y: 0 }}
+                exit={{ y: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <CategoryBarChart />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Search and Filter Bar */}
         <div className="px-6 pb-6">
@@ -584,13 +608,13 @@ export default function MainInventory() {
               <Button
                 variant="default"
                 size="sm"
-                onClick={handleExportCSV}
-                className="rounded-sm font-geist gap-2"
+                onClick={handleExportPDF}
+                className="rounded-sm font-geist gap-2 bg-red-600 hover:bg-red-700"
                 disabled={loading || filteredItems.length === 0}
                 title={filteredItems.length === 0 ? "No items to export" : ""}
               >
-                <Download className="h-4 w-4" />
-                Export
+                <FileText className="h-4 w-4" />
+                Export PDF
               </Button>
             </div>
           </div>
@@ -600,40 +624,9 @@ export default function MainInventory() {
       {/* Main Content Area */}
       <div className="flex-1 px-5 pt-2 pb-2">
         <div className="max-w-6xl mx-auto space-y-6">
-          {/* Chart Section - Conditionally Rendered with Framer Motion */}
-          <AnimatePresence>
-            {showChart && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <motion.div
-                  initial={{ y: -20 }}
-                  animate={{ y: 0 }}
-                  exit={{ y: -20 }}
-                  transition={{ duration: 0.3, ease: "easeInOut" }}
-                  className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-                >
-                  {/* Mobile chart - visible only on small screens */}
-                  <div className="lg:hidden">
-                    <CategoryBarChart />
-                  </div>
-
-                  {/* Desktop chart - takes full width on desktop */}
-                  <div className="hidden lg:block lg:col-span-2">
-                    <CategoryBarChart />
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Inventory Table/Grid Section */}
           {filteredItems.length === 0 && !loading ? (
-            <Card className="max-w-md mx-auto">
+            <Card className="max-w-md mx-auto rounded-sm shadow-none border">
               <CardContent className="pt-2">
                 <div className="text-center p-8">
                   <h3 className="text-xl font-semibold text-gray-900 font-geist">
@@ -647,7 +640,7 @@ export default function MainInventory() {
                   {hasActiveFilters && (
                     <Button
                       onClick={clearFilters}
-                      variant="custom"
+                      variant="default"
                       size="sm"
                       className="mt-4 rounded-sm font-geist"
                     >
@@ -658,12 +651,12 @@ export default function MainInventory() {
               </CardContent>
             </Card>
           ) : (
-            <Card className="w-full">
+            <Card className="w-full rounded-sm shadow-none border">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
                   <div>
                     <CardTitle className="text-foreground-900 font-geist">
-                      Inventory Management
+                      Inventory Items
                     </CardTitle>
                     <CardDescription className="font-geist">
                       View and manage all inventory items in your system
@@ -792,7 +785,7 @@ export default function MainInventory() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="w-full rounded-md border">
+                <div className="w-full rounded-sm border">
                   {viewMode === "table" ? (
                     <InventoryTable
                       items={filteredItems}
