@@ -32,8 +32,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { useEffect, useState } from "react";
-import { getInventoryByCategory, getCategories } from "@/action/inventory";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,41 +65,30 @@ interface ChartItem {
 
 type SearchFilter = "item" | "category";
 
-export function CategoryBarChart() {
-  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+interface CategoryBarChartProps {
+  categoryData: CategoryData[];
+  categories: string[];
+  loading: boolean;
+}
+
+export function CategoryBarChart({
+  categoryData = [],
+  categories = [],
+  loading = true,
+}: CategoryBarChartProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchFilter, setSearchFilter] = useState<SearchFilter>("item");
   const itemsPerPage = 6;
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [categoryData, categoryList] = await Promise.all([
-          getInventoryByCategory(),
-          getCategories(),
-        ]);
-        setCategoryData(categoryData);
-        setCategories(categoryList);
-      } catch (error) {
-        console.error("Failed to fetch category data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
 
   // Reset page when category or search changes
   useEffect(() => {
     setPage(0);
   }, [selectedCategory, searchTerm, searchFilter]);
 
-  // Get all items for the selected category with search filtering
-  const getAllItems = (): ChartItem[] => {
+  // Get all items for the selected category with search filtering - memoized
+  const getAllItems = useCallback((): ChartItem[] => {
     let allItems: ChartItem[] = [];
 
     if (selectedCategory === "all") {
@@ -161,99 +149,157 @@ export function CategoryBarChart() {
 
     // Sort by quantity descending
     return allItems.sort((a, b) => b.quantity - a.quantity);
-  };
+  }, [categoryData, selectedCategory, searchTerm, searchFilter]);
 
-  // Prepare paginated chart data
-  const getChartData = (): ChartItem[] => {
+  // Prepare paginated chart data - memoized
+  const getChartData = useCallback((): ChartItem[] => {
     const allItems = getAllItems();
     const startIndex = page * itemsPerPage;
     return allItems.slice(startIndex, startIndex + itemsPerPage);
-  };
+  }, [getAllItems, page, itemsPerPage]);
 
-  const allItems = getAllItems();
-  const chartData = getChartData();
-  const totalItems = allItems.reduce((sum, item) => sum + item.quantity, 0);
-  const displayCategory =
-    selectedCategory === "all" ? "All Categories" : selectedCategory;
-
-  // Get the maximum value for setting domain
-  const maxDomainValue =
-    chartData.length > 0
-      ? Math.ceil(Math.max(...chartData.map((item) => item.maxValue)) / 50) * 50
-      : 100;
-
-  // Calculate pagination info
-  const totalPages = Math.ceil(allItems.length / itemsPerPage);
-  const currentPageStart = page * itemsPerPage + 1;
-  const currentPageEnd = Math.min((page + 1) * itemsPerPage, allItems.length);
-  const hasPagination = allItems.length > itemsPerPage;
-
-  const chartConfig = {
-    quantity: {
-      label: "Quantity",
-      color: "#3b82f6", // Changed to blue-500
-    },
-    reorderPoint: {
-      label: "Reorder Point",
-      color: "hsl(var(--chart-2))",
-    },
-    safetyStock: {
-      label: "Safety Stock",
-      color: "hsl(var(--chart-3))",
-    },
-  } satisfies ChartConfig;
-
-  // Custom tooltip to show all values
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-background border rounded-md px-3 shadow-md">
-          <p className="font-medium">{data.name}</p>
-          <p className="text-sm text-muted-foreground">{data.category}</p>
-          <p className="text-sm" style={{ color: chartConfig.quantity.color }}>
-            Quantity: <strong>{data.quantity?.toLocaleString() || "0"}</strong>
-          </p>
-          <p
-            className="text-sm"
-            style={{ color: chartConfig.reorderPoint.color }}
-          >
-            Reorder Point:{" "}
-            <strong>{data.reorderPoint?.toLocaleString() || "0"}</strong>
-          </p>
-          {data.safetyStock !== undefined && data.safetyStock !== null && (
-            <p
-              className="text-sm"
-              style={{ color: chartConfig.safetyStock.color }}
-            >
-              Safety Stock:{" "}
-              <strong>{data.safetyStock?.toLocaleString() || "0"}</strong>
-            </p>
-          )}
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Skeleton loading for chart area
-  const ChartSkeleton = () => (
-    <div className="h-64 w-full flex flex-col gap-3">
-      {[...Array(6)].map((_, index) => (
-        <div key={index} className="flex items-center gap-3">
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 flex-1" />
-        </div>
-      ))}
-    </div>
+  // Memoized values to prevent recalculations
+  const allItems = useMemo(() => getAllItems(), [getAllItems]);
+  const chartData = useMemo(() => getChartData(), [getChartData]);
+  const totalItems = useMemo(
+    () => allItems.reduce((sum, item) => sum + item.quantity, 0),
+    [allItems]
+  );
+  const displayCategory = useMemo(
+    () => (selectedCategory === "all" ? "All Categories" : selectedCategory),
+    [selectedCategory]
   );
 
-  const clearSearch = () => {
+  // Get the maximum value for setting domain - memoized
+  const maxDomainValue = useMemo(
+    () =>
+      chartData.length > 0
+        ? Math.ceil(Math.max(...chartData.map((item) => item.maxValue)) / 50) *
+          50
+        : 100,
+    [chartData]
+  );
+
+  // Calculate pagination info - memoized
+  const totalPages = useMemo(
+    () => Math.ceil(allItems.length / itemsPerPage),
+    [allItems.length, itemsPerPage]
+  );
+  const currentPageStart = useMemo(
+    () => page * itemsPerPage + 1,
+    [page, itemsPerPage]
+  );
+  const currentPageEnd = useMemo(
+    () => Math.min((page + 1) * itemsPerPage, allItems.length),
+    [page, itemsPerPage, allItems.length]
+  );
+  const hasPagination = useMemo(
+    () => allItems.length > itemsPerPage,
+    [allItems.length, itemsPerPage]
+  );
+
+  const chartConfig = useMemo(
+    () =>
+      ({
+        quantity: {
+          label: "Quantity",
+          color: "#3b82f6", // Changed to blue-500
+        },
+        reorderPoint: {
+          label: "Reorder Point",
+          color: "hsl(var(--chart-2))",
+        },
+        safetyStock: {
+          label: "Safety Stock",
+          color: "hsl(var(--chart-3))",
+        },
+      }) satisfies ChartConfig,
+    []
+  );
+
+  // Custom tooltip to show all values - memoized
+  const CustomTooltip = useCallback(
+    ({ active, payload }: any) => {
+      if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+          <div className="bg-background border rounded-md px-3 shadow-md">
+            <p className="font-medium">{data.name}</p>
+            <p className="text-sm text-muted-foreground">{data.category}</p>
+            <p
+              className="text-sm"
+              style={{ color: chartConfig.quantity.color }}
+            >
+              Quantity:{" "}
+              <strong>{data.quantity?.toLocaleString() || "0"}</strong>
+            </p>
+            <p
+              className="text-sm"
+              style={{ color: chartConfig.reorderPoint.color }}
+            >
+              Reorder Point:{" "}
+              <strong>{data.reorderPoint?.toLocaleString() || "0"}</strong>
+            </p>
+            {data.safetyStock !== undefined && data.safetyStock !== null && (
+              <p
+                className="text-sm"
+                style={{ color: chartConfig.safetyStock.color }}
+              >
+                Safety Stock:{" "}
+                <strong>{data.safetyStock?.toLocaleString() || "0"}</strong>
+              </p>
+            )}
+          </div>
+        );
+      }
+      return null;
+    },
+    [chartConfig]
+  );
+
+  // Skeleton loading for chart area - memoized
+  const ChartSkeleton = useCallback(
+    () => (
+      <div className="h-64 w-full flex flex-col gap-3">
+        {[...Array(6)].map((_, index) => (
+          <div key={index} className="flex items-center gap-3">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 flex-1" />
+          </div>
+        ))}
+      </div>
+    ),
+    []
+  );
+
+  // Event handlers - memoized
+  const clearSearch = useCallback(() => {
     setSearchTerm("");
-  };
+  }, []);
+
+  const handleCategoryChange = useCallback((category: string) => {
+    setSelectedCategory(category);
+  }, []);
+
+  const handleSearchFilterChange = useCallback((filter: SearchFilter) => {
+    setSearchFilter(filter);
+  }, []);
+
+  const handlePreviousPage = useCallback(() => {
+    setPage((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const handleNextPage = useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    setSelectedCategory("all");
+    setSearchTerm("");
+  }, []);
 
   return (
-    <Card className="w-full max-w-lg shadow-none border-gray/80">
+    <Card className="w-full shadow-none border-gray/80 rounded-none">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Materials by Category</CardTitle>
@@ -268,7 +314,7 @@ export function CategoryBarChart() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem
-                onClick={() => setSelectedCategory("all")}
+                onClick={() => handleCategoryChange("all")}
                 className={selectedCategory === "all" ? "bg-accent" : ""}
               >
                 All Categories
@@ -276,7 +322,7 @@ export function CategoryBarChart() {
               {categories.map((category) => (
                 <DropdownMenuItem
                   key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => handleCategoryChange(category)}
                   className={selectedCategory === category ? "bg-accent" : ""}
                 >
                   {category}
@@ -316,13 +362,13 @@ export function CategoryBarChart() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-32">
                 <DropdownMenuItem
-                  onClick={() => setSearchFilter("item")}
+                  onClick={() => handleSearchFilterChange("item")}
                   className={searchFilter === "item" ? "bg-accent" : ""}
                 >
                   Item
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setSearchFilter("category")}
+                  onClick={() => handleSearchFilterChange("category")}
                   className={searchFilter === "category" ? "bg-accent" : ""}
                 >
                   Category
@@ -347,10 +393,7 @@ export function CategoryBarChart() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  setSelectedCategory("all");
-                  setSearchTerm("");
-                }}
+                onClick={handleClearAll}
                 className="h-5 text-xs p-1"
               >
                 Clear all
@@ -364,7 +407,7 @@ export function CategoryBarChart() {
           <ChartSkeleton />
         ) : (
           <>
-            <ChartContainer config={chartConfig} className="h-64">
+            <ChartContainer config={chartConfig} className="h-64 w-full">
               <BarChart
                 accessibilityLayer
                 data={chartData}
@@ -377,12 +420,13 @@ export function CategoryBarChart() {
                 }}
                 barSize={18}
                 height={360}
+                width={800} // Increased width for full width display
               >
                 <CartesianGrid
                   horizontal={true}
-                  vertical={true} // Changed to true to show vertical grid lines
-                  strokeDasharray="2 2" // Changed to make grid lines more visible
-                  stroke="#e5e7eb" // Light gray color for grid lines
+                  vertical={true}
+                  strokeDasharray="2 2"
+                  stroke="#e5e7eb"
                 />
                 <XAxis
                   type="number"
@@ -398,16 +442,16 @@ export function CategoryBarChart() {
                   type="category"
                   tickLine={false}
                   axisLine={false}
-                  width={selectedCategory === "all" ? 70 : 70}
+                  width={selectedCategory === "all" ? 120 : 100} // Increased width for better text display
                   tick={{ fontSize: 11 }}
                   tickFormatter={(value) => {
                     if (selectedCategory === "all") {
-                      return value.length > 22
-                        ? `${value.slice(0, 22)}...`
+                      return value.length > 25
+                        ? `${value.slice(0, 25)}...`
                         : value;
                     }
-                    return value.length > 18
-                      ? `${value.slice(0, 18)}...`
+                    return value.length > 22
+                      ? `${value.slice(0, 22)}...`
                       : value;
                   }}
                 />
@@ -443,7 +487,7 @@ export function CategoryBarChart() {
                 <Bar
                   dataKey="quantity"
                   layout="vertical"
-                  fill={chartConfig.quantity.color} // Now uses blue color
+                  fill={chartConfig.quantity.color}
                   radius={[0, 4, 4, 0]}
                 >
                   <LabelList
@@ -508,7 +552,7 @@ export function CategoryBarChart() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+                onClick={handlePreviousPage}
                 disabled={page === 0}
                 className="h-6 w-6 p-0"
               >
@@ -517,7 +561,7 @@ export function CategoryBarChart() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((prev) => prev + 1)}
+                onClick={handleNextPage}
                 disabled={page >= totalPages - 1}
                 className="h-6 w-6 p-0"
               >

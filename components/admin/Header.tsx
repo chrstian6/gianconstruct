@@ -11,29 +11,25 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 import {
-  LogOut,
   GalleryVerticalEnd,
   Bell,
   Check,
   Trash2,
-  Eye,
   UserPlus,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
-import { useAuthStore, useModalStore } from "@/lib/stores";
+import { useModalStore } from "@/lib/stores";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
   getNotifications,
-  markAsRead,
   deleteNotification,
   clearAllNotifications,
   markNotificationAsRead,
@@ -92,13 +88,10 @@ const pathLabels: Record<string, string> = {
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { clearUser } = useAuthStore();
   const { setIsCreateAccountOpen, setCreateAccountData } = useModalStore();
-  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isHovering, setIsHovering] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
   const [missingDesignId, setMissingDesignId] = useState<string | null>(null);
@@ -171,20 +164,6 @@ export function Header() {
   };
 
   const breadcrumbs = generateBreadcrumbs();
-
-  const handleLogout = async () => {
-    try {
-      await clearUser();
-      router.push("/");
-      router.refresh();
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
-
-  const handleLogoutClick = () => {
-    setIsLogoutModalOpen(true);
-  };
 
   const formatNotificationDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -305,7 +284,7 @@ export function Header() {
     return name.charAt(0).toUpperCase();
   };
 
-  // NEW FUNCTION: Handle creating account from notification
+  // Handle creating account from notification
   const handleCreateAccount = (notification: Notification) => {
     // Extract name parts from the notification
     const nameParts = notification.inquiryDetails.name.split(" ");
@@ -374,7 +353,7 @@ export function Header() {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
-          {/* Notification and Sign-Out */}
+          {/* Notification */}
           <div className="flex items-center gap-4">
             {/* Notification Dropdown */}
             <div className="relative" ref={dropdownRef}>
@@ -566,28 +545,6 @@ export function Header() {
                 )}
               </AnimatePresence>
             </div>
-
-            {/* Sign-Out Button with Animation */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="relative text-text-secondary hover:bg-text-secondary hover:text-text-secondary-foreground overflow-hidden group"
-              onClick={handleLogoutClick}
-              onMouseEnter={() => setIsHovering(true)}
-              onMouseLeave={() => setIsHovering(false)}
-            >
-              <LogOut className="h-4 w-4" />
-              <span
-                className={`
-                  absolute left-8 transition-all duration-300 ease-in-out
-                  ${isHovering ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-2"}
-                  whitespace-nowrap
-                `}
-              >
-                Sign Out
-              </span>
-              <span className="sr-only">Sign Out</span>
-            </Button>
           </div>
         </div>
       </header>
@@ -884,30 +841,6 @@ export function Header() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Logout Confirmation Modal */}
-      <Dialog open={isLogoutModalOpen} onOpenChange={setIsLogoutModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Logout</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to sign out? You will need to log in again
-              to access the admin panel.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsLogoutModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleLogout}>
-              Sign Out
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

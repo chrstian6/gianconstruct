@@ -188,7 +188,7 @@ export default function ProjectCard({
   return (
     <Card
       className={cn(
-        "w-full max-w-md transition-all shadow-none rounded-sm cursor-pointer border-gray-200 flex flex-col relative",
+        "w-full max-w-md transition-all shadow-md rounded-sm cursor-pointer border-none  flex flex-col relative",
         project.status === "completed" ? "bg-gray-50" : "bg-white",
         isSelectMode && "border-gray-300",
         isSelected && "border-blue-500 ring-2 ring-blue-200"

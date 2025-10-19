@@ -1,16 +1,16 @@
 // app/admin/main-inventory/page.tsx
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { IInventory } from "@/types/Inventory";
 import {
   getInventories,
   createInventory,
   updateInventory,
   deleteInventory,
+  getInventoryByCategory,
+  getCategories,
 } from "@/action/inventory";
-import { InventoryTable } from "@/components/admin/inventory/Table";
-import { InventoryGrid } from "@/components/admin/inventory/InventoryGrid";
 import { Button } from "@/components/ui/button";
 import { useModalStore } from "@/lib/stores";
 import { AddItemModal } from "@/components/admin/inventory/AddItemModal";
@@ -22,42 +22,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Search,
-  Plus,
-  X,
-  Filter,
-  FileText,
-  Rows4,
-  Grid3X3,
-  BarChart3,
-  ChevronDown,
-  Package,
-  CheckCircle,
-  AlertTriangle,
-  TrendingUp,
-} from "lucide-react";
+import { CheckCircle, AlertTriangle, TrendingUp, X } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmationModal from "@/components/ConfirmationModal";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { CategoryBarChart } from "@/components/admin/inventory/CategoryBarChart";
-import { motion, AnimatePresence } from "framer-motion";
 import { PDFFormatter } from "@/components/admin/inventory/pdf/Formatter";
+import { MaterialsView } from "@/components/admin/inventory/views/MaterialsView";
+import { ItemDetailsModal } from "@/components/admin/inventory/details/ItemDetailsModal";
 
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
 type CategoryFilter = "all" | string;
 type ViewMode = "table" | "grid";
+type ActiveTab = "analytics" | "materials" | "pdc";
+
+interface CategoryData {
+  category: string;
+  items: {
+    name: string;
+    quantity: number;
+    reorderPoint: number;
+    safetyStock?: number;
+  }[];
+}
 
 export default function MainInventory() {
   const [items, setItems] = useState<IInventory[]>([]);
@@ -69,7 +56,9 @@ export default function MainInventory() {
   const [itemToDelete, setItemToDelete] = useState<IInventory | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [showChart, setShowChart] = useState(true);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("materials");
+  const [selectedItem, setSelectedItem] = useState<IInventory | null>(null);
+  const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState({
     id: true,
     sku: true,
@@ -86,6 +75,11 @@ export default function MainInventory() {
     actions: true,
   });
 
+  // Chart data states
+  const [chartData, setChartData] = useState<CategoryData[]>([]);
+  const [chartCategories, setChartCategories] = useState<string[]>([]);
+  const [chartLoading, setChartLoading] = useState(true);
+
   // Extract the modal state from the store
   const {
     isCreateProjectOpen,
@@ -95,7 +89,7 @@ export default function MainInventory() {
     editingInventory,
   } = useModalStore();
 
-  // Fetch items
+  // Fetch items only once on component mount
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -112,81 +106,90 @@ export default function MainInventory() {
     fetchData();
   }, []);
 
-  // Get unique categories for filtering
-  const categories = useMemo(() => {
-    const uniqueCategories = new Set<string>();
-    items.forEach((item) => {
-      if (item.category) {
-        uniqueCategories.add(item.category);
+  // Fetch chart data only once on component mount
+  useEffect(() => {
+    const fetchChartData = async () => {
+      if (chartData.length > 0) return; // Don't fetch if already loaded
+
+      setChartLoading(true);
+      try {
+        const [categoryData, categoryList] = await Promise.all([
+          getInventoryByCategory(),
+          getCategories(),
+        ]);
+        setChartData(categoryData);
+        setChartCategories(categoryList);
+      } catch (error) {
+        console.error("Failed to fetch chart data:", error);
+        toast.error("Failed to load chart data");
+      } finally {
+        setChartLoading(false);
       }
-    });
-    return Array.from(uniqueCategories).sort();
-  }, [items]);
+    };
+
+    fetchChartData();
+  }, [chartData.length]); // Only depend on chartData length
+
+  // Get unique categories for filtering
+  const categories = Array.from(
+    new Set(items.map((item) => item.category).filter(Boolean))
+  ).sort();
 
   // Filter items based on search term and filters
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      // Search filter
+  const filteredItems = items.filter((item) => {
+    // Search filter
+    if (
+      searchTerm &&
+      !(
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.item_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.description &&
+          item.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.location &&
+          item.location.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    ) {
+      return false;
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "inStock" && item.quantity <= 0) return false;
+      if (statusFilter === "outOfStock" && item.quantity > 0) return false;
       if (
-        searchTerm &&
-        !(
-          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.item_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (item.description &&
-            item.description
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase())) ||
-          (item.location &&
-            item.location.toLowerCase().includes(searchTerm.toLowerCase()))
-        )
+        statusFilter === "lowStock" &&
+        (item.quantity > item.reorderPoint || item.quantity === 0)
       ) {
         return false;
       }
+    }
 
-      // Status filter
-      if (statusFilter !== "all") {
-        if (statusFilter === "inStock" && item.quantity <= 0) return false;
-        if (statusFilter === "outOfStock" && item.quantity > 0) return false;
-        if (
-          statusFilter === "lowStock" &&
-          (item.quantity > item.reorderPoint || item.quantity === 0)
-        ) {
-          return false;
-        }
-      }
+    // Category filter
+    if (categoryFilter !== "all" && item.category !== categoryFilter) {
+      return false;
+    }
 
-      // Category filter
-      if (categoryFilter !== "all" && item.category !== categoryFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [items, searchTerm, statusFilter, categoryFilter]);
+    return true;
+  });
 
   // Calculate inventory stats
-  const inventoryStats = useMemo(() => {
-    const inStock = filteredItems.filter((item) => item.quantity > 0).length;
-    const lowStock = filteredItems.filter(
+  const inventoryStats = {
+    inStock: filteredItems.filter((item) => item.quantity > 0).length,
+    lowStock: filteredItems.filter(
       (item) => item.quantity > 0 && item.quantity <= item.reorderPoint
-    ).length;
-    const outOfStock = filteredItems.filter(
-      (item) => item.quantity === 0
-    ).length;
-    const restockNeeded = filteredItems.filter(
+    ).length,
+    outOfStock: filteredItems.filter((item) => item.quantity === 0).length,
+    restockNeeded: filteredItems.filter(
       (item) => item.quantity <= item.reorderPoint
-    ).length;
-
-    // Calculate total inventory value
-    const totalInventoryValue = filteredItems.reduce(
+    ).length,
+    total: filteredItems.length,
+    totalValue: filteredItems.reduce(
       (total, item) => total + item.quantity * (item.unitCost || 0),
       0
-    );
-
-    // Calculate category statistics for PDF
-    const categoryStats = Array.from(
+    ),
+    categoryStats: Array.from(
       filteredItems.reduce((acc, item) => {
         const category = item.category || "Uncategorized";
         const current = acc.get(category) || { count: 0, totalValue: 0 };
@@ -199,23 +202,11 @@ export default function MainInventory() {
       category,
       count: data.count,
       totalValue: data.totalValue,
-    }));
+    })),
+  };
 
-    return {
-      inStock,
-      lowStock,
-      outOfStock,
-      restockNeeded,
-      total: filteredItems.length,
-      totalValue: totalInventoryValue,
-      categoryStats,
-    };
-  }, [filteredItems]);
-
-  const hasActiveFilters = useMemo(
-    () => searchTerm || statusFilter !== "all" || categoryFilter !== "all",
-    [searchTerm, statusFilter, categoryFilter]
-  );
+  const hasActiveFilters =
+    !!searchTerm || statusFilter !== "all" || categoryFilter !== "all";
 
   // Add item
   const handleAdd = async (
@@ -236,6 +227,9 @@ export default function MainInventory() {
         setItems((prev) => [...prev, result.item]);
         setIsCreateProjectOpen(false);
         toast.success("Item added successfully");
+
+        // Invalidate chart data cache when new item is added
+        setChartData([]);
       } else {
         toast.error(result.error || "Failed to add item");
       }
@@ -246,12 +240,9 @@ export default function MainInventory() {
   };
 
   // Edit item
-  const handleEdit = useCallback(
-    (item: IInventory) => {
-      setIsEditInventoryOpen(true, item);
-    },
-    [setIsEditInventoryOpen]
-  );
+  const handleEdit = (item: IInventory) => {
+    setIsEditInventoryOpen(true, item);
+  };
 
   // Update item
   const handleUpdate = async (
@@ -276,6 +267,9 @@ export default function MainInventory() {
         );
         setIsEditInventoryOpen(false, null);
         toast.success("Item updated successfully");
+
+        // Invalidate chart data cache when item is updated
+        setChartData([]);
       } else {
         toast.error(result.error || "Failed to update item");
       }
@@ -292,6 +286,9 @@ export default function MainInventory() {
       if (result.success) {
         setItems((prev) => prev.filter((i) => i.item_id !== item_id));
         toast.success("Item deleted successfully");
+
+        // Invalidate chart data cache when item is deleted
+        setChartData([]);
       } else {
         toast.error(result.error || "Failed to delete item");
       }
@@ -301,8 +298,20 @@ export default function MainInventory() {
     }
   };
 
+  // View details
+  const handleViewDetails = (item: IInventory) => {
+    setSelectedItem(item);
+    setIsViewDetailsOpen(true);
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setIsViewDetailsOpen(false);
+    setSelectedItem(null);
+  };
+
   // Export to PDF using the PDF formatter
-  const handleExportPDF = useCallback(async () => {
+  const handleExportPDF = async () => {
     try {
       const { exportToPDF } = PDFFormatter({
         inventoryItems: filteredItems,
@@ -318,495 +327,263 @@ export default function MainInventory() {
       console.error("Error exporting PDF:", error);
       toast.error("Failed to export PDF");
     }
-  }, [filteredItems, inventoryStats]);
+  };
 
-  const handleDeleteClick = useCallback((item: IInventory) => {
+  const handleDeleteClick = (item: IInventory) => {
     setItemToDelete(item);
     setIsDeleteModalOpen(true);
-  }, []);
+  };
 
-  const handleDeleteConfirm = useCallback(async () => {
+  const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     await handleDelete(itemToDelete.item_id);
     setIsDeleteModalOpen(false);
     setItemToDelete(null);
-  }, [itemToDelete, handleDelete]);
+  };
 
-  const handleDeleteCancel = useCallback(() => {
+  const handleDeleteCancel = () => {
     setIsDeleteModalOpen(false);
     setItemToDelete(null);
-  }, []);
+  };
 
-  const clearFilters = useCallback(() => {
+  const clearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
     setCategoryFilter("all");
-  }, []);
+  };
 
-  const toggleColumnVisibility = (column: keyof typeof columnVisibility) => {
-    setColumnVisibility((prev) => ({
-      ...prev,
-      [column]: !prev[column],
-    }));
+  const handleAddItem = () => {
+    setIsCreateProjectOpen(true);
+  };
+
+  // Get status information for an item
+  const getStatusInfo = (item: IInventory) => {
+    const quantity = item.quantity;
+    const reorderPoint = item.reorderPoint ?? 0;
+    const safetyStock = item.safetyStock ?? 0;
+
+    if (quantity === 0) {
+      return { text: "Out of Stock", variant: "destructive" as const };
+    }
+    if (quantity <= safetyStock) {
+      return { text: "Critical", variant: "destructive" as const };
+    }
+    if (quantity <= reorderPoint) {
+      return { text: "Low Stock", variant: "secondary" as const };
+    }
+    return { text: "In Stock", variant: "default" as const };
+  };
+
+  const AnalyticsTab = () => (
+    <Card className="w-full rounded-sm shadow-none border">
+      <CardHeader>
+        <CardTitle className="text-foreground-900 font-geist">
+          Inventory Analytics
+        </CardTitle>
+        <CardDescription className="font-geist">
+          Comprehensive overview of your inventory performance and trends
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="w-full">
+          <CategoryBarChart
+            categoryData={chartData}
+            categories={chartCategories}
+            loading={chartLoading}
+          />
+        </div>
+
+        {/* Additional Analytics Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium">In Stock</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                {inventoryStats.inStock}
+              </p>
+              <p className="text-xs text-gray-600">Items available</p>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                <span className="text-sm font-medium">Low Stock</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                {inventoryStats.lowStock}
+              </p>
+              <p className="text-xs text-gray-600">Need attention</p>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <X className="h-5 w-5 text-red-600" />
+                <span className="text-sm font-medium">Out of Stock</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                {inventoryStats.outOfStock}
+              </p>
+              <p className="text-xs text-gray-600">Require restocking</p>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+                <span className="text-sm font-medium">Total Value</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                ${inventoryStats.totalValue.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-600">Inventory worth</p>
+            </CardContent>
+          </Card>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const PDCTab = () => (
+    <Card className="w-full rounded-sm shadow-none border">
+      <CardHeader>
+        <CardTitle className="text-foreground-900 font-geist">
+          Production & Distribution Center (PDC)
+        </CardTitle>
+        <CardDescription className="font-geist">
+          Manage production planning, distribution, and supply chain operations
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="text-center p-12">
+          <TrendingUp className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 font-geist mb-2">
+            PDC Module Coming Soon
+          </h3>
+          <p className="text-gray-600 font-geist max-w-md mx-auto">
+            Production and Distribution Center features are currently under
+            development. This module will include production planning,
+            distribution tracking, and supply chain management capabilities.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const tabs = [
+    { id: "analytics", label: "Analytics" },
+    { id: "materials", label: "Materials" },
+    { id: "pdc", label: "PDC" },
+  ];
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "analytics":
+        return <AnalyticsTab />;
+      case "materials":
+        return (
+          <MaterialsView
+            items={items}
+            filteredItems={filteredItems}
+            loading={loading}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            categoryFilter={categoryFilter}
+            setCategoryFilter={setCategoryFilter}
+            isFilterOpen={isFilterOpen}
+            setIsFilterOpen={setIsFilterOpen}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
+            categories={categories}
+            hasActiveFilters={hasActiveFilters}
+            onAddItem={handleAddItem}
+            onEditItem={handleEdit}
+            onDeleteItem={handleDeleteClick}
+            onViewDetails={handleViewDetails}
+            onExportPDF={handleExportPDF}
+            onClearFilters={clearFilters}
+          />
+        );
+      case "pdc":
+        return <PDCTab />;
+      default:
+        return (
+          <MaterialsView
+            items={items}
+            filteredItems={filteredItems}
+            loading={loading}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            categoryFilter={categoryFilter}
+            setCategoryFilter={setCategoryFilter}
+            isFilterOpen={isFilterOpen}
+            setIsFilterOpen={setIsFilterOpen}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
+            categories={categories}
+            hasActiveFilters={hasActiveFilters}
+            onAddItem={handleAddItem}
+            onEditItem={handleEdit}
+            onDeleteItem={handleDeleteClick}
+            onViewDetails={handleViewDetails}
+            onExportPDF={handleExportPDF}
+            onClearFilters={clearFilters}
+          />
+        );
+    }
   };
 
   return (
-    <div className="flex flex-col font-geist px-10">
-      {/* Header Section */}
-      <div className="flex-shrink-0">
-        <div className="p-6">
-          <div className="flex justify-between items-start gap-4">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-                Inventory Management
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Manage and track all inventory items in your system
-              </p>
-            </div>
+    <div className="flex flex-col min-h-screen font-geist">
+      {/* Fixed Header Section */}
+      <div className="flex-shrink-0 bg-white border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4 px-5 pt-5">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground font-geist">
+              Inventory Management
+            </h1>
+            <p className="text-gray-600 mt-1 text-sm font-geist">
+              Manage and track all inventory items in your system
+            </p>
           </div>
         </div>
 
-        {/* Stats Cards Section - Updated to match user management style */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-6 pb-6">
-          {/* Total Items Card */}
-          <Card className="rounded-sm shadow-none border">
-            <CardContent className="p-3">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {inventoryStats.total}
-                </p>
-                <p className="text-sm font-semibold text-gray-600">
-                  Total Items
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* In Stock Card */}
-          <Card className="rounded-sm shadow-none border">
-            <CardContent className="p-3">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {inventoryStats.inStock}
-                </p>
-                <p className="text-sm font-semibold text-gray-600">In Stock</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Restock Needed Card */}
-          <Card className="rounded-sm shadow-none border">
-            <CardContent className="p-3">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {inventoryStats.restockNeeded}
-                </p>
-                <p className="text-sm font-semibold text-gray-600">
-                  Restock Needed
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Total Value Card */}
-          <Card className="rounded-sm shadow-none border">
-            <CardContent className="p-3">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  ₱{inventoryStats.totalValue.toLocaleString()}
-                </p>
-                <p className="text-sm font-semibold text-gray-600">
-                  Total Value
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Chart Section - Positioned below stats cards */}
-        <AnimatePresence>
-          {showChart && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="overflow-hidden px-6 pb-6"
+        {/* Tabs Navigation - Transaction Page Style */}
+        <div className="flex border-b border-gray-200 mt-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as ActiveTab)}
+              className={`px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2 font-geist ${
+                activeTab === tab.id
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
             >
-              <motion.div
-                initial={{ y: -20 }}
-                animate={{ y: 0 }}
-                exit={{ y: -20 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <CategoryBarChart />
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Search and Filter Bar */}
-        <div className="px-6 pb-6">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                <Input
-                  placeholder="Search inventory..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-10 rounded-sm border-gray-200 border-1 border-b-0 font-geist h-8 text-sm"
-                />
-                {searchTerm && (
-                  <X
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 cursor-pointer hover:text-gray-700"
-                    onClick={() => setSearchTerm("")}
-                  />
-                )}
-              </div>
-
-              <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="rounded-sm gap-2 font-geist"
-                    disabled={loading}
-                  >
-                    <Filter className="h-4 w-4" />
-                    Filters
-                    {hasActiveFilters && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center bg-gray-900 text-white"
-                      >
-                        !
-                      </Badge>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-56 bg-white font-geist"
-                  align="start"
-                >
-                  <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      className={statusFilter === "all" ? "bg-gray-100" : ""}
-                      onClick={() => setStatusFilter("all")}
-                    >
-                      All Items
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "inStock" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("inStock")}
-                    >
-                      In Stock
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "lowStock" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("lowStock")}
-                    >
-                      Low Stock
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className={
-                        statusFilter === "outOfStock" ? "bg-gray-100" : ""
-                      }
-                      onClick={() => setStatusFilter("outOfStock")}
-                    >
-                      Out of Stock
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-
-                  {categories.length > 0 && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem
-                          className={
-                            categoryFilter === "all" ? "bg-gray-100" : ""
-                          }
-                          onClick={() => setCategoryFilter("all")}
-                        >
-                          All Categories
-                        </DropdownMenuItem>
-                        {categories.map((category) => (
-                          <DropdownMenuItem
-                            key={category}
-                            className={
-                              categoryFilter === category ? "bg-gray-100" : ""
-                            }
-                            onClick={() => setCategoryFilter(category)}
-                          >
-                            {category}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuGroup>
-                    </>
-                  )}
-
-                  {hasActiveFilters && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={clearFilters}>
-                        Clear Filters
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="rounded-sm text-gray-600 hover:text-gray-900 font-geist"
-                >
-                  Clear
-                  <X className="ml-1 h-4 w-4" />
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className={viewMode === "table" ? "bg-gray-100" : ""}
-                aria-label="Table view"
-                disabled={loading}
-              >
-                <Rows4 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setViewMode("grid")}
-                className={viewMode === "grid" ? "bg-gray-100" : ""}
-                aria-label="Grid view"
-                disabled={loading}
-              >
-                <Grid3X3 className="h-4 w-4" />
-              </Button>
-              <Button
-                onClick={() => setIsCreateProjectOpen(true)}
-                variant="default"
-                size="sm"
-                className="rounded-sm whitespace-nowrap font-geist"
-                disabled={loading}
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add Item
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleExportPDF}
-                className="rounded-sm font-geist gap-2 bg-red-600 hover:bg-red-700"
-                disabled={loading || filteredItems.length === 0}
-                title={filteredItems.length === 0 ? "No items to export" : ""}
-              >
-                <FileText className="h-4 w-4" />
-                Export PDF
-              </Button>
-            </div>
-          </div>
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 px-5 pt-2 pb-2">
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Inventory Table/Grid Section */}
-          {filteredItems.length === 0 && !loading ? (
-            <Card className="max-w-md mx-auto rounded-sm shadow-none border">
-              <CardContent className="pt-2">
-                <div className="text-center p-8">
-                  <h3 className="text-xl font-semibold text-gray-900 font-geist">
-                    No items found
-                  </h3>
-                  <p className="text-gray-600 mt-2 font-geist">
-                    {hasActiveFilters
-                      ? "Try adjusting your filters or search query."
-                      : "No inventory items available. Add a new item to get started."}
-                  </p>
-                  {hasActiveFilters && (
-                    <Button
-                      onClick={clearFilters}
-                      variant="default"
-                      size="sm"
-                      className="mt-4 rounded-sm font-geist"
-                    >
-                      Clear Filters
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="w-full rounded-sm shadow-none border">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
-                  <div>
-                    <CardTitle className="text-foreground-900 font-geist">
-                      Inventory Items
-                    </CardTitle>
-                    <CardDescription className="font-geist">
-                      View and manage all inventory items in your system
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-sm font-geist gap-2"
-                        >
-                          Columns <ChevronDown className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.id}
-                          onCheckedChange={() => toggleColumnVisibility("id")}
-                        >
-                          ID
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.sku}
-                          onCheckedChange={() => toggleColumnVisibility("sku")}
-                        >
-                          SKU
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.name}
-                          onCheckedChange={() => toggleColumnVisibility("name")}
-                        >
-                          Name
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.category}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("category")
-                          }
-                        >
-                          Category
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.quantity}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("quantity")
-                          }
-                        >
-                          Quantity
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.unit}
-                          onCheckedChange={() => toggleColumnVisibility("unit")}
-                        >
-                          Unit
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.unitCost}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("unitCost")
-                          }
-                        >
-                          Unit Cost
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.totalCost}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("totalCost")
-                          }
-                        >
-                          Total Cost
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.location}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("location")
-                          }
-                        >
-                          Location
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.supplier}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("supplier")
-                          }
-                        >
-                          Supplier
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.reorderPoint}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("reorderPoint")
-                          }
-                        >
-                          Reorder Point
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.status}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("status")
-                          }
-                        >
-                          Status
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                          checked={columnVisibility.actions}
-                          onCheckedChange={() =>
-                            toggleColumnVisibility("actions")
-                          }
-                        >
-                          Actions
-                        </DropdownMenuCheckboxItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowChart(!showChart)}
-                      className="rounded-sm font-geist gap-2"
-                    >
-                      <BarChart3 className="h-4 w-4" />
-                      {showChart ? "Hide Analytics" : "Show Analytics"}
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="w-full rounded-sm border">
-                  {viewMode === "table" ? (
-                    <InventoryTable
-                      items={filteredItems}
-                      loading={loading}
-                      onDelete={handleDeleteClick}
-                      onEdit={handleEdit}
-                      columnVisibility={columnVisibility}
-                    />
-                  ) : (
-                    <InventoryGrid
-                      items={filteredItems}
-                      loading={loading}
-                      onDelete={handleDeleteClick}
-                      onEdit={handleEdit}
-                    />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+      {/* Scrollable Content Section */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="space-y-6">{renderTabContent()}</div>
       </div>
 
       <AddItemModal onAdd={handleAdd} />
@@ -824,6 +601,15 @@ export default function MainInventory() {
         confirmText="Delete"
         cancelText="Cancel"
       />
+
+      {/* View Details Modal - Using the new full-screen modal */}
+      {selectedItem && (
+        <ItemDetailsModal
+          item={selectedItem}
+          isOpen={isViewDetailsOpen}
+          onClose={handleModalClose}
+        />
+      )}
     </div>
   );
 }
