@@ -133,7 +133,7 @@ export function SupplierTable({
   };
 
   return (
-    <div className="w-full overflow-hidden rounded-sm border">
+    <div className="w-full overflow-hidden rounded-none border">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>

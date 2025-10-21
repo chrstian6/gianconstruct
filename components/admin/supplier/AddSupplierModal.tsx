@@ -24,7 +24,8 @@ interface AddSupplierModalProps {
 }
 
 export function AddSupplierModal({ onAdd }: AddSupplierModalProps) {
-  const { isCreateProjectOpen, setIsCreateProjectOpen } = useModalStore();
+  // FIX: Use isCreateSupplierOpen instead of isCreateProjectOpen
+  const { isCreateSupplierOpen, setIsCreateSupplierOpen } = useModalStore();
   const [formData, setFormData] = useState<SupplierFormData>({
     companyName: "",
     contactPerson: "",
@@ -59,8 +60,9 @@ export function AddSupplierModal({ onAdd }: AddSupplierModalProps) {
     setFormData({ ...formData, contact: value });
   };
 
+  // FIX: Use isCreateSupplierOpen and setIsCreateSupplierOpen
   return (
-    <Dialog open={isCreateProjectOpen} onOpenChange={setIsCreateProjectOpen}>
+    <Dialog open={isCreateSupplierOpen} onOpenChange={setIsCreateSupplierOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Add New Supplier</DialogTitle>
@@ -158,7 +160,8 @@ export function AddSupplierModal({ onAdd }: AddSupplierModalProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsCreateProjectOpen(false)}
+              // FIX: Use setIsCreateSupplierOpen
+              onClick={() => setIsCreateSupplierOpen(false)}
             >
               Cancel
             </Button>

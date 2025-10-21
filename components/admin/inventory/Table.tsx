@@ -167,22 +167,22 @@ export function InventoryTable({
         <Table className="w-full border-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="p-3 text-left border border-gray-300 bg-gray-50">
+              <TableHead className="p-3 text-left border border-gray-300 ">
                 Name
               </TableHead>
-              <TableHead className="p-3 text-left border border-gray-300 bg-gray-50">
+              <TableHead className="p-3 text-left border border-gray-300">
                 Category
               </TableHead>
-              <TableHead className="p-3 text-right border border-gray-300 bg-gray-50">
+              <TableHead className="p-3 text-right border border-gray-300">
                 Quantity
               </TableHead>
-              <TableHead className="p-3 text-right border border-gray-300 bg-gray-50">
+              <TableHead className="p-3 text-right border border-gray-300">
                 Unit Cost
               </TableHead>
-              <TableHead className="p-3 text-left border border-gray-300 bg-gray-50">
+              <TableHead className="p-3 text-left border border-gray-300">
                 Status
               </TableHead>
-              <TableHead className="p-3 text-center border border-gray-300 bg-gray-50">
+              <TableHead className="p-3 text-center border border-gray-300">
                 Actions
               </TableHead>
             </TableRow>

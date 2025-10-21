@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { IInventory } from "@/types/Inventory";
+import { ISupplier } from "@/types/supplier";
 import {
   getInventories,
   createInventory,
@@ -11,6 +12,11 @@ import {
   getInventoryByCategory,
   getCategories,
 } from "@/action/inventory";
+import {
+  getSuppliers,
+  createSupplier,
+  deleteSupplier,
+} from "@/action/supplier";
 import { Button } from "@/components/ui/button";
 import { useModalStore } from "@/lib/stores";
 import { AddItemModal } from "@/components/admin/inventory/AddItemModal";
@@ -22,7 +28,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CheckCircle, AlertTriangle, TrendingUp, X } from "lucide-react";
+import {
+  CheckCircle,
+  AlertTriangle,
+  TrendingUp,
+  X,
+  Search,
+  Plus,
+  Filter,
+} from "lucide-react";
 import { toast } from "sonner";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import { Badge } from "@/components/ui/badge";
@@ -30,11 +44,25 @@ import { CategoryBarChart } from "@/components/admin/inventory/CategoryBarChart"
 import { PDFFormatter } from "@/components/admin/inventory/pdf/Formatter";
 import { MaterialsView } from "@/components/admin/inventory/views/MaterialsView";
 import { ItemDetailsModal } from "@/components/admin/inventory/details/ItemDetailsModal";
+import { AddSupplierModal } from "@/components/admin/supplier/AddSupplierModal";
+import { ViewSupplierModal } from "@/components/admin/supplier/ViewSupplierModal";
+import { SupplierView } from "@/components/admin/supplier/views/SupplierView";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
+type SupplierStatusFilter = "all" | "active" | "inactive" | "pending";
 type CategoryFilter = "all" | string;
 type ViewMode = "table" | "grid";
-type ActiveTab = "analytics" | "materials" | "pdc";
+type ActiveTab = "analytics" | "materials" | "pdc" | "suppliers";
 
 interface CategoryData {
   category: string;
@@ -48,13 +76,24 @@ interface CategoryData {
 
 export default function MainInventory() {
   const [items, setItems] = useState<IInventory[]>([]);
+  const [suppliers, setSuppliers] = useState<ISupplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [suppliersLoading, setSuppliersLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [supplierStatusFilter, setSupplierStatusFilter] =
+    useState<SupplierStatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isSupplierFilterOpen, setIsSupplierFilterOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<IInventory | null>(null);
+  const [supplierToDelete, setSupplierToDelete] = useState<ISupplier | null>(
+    null
+  );
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isSupplierDeleteModalOpen, setIsSupplierDeleteModalOpen] =
+    useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [activeTab, setActiveTab] = useState<ActiveTab>("materials");
   const [selectedItem, setSelectedItem] = useState<IInventory | null>(null);
@@ -75,6 +114,12 @@ export default function MainInventory() {
     actions: true,
   });
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [supplierCurrentPage, setSupplierCurrentPage] = useState(1);
+  const [supplierItemsPerPage, setSupplierItemsPerPage] = useState(10);
+
   // Chart data states
   const [chartData, setChartData] = useState<CategoryData[]>([]);
   const [chartCategories, setChartCategories] = useState<string[]>([]);
@@ -87,6 +132,11 @@ export default function MainInventory() {
     isEditInventoryOpen,
     setIsEditInventoryOpen,
     editingInventory,
+    isCreateSupplierOpen,
+    setIsCreateSupplierOpen,
+    isViewSupplierOpen,
+    setIsViewSupplierOpen,
+    viewingSupplier,
   } = useModalStore();
 
   // Fetch items only once on component mount
@@ -104,6 +154,24 @@ export default function MainInventory() {
       }
     };
     fetchData();
+  }, []);
+
+  // Fetch suppliers when suppliers tab is active or on component mount
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      setSuppliersLoading(true);
+      try {
+        const data = await getSuppliers();
+        setSuppliers(data);
+      } catch (error) {
+        console.error("Failed to fetch suppliers:", error);
+        toast.error("Failed to fetch suppliers");
+      } finally {
+        setSuppliersLoading(false);
+      }
+    };
+
+    fetchSuppliers();
   }, []);
 
   // Fetch chart data only once on component mount
@@ -174,7 +242,46 @@ export default function MainInventory() {
     return true;
   });
 
-  // Calculate inventory stats
+  // Filter suppliers based on search term and filters
+  const filteredSuppliers = suppliers.filter((supplier) => {
+    // Search filter
+    if (
+      supplierSearchTerm &&
+      !(
+        supplier.companyName
+          .toLowerCase()
+          .includes(supplierSearchTerm.toLowerCase()) ||
+        supplier.contactPerson
+          .toLowerCase()
+          .includes(supplierSearchTerm.toLowerCase()) ||
+        supplier.contact.includes(supplierSearchTerm) ||
+        (supplier.email &&
+          supplier.email
+            .toLowerCase()
+            .includes(supplierSearchTerm.toLowerCase())) ||
+        supplier.location
+          .toLowerCase()
+          .includes(supplierSearchTerm.toLowerCase()) ||
+        supplier.supplier_id
+          .toLowerCase()
+          .includes(supplierSearchTerm.toLowerCase())
+      )
+    ) {
+      return false;
+    }
+
+    // Status filter
+    if (
+      supplierStatusFilter !== "all" &&
+      supplier.status !== supplierStatusFilter
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Calculate inventory stats - MOVED AFTER filteredItems declaration
   const inventoryStats = {
     inStock: filteredItems.filter((item) => item.quantity > 0).length,
     lowStock: filteredItems.filter(
@@ -207,6 +314,19 @@ export default function MainInventory() {
 
   const hasActiveFilters =
     !!searchTerm || statusFilter !== "all" || categoryFilter !== "all";
+
+  const hasSupplierActiveFilters =
+    !!supplierSearchTerm || supplierStatusFilter !== "all";
+
+  // Reset to first page when filters change for materials
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, categoryFilter, filteredItems.length]);
+
+  // Reset to first page when filters change for suppliers
+  useEffect(() => {
+    setSupplierCurrentPage(1);
+  }, [supplierSearchTerm, supplierStatusFilter, filteredSuppliers.length]);
 
   // Add item
   const handleAdd = async (
@@ -298,7 +418,47 @@ export default function MainInventory() {
     }
   };
 
-  // View details
+  // Add supplier
+  const handleAddSupplier = async (newSupplier: any) => {
+    try {
+      const result = await createSupplier(newSupplier);
+      if (result.success && result.supplier) {
+        setSuppliers((prev) => [...prev, result.supplier!]);
+        setIsCreateSupplierOpen(false);
+        toast.success("Supplier added successfully");
+      } else {
+        toast.error(result.error || "Failed to add supplier");
+      }
+    } catch (error) {
+      toast.error("Failed to add supplier");
+      console.error("Error creating supplier:", error);
+    }
+  };
+
+  // Delete supplier
+  const handleDeleteSupplier = async (supplier_id: string) => {
+    try {
+      const result = await deleteSupplier(supplier_id);
+      if (result.success) {
+        setSuppliers((prev) =>
+          prev.filter((s) => s.supplier_id !== supplier_id)
+        );
+        toast.success("Supplier deleted successfully");
+      } else {
+        toast.error(result.error || "Failed to delete supplier");
+      }
+    } catch (error) {
+      toast.error("Failed to delete supplier");
+      console.error("Error deleting supplier:", error);
+    }
+  };
+
+  // View supplier details
+  const handleViewSupplier = (supplier: ISupplier) => {
+    setIsViewSupplierOpen(true, supplier);
+  };
+
+  // View item details
   const handleViewDetails = (item: IInventory) => {
     setSelectedItem(item);
     setIsViewDetailsOpen(true);
@@ -346,14 +506,40 @@ export default function MainInventory() {
     setItemToDelete(null);
   };
 
+  const handleSupplierDeleteClick = (supplier: ISupplier) => {
+    setSupplierToDelete(supplier);
+    setIsSupplierDeleteModalOpen(true);
+  };
+
+  const handleSupplierDeleteConfirm = async () => {
+    if (!supplierToDelete) return;
+    await handleDeleteSupplier(supplierToDelete.supplier_id);
+    setIsSupplierDeleteModalOpen(false);
+    setSupplierToDelete(null);
+  };
+
+  const handleSupplierDeleteCancel = () => {
+    setIsSupplierDeleteModalOpen(false);
+    setSupplierToDelete(null);
+  };
+
   const clearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
     setCategoryFilter("all");
   };
 
+  const clearSupplierFilters = () => {
+    setSupplierSearchTerm("");
+    setSupplierStatusFilter("all");
+  };
+
   const handleAddItem = () => {
     setIsCreateProjectOpen(true);
+  };
+
+  const handleAddSupplierClick = () => {
+    setIsCreateSupplierOpen(true);
   };
 
   // Get status information for an item
@@ -452,7 +638,7 @@ export default function MainInventory() {
   );
 
   const PDCTab = () => (
-    <Card className="w-full rounded-sm shadow-none border">
+    <Card className="w-full rounded-none shadow-none border-none">
       <CardHeader>
         <CardTitle className="text-foreground-900 font-geist">
           Production & Distribution Center (PDC)
@@ -480,6 +666,7 @@ export default function MainInventory() {
   const tabs = [
     { id: "analytics", label: "Analytics" },
     { id: "materials", label: "Materials" },
+    { id: "suppliers", label: "Suppliers" },
     { id: "pdc", label: "PDC" },
   ];
 
@@ -513,10 +700,39 @@ export default function MainInventory() {
             onViewDetails={handleViewDetails}
             onExportPDF={handleExportPDF}
             onClearFilters={clearFilters}
+            // Pagination props
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            itemsPerPage={itemsPerPage}
+            setItemsPerPage={setItemsPerPage}
           />
         );
       case "pdc":
         return <PDCTab />;
+      case "suppliers":
+        return (
+          <SupplierView
+            suppliers={suppliers}
+            filteredSuppliers={filteredSuppliers}
+            loading={suppliersLoading}
+            searchTerm={supplierSearchTerm}
+            setSearchTerm={setSupplierSearchTerm}
+            statusFilter={supplierStatusFilter}
+            setStatusFilter={setSupplierStatusFilter}
+            isFilterOpen={isSupplierFilterOpen}
+            setIsFilterOpen={setIsSupplierFilterOpen}
+            hasActiveFilters={hasSupplierActiveFilters}
+            onAddSupplier={handleAddSupplierClick}
+            onDeleteSupplier={handleSupplierDeleteClick}
+            onViewSupplier={handleViewSupplier}
+            onClearFilters={clearSupplierFilters}
+            // Pagination props
+            currentPage={supplierCurrentPage}
+            setCurrentPage={setSupplierCurrentPage}
+            itemsPerPage={supplierItemsPerPage}
+            setItemsPerPage={setSupplierItemsPerPage}
+          />
+        );
       default:
         return (
           <MaterialsView
@@ -543,6 +759,11 @@ export default function MainInventory() {
             onViewDetails={handleViewDetails}
             onExportPDF={handleExportPDF}
             onClearFilters={clearFilters}
+            // Pagination props
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            itemsPerPage={itemsPerPage}
+            setItemsPerPage={setItemsPerPage}
           />
         );
     }
@@ -558,7 +779,7 @@ export default function MainInventory() {
               Inventory Management
             </h1>
             <p className="text-gray-600 mt-1 text-sm font-geist">
-              Manage and track all inventory items in your system
+              Manage and track all inventory items and suppliers in your system
             </p>
           </div>
         </div>
@@ -586,10 +807,20 @@ export default function MainInventory() {
         <div className="space-y-6">{renderTabContent()}</div>
       </div>
 
+      {/* Modals */}
       <AddItemModal onAdd={handleAdd} />
+      <AddSupplierModal onAdd={handleAddSupplier} />
 
       {editingInventory && (
         <EditItemModal item={editingInventory} onUpdate={handleUpdate} />
+      )}
+
+      {/* View Supplier Modal */}
+      {viewingSupplier && (
+        <ViewSupplierModal
+          supplier={viewingSupplier}
+          onDelete={handleSupplierDeleteClick}
+        />
       )}
 
       <ConfirmationModal
@@ -598,6 +829,16 @@ export default function MainInventory() {
         onCancel={handleDeleteCancel}
         title="Delete Item"
         description={`Are you sure you want to delete item "${itemToDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
+
+      <ConfirmationModal
+        isOpen={isSupplierDeleteModalOpen}
+        onConfirm={handleSupplierDeleteConfirm}
+        onCancel={handleSupplierDeleteCancel}
+        title="Delete Supplier"
+        description={`Are you sure you want to delete supplier "${supplierToDelete?.companyName}"? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
       />

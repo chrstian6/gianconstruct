@@ -22,6 +22,8 @@ import {
   Rows4,
   Grid3X3,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +35,13 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
@@ -77,6 +86,11 @@ interface MaterialsViewProps {
   onViewDetails: (item: IInventory) => void;
   onExportPDF: () => void;
   onClearFilters: () => void;
+  // Pagination props
+  currentPage: number;
+  setCurrentPage: (page: number) => void;
+  itemsPerPage: number;
+  setItemsPerPage: (perPage: number) => void;
 }
 
 export function MaterialsView({
@@ -103,12 +117,74 @@ export function MaterialsView({
   onViewDetails,
   onExportPDF,
   onClearFilters,
+  // Pagination
+  currentPage,
+  setCurrentPage,
+  itemsPerPage,
+  setItemsPerPage,
 }: MaterialsViewProps) {
   const toggleColumnVisibility = (column: keyof typeof columnVisibility) => {
     setColumnVisibility((prev: typeof columnVisibility) => ({
       ...prev,
       [column]: !prev[column],
     }));
+  };
+
+  // Pagination calculations
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredItems.length / itemsPerPage)
+  );
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = filteredItems.slice(startIndex, endIndex);
+
+  // Pagination handlers
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      const startPage = Math.max(1, currentPage - 2);
+      const endPage = Math.min(totalPages, currentPage + 2);
+
+      if (startPage > 1) {
+        pages.push(1);
+        if (startPage > 2) pages.push(-1); // -1 represents ellipsis
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) pages.push(-2); // -2 represents ellipsis
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
   };
 
   return (
@@ -279,7 +355,7 @@ export function MaterialsView({
 
       {/* Inventory Table/Grid Section */}
       {filteredItems.length === 0 && !loading ? (
-        <Card className="max-w-md mx-auto rounded-sm shadow-none border">
+        <Card className="max-w-md mx-auto shadow-none">
           <CardContent className="pt-2">
             <div className="text-center p-8">
               <h3 className="text-xl font-semibold text-gray-900 font-geist">
@@ -304,7 +380,7 @@ export function MaterialsView({
           </CardContent>
         </Card>
       ) : (
-        <Card className="w-full rounded-sm shadow-none border overflow-x-auto">
+        <Card className="w-full overflow-x-auto">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
               <div>
@@ -313,6 +389,7 @@ export function MaterialsView({
                 </CardTitle>
                 <CardDescription className="font-geist">
                   View and manage all inventory items in your system
+                  {hasActiveFilters && " (filtered)"}
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -415,10 +492,10 @@ export function MaterialsView({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="w-full rounded-sm border">
+            <div className="w-full rounded-sm border-none">
               {viewMode === "table" ? (
                 <InventoryTable
-                  items={filteredItems}
+                  items={currentItems}
                   loading={loading}
                   onDelete={onDeleteItem}
                   onEdit={onEditItem}
@@ -427,7 +504,7 @@ export function MaterialsView({
                 />
               ) : (
                 <InventoryGrid
-                  items={filteredItems}
+                  items={currentItems}
                   loading={loading}
                   onDelete={onDeleteItem}
                   onEdit={onEditItem}
@@ -435,6 +512,92 @@ export function MaterialsView({
                 />
               )}
             </div>
+
+            {/* Pagination - Always visible */}
+            {filteredItems.length > 0 && (
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <span>•</span>
+                  <span>{filteredItems.length} total items</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Previous Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {getPageNumbers().map((page, index) =>
+                      page === -1 || page === -2 ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="px-2 text-sm text-gray-500"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(page as number)}
+                          className={`h-8 w-8 p-0 text-xs ${
+                            currentPage === page ? "bg-gray-900 text-white" : ""
+                          }`}
+                        >
+                          {page}
+                        </Button>
+                      )
+                    )}
+                  </div>
+
+                  {/* Next Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Items Per Page Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Show:</span>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      setItemsPerPage(Number(value));
+                      setCurrentPage(1); // Reset to first page
+                    }}
+                  >
+                    <SelectTrigger className="w-[80px] h-8">
+                      <SelectValue placeholder={itemsPerPage} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-gray-600">per page</span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

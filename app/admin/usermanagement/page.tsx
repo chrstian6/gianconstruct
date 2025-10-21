@@ -21,6 +21,8 @@ import {
   UserCheck,
   UserCog,
   UserX,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -101,6 +103,10 @@ export default function UserManagementPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   const { isCreateAccountOpen, setIsCreateAccountOpen, createAccountData } =
     useModalStore();
 
@@ -173,6 +179,20 @@ export default function UserManagementPage() {
       return true;
     });
   }, [users, searchTerm, statusFilter, roleFilter]);
+
+  // Pagination calculations
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredUsers.length / itemsPerPage)
+  );
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentUsers = filteredUsers.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, roleFilter, filteredUsers.length]);
 
   // Calculate user stats
   const userStats = useMemo(() => {
@@ -324,6 +344,54 @@ export default function UserManagementPage() {
 
   const handleCancelAddUser = () => {
     setIsCreateAccountOpen(false);
+  };
+
+  // Pagination handlers
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      const startPage = Math.max(1, currentPage - 2);
+      const endPage = Math.min(totalPages, currentPage + 2);
+
+      if (startPage > 1) {
+        pages.push(1);
+        if (startPage > 2) pages.push(-1); // -1 represents ellipsis
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) pages.push(-2); // -2 represents ellipsis
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
   };
 
   return (
@@ -585,10 +653,9 @@ export default function UserManagementPage() {
                   </CardTitle>
                   <CardDescription className="font-geist">
                     View and manage all users in your system
+                    {hasActiveFilters && " (filtered)"}
                   </CardDescription>
                 </div>
-              </div>
-              <div className="flex gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -667,12 +734,98 @@ export default function UserManagementPage() {
             <CardContent>
               <div className="w-full rounded-sm border">
                 <UserManagementTable
-                  users={filteredUsers}
+                  users={currentUsers}
                   onUpdate={handleUpdate}
                   onToggleStatus={handleToggleStatus}
                   columnVisibility={columnVisibility}
                 />
               </div>
+
+              {/* Pagination - Always visible */}
+              {filteredUsers.length > 0 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <span>•</span>
+                    <span>{filteredUsers.length} total users</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Previous Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-1">
+                      {getPageNumbers().map((page, index) =>
+                        page === -1 || page === -2 ? (
+                          <span
+                            key={`ellipsis-${index}`}
+                            className="px-2 text-sm text-gray-500"
+                          >
+                            ...
+                          </span>
+                        ) : (
+                          <Button
+                            key={page}
+                            variant={
+                              currentPage === page ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => handlePageChange(page as number)}
+                            className={`h-8 w-8 p-0 text-xs ${
+                              currentPage === page
+                                ? "bg-gray-900 text-white"
+                                : ""
+                            }`}
+                          >
+                            {page}
+                          </Button>
+                        )
+                      )}
+                    </div>
+
+                    {/* Next Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Items Per Page Selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Show:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="text-sm border rounded px-2 py-1"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-gray-600">per page</span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

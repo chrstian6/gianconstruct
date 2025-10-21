@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { IInventory } from "@/types/Inventory";
+import { ISupplier } from "@/types/supplier";
 
 // Define User type for user management
 interface User {
@@ -46,6 +47,8 @@ interface ModalStore {
 
   // Supplier modals
   isCreateSupplierOpen: boolean;
+  isViewSupplierOpen: boolean;
+  viewingSupplier: ISupplier | null;
 
   // User management modals
   isEditUserOpen: boolean;
@@ -65,6 +68,7 @@ interface ModalStore {
     inventory?: IInventory | null
   ) => void;
   setIsCreateSupplierOpen: (open: boolean) => void;
+  setIsViewSupplierOpen: (open: boolean, supplier?: ISupplier | null) => void;
   setIsEditUserOpen: (open: boolean, user?: User | null) => void;
   setCreateAccountData: (data: CreateAccountData | null) => void;
 }
@@ -106,11 +110,13 @@ export const useModalStore = create<ModalStore>((set) => ({
   isEditProjectOpen: false,
   isEditInventoryOpen: false,
   isCreateSupplierOpen: false,
+  isViewSupplierOpen: false,
   isEditUserOpen: false,
 
   designIdToDelete: null,
   editingProject: null,
   editingInventory: null,
+  viewingSupplier: null,
   editingUser: null,
   createAccountData: null,
 
@@ -131,12 +137,10 @@ export const useModalStore = create<ModalStore>((set) => ({
       isDeleteDesignOpen: open,
       designIdToDelete: open ? (designId ?? null) : null,
     });
-    // Removed window.location.reload() - let the component handle refresh if needed
   },
 
   setIsCreateProjectOpen: (open: boolean) => {
     set({ isCreateProjectOpen: open });
-    // Removed window.location.reload() - let the component handle refresh if needed
   },
 
   setIsEditProjectOpen: (open: boolean, project?: any) => {
@@ -144,7 +148,6 @@ export const useModalStore = create<ModalStore>((set) => ({
       isEditProjectOpen: open,
       editingProject: open ? project : null,
     });
-    // Removed window.location.reload() - let the component handle refresh if needed
   },
 
   setIsEditInventoryOpen: (open: boolean, inventory?: IInventory | null) => {
@@ -152,12 +155,17 @@ export const useModalStore = create<ModalStore>((set) => ({
       isEditInventoryOpen: open,
       editingInventory: open ? inventory : null,
     });
-    // Removed window.location.reload() - let the component handle refresh if needed
   },
 
   setIsCreateSupplierOpen: (open: boolean) => {
     set({ isCreateSupplierOpen: open });
-    // Removed window.location.reload() - let the component handle refresh if needed
+  },
+
+  setIsViewSupplierOpen: (open: boolean, supplier?: ISupplier | null) => {
+    set({
+      isViewSupplierOpen: open,
+      viewingSupplier: open ? supplier : null,
+    });
   },
 
   setIsEditUserOpen: (open: boolean, user?: User | null) => {
@@ -165,7 +173,6 @@ export const useModalStore = create<ModalStore>((set) => ({
       isEditUserOpen: open,
       editingUser: open ? user : null,
     });
-    // Removed window.location.reload() - let the component handle refresh if needed
   },
 
   setCreateAccountData: (data: CreateAccountData | null) => {

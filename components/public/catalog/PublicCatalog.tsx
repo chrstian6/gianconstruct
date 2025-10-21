@@ -27,7 +27,12 @@ import {
 import NotFound from "@/components/admin/NotFound";
 import { X } from "lucide-react";
 
-export default function PublicCatalog() {
+// Define props interface
+interface PublicCatalogProps {
+  searchTerm?: string;
+}
+
+export default function PublicCatalog({ searchTerm = "" }: PublicCatalogProps) {
   const [designs, setDesigns] = useState<Design[]>([]);
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([]);
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
@@ -72,7 +77,70 @@ export default function PublicCatalog() {
     fetchDesigns();
   }, []);
 
-  // Apply filters whenever filter criteria change
+  // Improved search function with better matching
+  const searchDesigns = (designs: Design[], query: string): Design[] => {
+    if (!query.trim()) return designs;
+
+    const searchLower = query.toLowerCase().trim();
+    const searchWords = searchLower
+      .split(/\s+/)
+      .filter((word) => word.length > 0);
+
+    return designs.filter((design) => {
+      // Create a searchable text string from all relevant fields
+      const searchableText = `
+        ${design.name?.toLowerCase() || ""}
+        ${design.category?.toLowerCase() || ""}
+        ${design.description?.toLowerCase() || ""}
+      `;
+
+      // Check if ALL search words are found in any of the fields
+      const matchesAllWords = searchWords.every((word) => {
+        // Check each field for the word
+        const nameMatch = design.name?.toLowerCase().includes(word);
+        const categoryMatch = design.category?.toLowerCase().includes(word);
+        const descriptionMatch = design.description
+          ?.toLowerCase()
+          .includes(word);
+
+        return nameMatch || categoryMatch || descriptionMatch;
+      });
+
+      // Also check for partial matches and common synonyms
+      if (!matchesAllWords && searchWords.length === 1) {
+        const singleWord = searchWords[0];
+
+        // Common search term mappings
+        const searchMappings: { [key: string]: string[] } = {
+          ho: ["house", "home", "housing"],
+          kit: ["kitchen"],
+          bed: ["bedroom"],
+          bath: ["bathroom"],
+          liv: ["living", "living room"],
+          off: ["office"],
+          com: ["commercial"],
+          res: ["residential"],
+          ind: ["industrial"],
+          cus: ["custom"],
+        };
+
+        // Check if the search term matches any common abbreviations
+        const mappedTerms = searchMappings[singleWord] || [];
+        const hasMappedMatch = mappedTerms.some(
+          (term) =>
+            design.name?.toLowerCase().includes(term) ||
+            design.category?.toLowerCase().includes(term) ||
+            design.description?.toLowerCase().includes(term)
+        );
+
+        return hasMappedMatch;
+      }
+
+      return matchesAllWords;
+    });
+  };
+
+  // Apply filters whenever filter criteria or search term change
   useEffect(() => {
     let filtered = designs;
 
@@ -83,9 +151,14 @@ export default function PublicCatalog() {
       );
     }
 
+    // Apply improved search
+    if (searchTerm.trim()) {
+      filtered = searchDesigns(filtered, searchTerm);
+    }
+
     setFilteredDesigns(filtered);
     setCurrentPage(1); // Reset to first page when filters change
-  }, [designs, filterCategory]);
+  }, [designs, filterCategory, searchTerm]);
 
   // Calculate pagination
   const totalCount = filteredDesigns.length;
@@ -174,7 +247,31 @@ export default function PublicCatalog() {
         />
       )}
 
-      {/* Header Section */}
+      {/* Search Results Info */}
+      {searchTerm.trim() && (
+        <div className="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-orange-800">
+                Search Results for "{searchTerm}"
+              </h3>
+              <p className="text-orange-600 text-sm">
+                Found {filteredDesigns.length} design
+                {filteredDesigns.length !== 1 ? "s" : ""} matching your search
+              </p>
+            </div>
+            {filteredDesigns.length === 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setFilterCategory("all")}
+                className="border-orange-300 text-orange-700 hover:bg-orange-100"
+              >
+                Show All Designs
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Category Tags Only - UPDATED WITH ORANGE COLORS */}
       <div className="flex flex-wrap gap-2 mb-2 py-4">
@@ -191,9 +288,7 @@ export default function PublicCatalog() {
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            {category === "all"
-              ? "All Categories"
-              : capitalizeFirstLetter(category)}
+            {category === "all" ? "All" : capitalizeFirstLetter(category)}
           </button>
         ))}
       </div>
@@ -296,24 +391,44 @@ export default function PublicCatalog() {
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
-
-            {/* Page info */}
-            <div className="text-center mt-4 text-sm text-gray-600">
-              Page {currentPage} of {totalPages}
-            </div>
           </div>
         </>
       ) : (
         /* No Results State - Using NotFound Component */
         <div className="text-center py-16">
-          <NotFound description="Try selecting a different category to explore more designs" />
-          <Button
-            variant="outline"
-            onClick={() => setFilterCategory("all")}
-            className="border-gray-300 mt-6"
-          >
-            Show All Categories
-          </Button>
+          <NotFound
+            title={
+              searchTerm.trim()
+                ? `No designs found for "${searchTerm}"`
+                : "No designs found"
+            }
+            description={
+              searchTerm.trim()
+                ? "Try adjusting your search terms or browse all categories"
+                : "Try selecting a different category to explore more designs"
+            }
+          />
+          <div className="flex gap-4 justify-center mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setFilterCategory("all")}
+              className="border-gray-300"
+            >
+              Show All Categories
+            </Button>
+            {searchTerm.trim() && (
+              <Button
+                variant="default"
+                onClick={() => {
+                  // This will be handled by the parent component clearing the search
+                  setFilterCategory("all");
+                }}
+                className="bg-orange-500 hover:bg-orange-600"
+              >
+                Clear Search
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

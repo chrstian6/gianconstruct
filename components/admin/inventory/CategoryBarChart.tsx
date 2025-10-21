@@ -299,7 +299,7 @@ export function CategoryBarChart({
   }, []);
 
   return (
-    <Card className="w-full shadow-none border-gray/80 rounded-none">
+    <Card className="w-full shadow-none border-gray/80 rounded-none p-5">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Materials by Category</CardTitle>
@@ -402,7 +402,7 @@ export function CategoryBarChart({
           )}
         </div>
       </CardHeader>
-      <CardContent className="pb-1">
+      <CardContent className="p-4 shadow-md">
         {loading ? (
           <ChartSkeleton />
         ) : (

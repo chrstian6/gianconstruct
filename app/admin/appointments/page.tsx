@@ -803,8 +803,8 @@ export default function AppointmentsPage() {
         <div className="lg:col-span-2 flex flex-col min-h-0">
           {/* Filters */}
           <Card className="flex-shrink-0">
-            <CardContent className="pt-6">
-              <div className="flex flex-col sm:flex-row gap-4">
+            <CardContent className="pt-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1">
                   <Label htmlFor="search" className="sr-only">
                     Search appointments
@@ -819,34 +819,6 @@ export default function AppointmentsPage() {
                       className="pl-10"
                     />
                   </div>
-                </div>
-                <div className="w-full sm:w-48">
-                  <Label htmlFor="status-filter" className="sr-only">
-                    Filter by status
-                  </Label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger id="status-filter">
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusTags.map((tag) => (
-                        <SelectItem key={tag.value} value={tag.value}>
-                          <div className="flex items-center justify-between w-full">
-                            <span>{tag.label}</span>
-                            {tag.count > 0 && (
-                              <Badge
-                                variant="secondary"
-                                className="ml-2 h-5 min-w-5 text-xs"
-                              >
-                                {tag.count}
-                              </Badge>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
 

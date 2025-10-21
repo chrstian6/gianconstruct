@@ -22,7 +22,6 @@ export function Navbar() {
     { name: "Services", href: "#services" },
     { name: "Contacts", href: "#contact" },
     { name: "Design Catalog", href: "/catalog" },
-    { name: "Admin", href: "/admin/admindashboard" },
   ];
 
   // Memoize adjusted nav items based on pathname
@@ -37,7 +36,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-white flex-1 flex items-center">
-      <div className="container mx-auto flex h-16 items-center px-4">
+      <div className="container mx-auto flex h-12 items-center px-4 pt-3">
         {/* Logo */}
         <Link href="/" className="text-2xl font-bold text-orange-500">
           GianConstruct®
