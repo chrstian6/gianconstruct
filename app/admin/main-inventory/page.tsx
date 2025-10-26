@@ -11,6 +11,7 @@ import {
   deleteInventory,
   getInventoryByCategory,
   getCategories,
+  createBatchInventory,
 } from "@/action/inventory";
 import {
   getSuppliers,
@@ -70,7 +71,6 @@ interface CategoryData {
     name: string;
     quantity: number;
     reorderPoint: number;
-    safetyStock?: number;
   }[];
 }
 
@@ -100,13 +100,14 @@ export default function MainInventory() {
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState({
     id: true,
-    sku: true,
     name: true,
     category: true,
     quantity: true,
     unit: true,
     unitCost: true,
-    totalCost: true,
+    salePrice: true,
+    totalCapital: true,
+    totalValue: true,
     location: true,
     supplier: true,
     reorderPoint: true,
@@ -210,8 +211,7 @@ export default function MainInventory() {
       searchTerm &&
       !(
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.item_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.product_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.description &&
           item.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -292,22 +292,36 @@ export default function MainInventory() {
       (item) => item.quantity <= item.reorderPoint
     ).length,
     total: filteredItems.length,
+    totalCapital: filteredItems.reduce(
+      (total, item) =>
+        total + (item.totalCapital || item.quantity * (item.unitCost || 0)),
+      0
+    ),
     totalValue: filteredItems.reduce(
-      (total, item) => total + item.quantity * (item.unitCost || 0),
+      (total, item) =>
+        total + (item.totalValue || item.quantity * (item.salePrice || 0)),
       0
     ),
     categoryStats: Array.from(
       filteredItems.reduce((acc, item) => {
         const category = item.category || "Uncategorized";
-        const current = acc.get(category) || { count: 0, totalValue: 0 };
+        const current = acc.get(category) || {
+          count: 0,
+          totalCapital: 0,
+          totalValue: 0,
+        };
         current.count += 1;
-        current.totalValue += item.quantity * (item.unitCost || 0);
+        current.totalCapital +=
+          item.totalCapital || item.quantity * (item.unitCost || 0);
+        current.totalValue +=
+          item.totalValue || item.quantity * (item.salePrice || 0);
         acc.set(category, current);
         return acc;
       }, new Map())
     ).map(([category, data]) => ({
       category,
       count: data.count,
+      totalCapital: data.totalCapital,
       totalValue: data.totalValue,
     })),
   };
@@ -332,12 +346,13 @@ export default function MainInventory() {
   const handleAdd = async (
     newItem: Omit<
       IInventory,
-      | "item_id"
-      | "sku"
+      | "product_id"
       | "timeCreated"
       | "timeUpdated"
       | "lastUpdated"
       | "createdAt"
+      | "totalCapital"
+      | "totalValue"
     >
   ) => {
     try {
@@ -359,6 +374,37 @@ export default function MainInventory() {
     }
   };
 
+  // Add batch items
+  const handleBatchAdd = async (
+    items: Omit<
+      IInventory,
+      | "product_id"
+      | "timeCreated"
+      | "timeUpdated"
+      | "lastUpdated"
+      | "createdAt"
+      | "totalCapital"
+      | "totalValue"
+    >[]
+  ) => {
+    try {
+      const result = await createBatchInventory(items);
+      if (result.success && result.items) {
+        setItems((prev) => [...prev, ...result.items]);
+        setIsCreateProjectOpen(false);
+        toast.success(`Successfully added ${result.count} items`);
+
+        // Invalidate chart data cache when new items are added
+        setChartData([]);
+      } else {
+        toast.error(result.error || "Failed to add items");
+      }
+    } catch (error) {
+      toast.error("Failed to add items");
+      console.error("Error creating batch items:", error);
+    }
+  };
+
   // Edit item
   const handleEdit = (item: IInventory) => {
     setIsEditInventoryOpen(true, item);
@@ -366,24 +412,27 @@ export default function MainInventory() {
 
   // Update item
   const handleUpdate = async (
-    item_id: string,
+    product_id: string,
     data: Partial<
       Omit<
         IInventory,
-        | "item_id"
-        | "sku"
+        | "product_id"
         | "timeCreated"
         | "timeUpdated"
         | "lastUpdated"
         | "createdAt"
+        | "totalCapital"
+        | "totalValue"
       >
     >
   ) => {
     try {
-      const result = await updateInventory(item_id, data);
+      const result = await updateInventory(product_id, data);
       if (result.success && result.item) {
         setItems((prev) =>
-          prev.map((item) => (item.item_id === item_id ? result.item : item))
+          prev.map((item) =>
+            item.product_id === product_id ? result.item : item
+          )
         );
         setIsEditInventoryOpen(false, null);
         toast.success("Item updated successfully");
@@ -399,12 +448,12 @@ export default function MainInventory() {
     }
   };
 
-  // Delete item using item_id
-  const handleDelete = async (item_id: string) => {
+  // Delete item using product_id
+  const handleDelete = async (product_id: string) => {
     try {
-      const result = await deleteInventory(item_id);
+      const result = await deleteInventory(product_id);
       if (result.success) {
-        setItems((prev) => prev.filter((i) => i.item_id !== item_id));
+        setItems((prev) => prev.filter((i) => i.product_id !== product_id));
         toast.success("Item deleted successfully");
 
         // Invalidate chart data cache when item is deleted
@@ -496,7 +545,7 @@ export default function MainInventory() {
 
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
-    await handleDelete(itemToDelete.item_id);
+    await handleDelete(itemToDelete.product_id);
     setIsDeleteModalOpen(false);
     setItemToDelete(null);
   };
@@ -546,13 +595,9 @@ export default function MainInventory() {
   const getStatusInfo = (item: IInventory) => {
     const quantity = item.quantity;
     const reorderPoint = item.reorderPoint ?? 0;
-    const safetyStock = item.safetyStock ?? 0;
 
     if (quantity === 0) {
       return { text: "Out of Stock", variant: "destructive" as const };
-    }
-    if (quantity <= safetyStock) {
-      return { text: "Critical", variant: "destructive" as const };
     }
     if (quantity <= reorderPoint) {
       return { text: "Low Stock", variant: "secondary" as const };
@@ -627,9 +672,43 @@ export default function MainInventory() {
                 <span className="text-sm font-medium">Total Value</span>
               </div>
               <p className="text-2xl font-bold mt-2">
-                ${inventoryStats.totalValue.toLocaleString()}
+                ₱{inventoryStats.totalValue.toLocaleString()}
               </p>
               <p className="text-xs text-gray-600">Inventory worth</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Additional Financial Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium">Total Capital</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                ₱{inventoryStats.totalCapital.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-600">
+                Total investment in inventory
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-medium">Potential Profit</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                ₱
+                {(
+                  inventoryStats.totalValue - inventoryStats.totalCapital
+                ).toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-600">Total value minus capital</p>
             </CardContent>
           </Card>
         </div>
@@ -776,10 +855,10 @@ export default function MainInventory() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4 px-5 pt-5">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground font-geist">
-              Inventory Management
+              Manage your Inventory
             </h1>
             <p className="text-gray-600 mt-1 text-sm font-geist">
-              Manage and track all inventory items and suppliers in your system
+              Manage and track all inventory items and suppliers.
             </p>
           </div>
         </div>
@@ -808,7 +887,7 @@ export default function MainInventory() {
       </div>
 
       {/* Modals */}
-      <AddItemModal onAdd={handleAdd} />
+      <AddItemModal onAdd={handleAdd} onBatchAdd={handleBatchAdd} />
       <AddSupplierModal onAdd={handleAddSupplier} />
 
       {editingInventory && (

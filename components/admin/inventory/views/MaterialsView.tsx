@@ -64,13 +64,14 @@ interface MaterialsViewProps {
   setViewMode: (mode: ViewMode) => void;
   columnVisibility: {
     id: boolean;
-    sku: boolean;
     name: boolean;
     category: boolean;
     quantity: boolean;
     unit: boolean;
     unitCost: boolean;
-    totalCost: boolean;
+    salePrice: boolean;
+    totalCapital: boolean;
+    totalValue: boolean;
     location: boolean;
     supplier: boolean;
     reorderPoint: boolean;
@@ -408,19 +409,13 @@ export function MaterialsView({
                       checked={columnVisibility.id}
                       onCheckedChange={() => toggleColumnVisibility("id")}
                     >
-                      ID
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.sku}
-                      onCheckedChange={() => toggleColumnVisibility("sku")}
-                    >
-                      SKU
+                      Product ID
                     </DropdownMenuCheckboxItem>
                     <DropdownMenuCheckboxItem
                       checked={columnVisibility.name}
                       onCheckedChange={() => toggleColumnVisibility("name")}
                     >
-                      Name
+                      Product Name
                     </DropdownMenuCheckboxItem>
                     <DropdownMenuCheckboxItem
                       checked={columnVisibility.category}
@@ -444,15 +439,31 @@ export function MaterialsView({
                       checked={columnVisibility.unitCost}
                       onCheckedChange={() => toggleColumnVisibility("unitCost")}
                     >
-                      Unit Cost
+                      Base Price
                     </DropdownMenuCheckboxItem>
                     <DropdownMenuCheckboxItem
-                      checked={columnVisibility.totalCost}
+                      checked={columnVisibility.salePrice}
                       onCheckedChange={() =>
-                        toggleColumnVisibility("totalCost")
+                        toggleColumnVisibility("salePrice")
                       }
                     >
-                      Total Cost
+                      Sale Price
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.totalCapital}
+                      onCheckedChange={() =>
+                        toggleColumnVisibility("totalCapital")
+                      }
+                    >
+                      Total Capital
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={columnVisibility.totalValue}
+                      onCheckedChange={() =>
+                        toggleColumnVisibility("totalValue")
+                      }
+                    >
+                      Total Value
                     </DropdownMenuCheckboxItem>
                     <DropdownMenuCheckboxItem
                       checked={columnVisibility.location}
