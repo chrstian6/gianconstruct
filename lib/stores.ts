@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { IInventory } from "@/types/Inventory";
+import { ISupplier } from "@/types/supplier";
 
 // Define User type for user management
 interface User {
@@ -44,6 +45,11 @@ interface ModalStore {
   isEditInventoryOpen: boolean;
   editingInventory: IInventory | null;
 
+  // Supplier modals
+  isCreateSupplierOpen: boolean;
+  isViewSupplierOpen: boolean;
+  viewingSupplier: ISupplier | null;
+
   // User management modals
   isEditUserOpen: boolean;
   editingUser: User | null;
@@ -61,6 +67,8 @@ interface ModalStore {
     open: boolean,
     inventory?: IInventory | null
   ) => void;
+  setIsCreateSupplierOpen: (open: boolean) => void;
+  setIsViewSupplierOpen: (open: boolean, supplier?: ISupplier | null) => void;
   setIsEditUserOpen: (open: boolean, user?: User | null) => void;
   setCreateAccountData: (data: CreateAccountData | null) => void;
 }
@@ -101,11 +109,14 @@ export const useModalStore = create<ModalStore>((set) => ({
   isCreateProjectOpen: false,
   isEditProjectOpen: false,
   isEditInventoryOpen: false,
+  isCreateSupplierOpen: false,
+  isViewSupplierOpen: false,
   isEditUserOpen: false,
 
   designIdToDelete: null,
   editingProject: null,
   editingInventory: null,
+  viewingSupplier: null,
   editingUser: null,
   createAccountData: null,
 
@@ -126,16 +137,10 @@ export const useModalStore = create<ModalStore>((set) => ({
       isDeleteDesignOpen: open,
       designIdToDelete: open ? (designId ?? null) : null,
     });
-    if (!open) {
-      window.location.reload();
-    }
   },
 
   setIsCreateProjectOpen: (open: boolean) => {
     set({ isCreateProjectOpen: open });
-    if (!open) {
-      window.location.reload();
-    }
   },
 
   setIsEditProjectOpen: (open: boolean, project?: any) => {
@@ -143,9 +148,6 @@ export const useModalStore = create<ModalStore>((set) => ({
       isEditProjectOpen: open,
       editingProject: open ? project : null,
     });
-    if (!open) {
-      window.location.reload();
-    }
   },
 
   setIsEditInventoryOpen: (open: boolean, inventory?: IInventory | null) => {
@@ -153,9 +155,17 @@ export const useModalStore = create<ModalStore>((set) => ({
       isEditInventoryOpen: open,
       editingInventory: open ? inventory : null,
     });
-    if (!open) {
-      window.location.reload();
-    }
+  },
+
+  setIsCreateSupplierOpen: (open: boolean) => {
+    set({ isCreateSupplierOpen: open });
+  },
+
+  setIsViewSupplierOpen: (open: boolean, supplier?: ISupplier | null) => {
+    set({
+      isViewSupplierOpen: open,
+      viewingSupplier: open ? supplier : null,
+    });
   },
 
   setIsEditUserOpen: (open: boolean, user?: User | null) => {
@@ -163,9 +173,6 @@ export const useModalStore = create<ModalStore>((set) => ({
       isEditUserOpen: open,
       editingUser: open ? user : null,
     });
-    if (!open) {
-      window.location.reload();
-    }
   },
 
   setCreateAccountData: (data: CreateAccountData | null) => {

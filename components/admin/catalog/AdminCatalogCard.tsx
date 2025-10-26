@@ -103,10 +103,10 @@ export default function AdminCatalogCard({
       <div className="rounded-none">
         <div className="flex justify-between items-start gap-2">
           <div className="flex-1 min-w-0 pb-4">
-            <h3 className="font-bold text-gray-900 text-sm text-base truncate font-geist">
+            <h3 className="font-bold text-gray-900 text-md text-base truncate font-geist">
               {formatPrice(design.price)}
             </h3>
-            <p className="text-gray-600 text-sm font-medium font-geist">
+            <p className="text-gray-600 text-sm font-medium font-geist mb-2">
               {capitalizeFirstLetter(design.name)}
             </p>
             <div className="flex items-center gap-4 text-xs text-gray-500">

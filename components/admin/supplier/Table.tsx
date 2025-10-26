@@ -123,7 +123,7 @@ export function SupplierTable({
     // Remove any non-digit characters first
     const digitsOnly = contact.replace(/\D/g, "");
 
-    // Format as XXX-XXX-XXXX if we have 11 digits
+    // Format as XXXX-XXX-XXXX if we have 11 digits
     if (digitsOnly.length === 11) {
       return digitsOnly.replace(/(\d{4})(\d{3})(\d{4})/, "$1-$2-$3");
     }
@@ -133,7 +133,7 @@ export function SupplierTable({
   };
 
   return (
-    <div className="w-full overflow-hidden rounded-sm border">
+    <div className="w-full overflow-hidden rounded-none border">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>

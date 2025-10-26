@@ -267,7 +267,7 @@ export function AppointmentCard({
 
   return (
     <Card
-      className="hover:shadow-md transition-all duration-300 border-l-4 border-l-black rounded-none hover:-translate-y-1"
+      className="hover:shadow-md transition-all duration-300 border-l-4 border-l-black  shadow-sm rounded-none hover:-translate-y-1"
       style={stackAnimation}
     >
       <CardContent className="p-0">

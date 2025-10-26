@@ -185,10 +185,10 @@ export function TransactionPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen px-10 font-geist">
+    <div className="flex flex-col min-h-screen font-geist">
       {/* Fixed Header Section */}
-      <div className="flex-shrink-0 px-6 py-2 bg-white border-gray-200">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4">
+      <div className="flex-shrink-0 bg-white border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 px-5 pt-5">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground font-geist">
               Payment Transactions

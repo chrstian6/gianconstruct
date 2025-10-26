@@ -1102,6 +1102,7 @@ export async function updateTimeslotsForNewDuration(
 }
 
 // Get appointment statistics for badges and counts
+// Get appointment statistics for badges and counts
 export async function getAppointmentStats(): Promise<{
   success: boolean;
   stats?: {
@@ -1127,9 +1128,11 @@ export async function getAppointmentStats(): Promise<{
       (inquiry) => inquiry.status === "pending"
     ).length;
 
+    // FIXED: Include both confirmed AND rescheduled appointments in upcoming count
     const upcomingCount = inquiries.filter(
       (inquiry) =>
-        inquiry.status === "confirmed" && inquiry.preferredDate >= today
+        (inquiry.status === "confirmed" || inquiry.status === "rescheduled") &&
+        inquiry.preferredDate >= today
     ).length;
 
     const confirmedCount = inquiries.filter(
