@@ -10,20 +10,16 @@ export const inventorySchema = z.object({
   description: z.string().optional(),
   supplier: z.string().optional(),
   reorderPoint: z.number().min(0, "Reorder point must be non-negative"),
-  safetyStock: z
-    .number()
-    .min(0, "Safety stock must be non-negative")
-    .optional(),
   location: z.string().optional(),
   unitCost: z.number().min(0, "Unit cost must be non-negative"),
+  salePrice: z.number().min(0, "Sale price must be non-negative").optional(),
 });
 
 export type InventoryInput = z.infer<typeof inventorySchema>;
 
 // Interface for Mongoose document
 export interface IInventoryDoc extends Document {
-  item_id: string;
-  sku: string;
+  product_id: string;
   name: string;
   category: string;
   quantity: number;
@@ -31,9 +27,9 @@ export interface IInventoryDoc extends Document {
   description?: string;
   supplier?: string;
   reorderPoint: number;
-  safetyStock?: number;
   location?: string;
   unitCost: number;
+  salePrice?: number;
   timeCreated: Date;
   timeUpdated: Date;
 }
@@ -41,12 +37,7 @@ export interface IInventoryDoc extends Document {
 // Define the schema
 const InventorySchema: Schema<IInventoryDoc> = new Schema<IInventoryDoc>(
   {
-    item_id: {
-      type: String,
-      unique: true,
-      required: true,
-    },
-    sku: {
+    product_id: {
       type: String,
       unique: true,
       required: true,
@@ -80,16 +71,16 @@ const InventorySchema: Schema<IInventoryDoc> = new Schema<IInventoryDoc>(
       type: Number,
       default: 0,
     },
-    safetyStock: {
-      type: Number,
-      default: 0,
-    },
     location: {
       type: String,
     },
     unitCost: {
       type: Number,
       required: true,
+      default: 0,
+    },
+    salePrice: {
+      type: Number,
       default: 0,
     },
     timeCreated: {
@@ -111,6 +102,16 @@ InventorySchema.virtual("lastUpdated").get(function (this: IInventoryDoc) {
 
 InventorySchema.virtual("createdAt").get(function (this: IInventoryDoc) {
   return this.timeCreated;
+});
+
+// Virtual for total capital value (unitCost * quantity)
+InventorySchema.virtual("totalCapital").get(function (this: IInventoryDoc) {
+  return this.quantity * this.unitCost;
+});
+
+// Virtual for total sale value (salePrice * quantity)
+InventorySchema.virtual("totalValue").get(function (this: IInventoryDoc) {
+  return this.quantity * (this.salePrice || 0);
 });
 
 // Ensure virtuals are included in toJSON output

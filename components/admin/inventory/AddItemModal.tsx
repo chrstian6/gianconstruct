@@ -3,28 +3,21 @@
 
 import { useState, useEffect } from "react";
 import { ProjectModalLayout } from "@/components/admin/projects/ProjectModalLayout";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useModalStore } from "@/lib/stores";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Info, Plus, X } from "lucide-react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSuppliers } from "@/action/supplier";
 import { ISupplier } from "@/types/supplier";
-import { getCategories } from "@/action/inventory"; // Assuming you have this action
+import {
+  getCategories,
+  createInventory,
+  createBatchInventory,
+} from "@/action/inventory";
+import { toast } from "sonner";
+import { SingleItemForm } from "@/components/admin/inventory/SingleItemForm";
+import { BatchItemForm } from "@/components/admin/inventory/BatchItemForm";
+import { PDCModal } from "@/components/admin/inventory/PDCModal";
 
 interface AddItemModalProps {
   onAdd: (item: {
@@ -35,94 +28,108 @@ interface AddItemModalProps {
     description?: string;
     supplier?: string;
     reorderPoint: number;
-    safetyStock: number;
     location?: string;
     unitCost: number;
+    salePrice?: number;
   }) => void;
+  onBatchAdd?: (
+    items: {
+      name: string;
+      category: string;
+      quantity: number;
+      unit: string;
+      description?: string;
+      supplier?: string;
+      reorderPoint: number;
+      location?: string;
+      unitCost: number;
+      salePrice?: number;
+    }[]
+  ) => void;
 }
 
-// Construction-specific units of measurement
-const CONSTRUCTION_UNITS = [
-  // Weight Units
-  { value: "kg", label: "Kilograms (kg)", category: "Weight" },
-  { value: "g", label: "Grams (g)", category: "Weight" },
-  { value: "tons", label: "Metric Tons", category: "Weight" },
-  { value: "lbs", label: "Pounds (lbs)", category: "Weight" },
+export interface ItemForm {
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  description: string;
+  reorderPoint: number;
+  location: string;
+  unitCost: number;
+  salePrice: number;
+}
 
-  // Volume Units
-  { value: "m³", label: "Cubic Meters (m³)", category: "Volume" },
-  { value: "cm³", label: "Cubic Centimeters (cm³)", category: "Volume" },
-  { value: "L", label: "Liters (L)", category: "Volume" },
-  { value: "mL", label: "Milliliters (mL)", category: "Volume" },
-  { value: "gal", label: "Gallons (gal)", category: "Volume" },
-  { value: "bags", label: "Bags", category: "Volume" },
-  { value: "drums", label: "Drums", category: "Volume" },
+export interface BatchForm {
+  supplier: string;
+  location: string;
+  items: (ItemForm & { isOpen: boolean })[];
+}
 
-  // Length/Distance Units
-  { value: "m", label: "Meters (m)", category: "Length" },
-  { value: "cm", label: "Centimeters (cm)", category: "Length" },
-  { value: "mm", label: "Millimeters (mm)", category: "Length" },
-  { value: "km", label: "Kilometers (km)", category: "Length" },
-  { value: "ft", label: "Feet (ft)", category: "Length" },
-  { value: "in", label: "Inches (in)", category: "Length" },
-  { value: "yd", label: "Yards (yd)", category: "Length" },
+export interface PDCData {
+  checkDate: Date | undefined;
+  totalAmount: number;
+  supplier: string;
+  itemCount: number;
+  payee: string;
+  amountInWords: string;
+}
 
-  // Area Units
-  { value: "m²", label: "Square Meters (m²)", category: "Area" },
-  { value: "cm²", label: "Square Centimeters (cm²)", category: "Area" },
-  { value: "mm²", label: "Square Millimeters (mm²)", category: "Area" },
-  { value: "ft²", label: "Square Feet (ft²)", category: "Area" },
-  { value: "in²", label: "Square Inches (in²)", category: "Area" },
-  { value: "yd²", label: "Square Yards (yd²)", category: "Area" },
-  { value: "hectares", label: "Hectares", category: "Area" },
-  { value: "acres", label: "Acres", category: "Area" },
-
-  // Countable Units
-  { value: "pcs", label: "Pieces (pcs)", category: "Count" },
-  { value: "units", label: "Units", category: "Count" },
-  { value: "packs", label: "Packs", category: "Count" },
-  { value: "bundles", label: "Bundles", category: "Count" },
-  { value: "rolls", label: "Rolls", category: "Count" },
-  { value: "sheets", label: "Sheets", category: "Count" },
-  { value: "panels", label: "Panels", category: "Count" },
-  { value: "blocks", label: "Blocks", category: "Count" },
-  { value: "tiles", label: "Tiles", category: "Count" },
-
-  // Time Units
-  { value: "hours", label: "Hours", category: "Time" },
-  { value: "days", label: "Days", category: "Time" },
-  { value: "weeks", label: "Weeks", category: "Time" },
-  { value: "months", label: "Months", category: "Time" },
-
-  // Special Construction Units
-  { value: "set", label: "Set", category: "Special" },
-  { value: "kit", label: "Kit", category: "Special" },
-  { value: "pair", label: "Pair", category: "Special" },
-  { value: "lot", label: "Lot", category: "Special" },
-  { value: "pallet", label: "Pallet", category: "Special" },
-  { value: "skid", label: "Skid", category: "Special" },
-];
-
-export function AddItemModal({ onAdd }: AddItemModalProps) {
+export function AddItemModal({ onAdd, onBatchAdd }: AddItemModalProps) {
   const { isCreateProjectOpen, setIsCreateProjectOpen } = useModalStore();
   const [suppliers, setSuppliers] = useState<ISupplier[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [showCustomCategory, setShowCustomCategory] = useState(false);
-  const [customCategory, setCustomCategory] = useState("");
-
-  const [form, setForm] = useState({
-    name: "",
-    category: "",
-    quantity: 0,
-    unit: "",
-    description: "",
+  const [batchMode, setBatchMode] = useState(false);
+  const [showPDCModal, setShowPDCModal] = useState(false);
+  const [pdcData, setPdcData] = useState<PDCData>({
+    checkDate: undefined,
+    totalAmount: 0,
     supplier: "",
-    reorderPoint: 0,
-    safetyStock: 0,
+    itemCount: 0,
+    payee: "EDNA B. SEGUIRO", // Hardcoded payee
+    amountInWords: "",
+  });
+  const [createdItems, setCreatedItems] = useState<any[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [hasPDCBeenCreated, setHasPDCBeenCreated] = useState(false);
+  const [toastShown, setToastShown] = useState(false); // Prevent duplicate toasts
+
+  // Single item state
+  const [singleItem, setSingleItem] = useState<ItemForm & { supplier: string }>(
+    {
+      name: "",
+      category: "",
+      quantity: 0,
+      unit: "",
+      description: "",
+      supplier: "none",
+      reorderPoint: 0,
+      location: "",
+      unitCost: 0,
+      salePrice: 0,
+    }
+  );
+
+  // Batch state
+  const [batchForm, setBatchForm] = useState<BatchForm>({
+    supplier: "none",
     location: "",
-    unitCost: 0,
+    items: [
+      {
+        name: "",
+        category: "",
+        quantity: 0,
+        unit: "",
+        description: "",
+        reorderPoint: 0,
+        location: "",
+        unitCost: 0,
+        salePrice: 0,
+        isOpen: false,
+      },
+    ],
   });
 
   // Fetch suppliers and categories when modal opens
@@ -133,14 +140,12 @@ export function AddItemModal({ onAdd }: AddItemModalProps) {
           setLoadingSuppliers(true);
           setLoadingCategories(true);
 
-          // Fetch suppliers
           const supplierData = await getSuppliers();
           const activeSuppliers = supplierData.filter(
             (supplier) => supplier.status === "active"
           );
           setSuppliers(activeSuppliers);
 
-          // Fetch categories
           const categoryData = await getCategories();
           setCategories(categoryData);
         } catch (error) {
@@ -155,677 +160,528 @@ export function AddItemModal({ onAdd }: AddItemModalProps) {
     fetchData();
   }, [isCreateProjectOpen]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]:
-        name === "quantity" ||
-        name === "reorderPoint" ||
-        name === "safetyStock" ||
-        name === "unitCost"
-          ? Number(value)
-          : value,
-    }));
-  };
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isCreateProjectOpen && !showPDCModal) {
+      resetForms();
+    }
+  }, [isCreateProjectOpen, showPDCModal]);
 
-  const handleUnitChange = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      unit: value,
-    }));
-  };
+  // Calculate totals for single item
+  const calculatedSingleTotalCapital =
+    singleItem.quantity * singleItem.unitCost;
 
-  const handleSupplierChange = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      supplier: value,
-    }));
-  };
+  // Calculate batch totals
+  const batchTotals = batchForm.items.reduce(
+    (acc, item) => {
+      const totalCapital = item.quantity * item.unitCost;
+      const totalValue = item.quantity * (item.salePrice || 0);
+      const isValidItem =
+        item.name && item.category && item.unit && item.unitCost > 0;
 
-  const handleCategoryChange = (value: string) => {
-    if (value === "add_new") {
-      setShowCustomCategory(true);
-      setForm((prev) => ({ ...prev, category: "" }));
+      return {
+        totalCapital: acc.totalCapital + totalCapital,
+        totalValue: acc.totalValue + totalValue,
+        itemCount: isValidItem ? acc.itemCount + 1 : acc.itemCount,
+      };
+    },
+    { totalCapital: 0, totalValue: 0, itemCount: 0 }
+  );
+
+  // Calculate total capital for PDC
+  const totalCapital = batchMode
+    ? batchTotals.totalCapital
+    : calculatedSingleTotalCapital;
+  const validBatchItemsCount = batchForm.items.filter(
+    (item) => item.name && item.category && item.unit && item.unitCost > 0
+  ).length;
+  const itemCount = batchMode
+    ? validBatchItemsCount
+    : singleItem.name &&
+        singleItem.category &&
+        singleItem.unit &&
+        singleItem.unitCost > 0
+      ? 1
+      : 0;
+  const selectedSupplier = batchMode ? batchForm.supplier : singleItem.supplier;
+
+  // Convert number to words for cheque amount
+  const numberToWords = (num: number): string => {
+    if (num === 0) return "Zero Pesos Only";
+
+    const ones = [
+      "",
+      "One",
+      "Two",
+      "Three",
+      "Four",
+      "Five",
+      "Six",
+      "Seven",
+      "Eight",
+      "Nine",
+      "Ten",
+      "Eleven",
+      "Twelve",
+      "Thirteen",
+      "Fourteen",
+      "Fifteen",
+      "Sixteen",
+      "Seventeen",
+      "Eighteen",
+      "Nineteen",
+    ];
+
+    const tens = [
+      "",
+      "",
+      "Twenty",
+      "Thirty",
+      "Forty",
+      "Fifty",
+      "Sixty",
+      "Seventy",
+      "Eighty",
+      "Ninety",
+    ];
+
+    const scales = ["", "Thousand", "Million", "Billion"];
+
+    function convertHundreds(n: number): string {
+      if (n === 0) return "";
+
+      let words = "";
+
+      if (n >= 100) {
+        words += ones[Math.floor(n / 100)] + " Hundred ";
+        n %= 100;
+      }
+
+      if (n >= 20) {
+        words += tens[Math.floor(n / 10)] + " ";
+        n %= 10;
+      }
+
+      if (n > 0) {
+        words += ones[n] + " ";
+      }
+
+      return words.trim();
+    }
+
+    let words = "";
+    let scaleIndex = 0;
+    let number = Math.floor(num);
+
+    if (number === 0) {
+      words = "Zero";
     } else {
-      setShowCustomCategory(false);
-      setForm((prev) => ({ ...prev, category: value }));
+      while (number > 0) {
+        const chunk = number % 1000;
+        if (chunk !== 0) {
+          const chunkWords = convertHundreds(chunk);
+          words =
+            chunkWords +
+            (scales[scaleIndex] ? " " + scales[scaleIndex] + " " : "") +
+            words;
+        }
+        number = Math.floor(number / 1000);
+        scaleIndex++;
+      }
+    }
+
+    words = words.trim() + " Pesos";
+
+    const centavos = Math.round((num - Math.floor(num)) * 100);
+    if (centavos > 0) {
+      let centavoWords = "";
+      if (centavos >= 20) {
+        centavoWords += tens[Math.floor(centavos / 10)];
+        if (centavos % 10 > 0) {
+          centavoWords += " " + ones[centavos % 10];
+        }
+      } else if (centavos > 0) {
+        centavoWords = ones[centavos];
+      }
+      words += " and " + centavoWords + " Centavos";
+    }
+
+    return words + " Only";
+  };
+
+  // Prepare items data for submission
+  const prepareItemsData = () => {
+    if (batchMode) {
+      const validItems = batchForm.items.filter(
+        (item) => item.name && item.category && item.unit && item.unitCost > 0
+      );
+
+      if (validItems.length === 0) {
+        throw new Error("Please add at least one valid item");
+      }
+
+      return validItems.map((item) => ({
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unit: item.unit,
+        description: item.description || undefined,
+        supplier:
+          batchForm.supplier === "none" ? undefined : batchForm.supplier,
+        reorderPoint: item.reorderPoint,
+        location: item.location || batchForm.location || undefined,
+        unitCost: item.unitCost,
+        salePrice: item.salePrice || undefined,
+      }));
+    } else {
+      return [
+        {
+          ...singleItem,
+          description: singleItem.description || undefined,
+          supplier:
+            singleItem.supplier === "none" ? undefined : singleItem.supplier,
+          location: singleItem.location || undefined,
+          salePrice: singleItem.salePrice || undefined,
+        },
+      ];
     }
   };
 
-  const handleCustomCategoryChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+  // Create items and get their actual product IDs
+  const createItemsAndGetIds = async (itemsData: any[]) => {
+    setIsProcessing(true);
+    try {
+      let createdItemsWithIds = [];
+
+      if (batchMode) {
+        const result = await createBatchInventory(itemsData);
+        if (result.success && result.items) {
+          createdItemsWithIds = result.items;
+        } else {
+          throw new Error(result.error || "Failed to create batch items");
+        }
+      } else {
+        const result = await createInventory(itemsData[0]);
+        if (result.success && result.item) {
+          createdItemsWithIds = [result.item];
+        } else {
+          throw new Error(result.error || "Failed to create item");
+        }
+      }
+
+      return createdItemsWithIds;
+    } catch (error) {
+      console.error("Failed to create items:", error);
+      toast.error("Failed to create items");
+      throw error;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Show single toast (prevent duplicates)
+  const showToast = (
+    message: string,
+    type: "success" | "error" = "success"
   ) => {
-    const value = e.target.value;
-    setCustomCategory(value);
-    setForm((prev) => ({ ...prev, category: value }));
+    if (!toastShown) {
+      setToastShown(true);
+      if (type === "success") {
+        toast.success(message);
+      } else {
+        toast.error(message);
+      }
+
+      // Reset toast flag after a short delay
+      setTimeout(() => setToastShown(false), 1000);
+    }
   };
 
-  const handleCancelCustomCategory = () => {
-    setShowCustomCategory(false);
-    setCustomCategory("");
-    setForm((prev) => ({ ...prev, category: "" }));
+  // Handle form submission
+  const handleSubmit = async () => {
+    try {
+      const itemsData = prepareItemsData();
+
+      if (totalCapital > 0 && selectedSupplier && selectedSupplier !== "none") {
+        // PDC Flow: Create items first, then show PDC modal
+        const createdItems = await createItemsAndGetIds(itemsData);
+        setCreatedItems(createdItems);
+
+        // Close the main modal first
+        setIsCreateProjectOpen(false);
+
+        // Then show PDC modal
+        setPdcData({
+          checkDate: undefined,
+          totalAmount: totalCapital,
+          supplier: selectedSupplier,
+          itemCount: createdItems.length,
+          payee: "EDNA B. SEGUIRO", // Hardcoded payee
+          amountInWords: numberToWords(totalCapital),
+        });
+        setShowPDCModal(true);
+        setHasPDCBeenCreated(false);
+      } else {
+        // Non-PDC Flow: Create items and notify parent
+        await createItemsAndGetIds(itemsData);
+
+        // Notify parent to refresh inventory
+        if (batchMode) {
+          if (onBatchAdd) {
+            onBatchAdd(itemsData);
+          }
+        } else {
+          onAdd(itemsData[0]);
+        }
+
+        // Close modal and reset
+        setIsCreateProjectOpen(false);
+        resetForms();
+        showToast(
+          batchMode
+            ? `Successfully added ${itemsData.length} items`
+            : "Item added successfully"
+        );
+      }
+    } catch (error) {
+      console.error("Error in handleSubmit:", error);
+    }
   };
 
-  const handleSubmit = () => {
-    // Filter out empty optional fields
-    const itemData = {
-      ...form,
-      description: form.description || undefined,
-      supplier: form.supplier || undefined,
-      location: form.location || undefined,
-    };
+  // Handle PDC confirmation - This is called AFTER PDC is created in PDCModal
+  const handlePDCConfirm = () => {
+    // Prevent duplicate execution
+    if (hasPDCBeenCreated) {
+      return;
+    }
 
-    onAdd(itemData);
-    // Reset form after submission
-    setForm({
+    // Prepare items data for parent callback
+    const itemsData = prepareItemsData();
+
+    // Notify parent to refresh inventory
+    if (batchMode) {
+      if (onBatchAdd) {
+        onBatchAdd(itemsData);
+      }
+    } else {
+      onAdd(itemsData[0]);
+    }
+
+    // Mark PDC as created and reset
+    setHasPDCBeenCreated(true);
+    setShowPDCModal(false);
+    resetForms();
+    showToast("PDC recorded successfully");
+  };
+
+  // Handle PDC cancellation
+  const handlePDCCancel = () => {
+    // Prepare items data for parent callback
+    const itemsData = prepareItemsData();
+
+    // Notify parent to refresh inventory (items were already created)
+    if (batchMode) {
+      if (onBatchAdd) {
+        onBatchAdd(itemsData);
+      }
+    } else {
+      onAdd(itemsData[0]);
+    }
+
+    // Close PDC modal and reset
+    setShowPDCModal(false);
+    resetForms();
+    showToast("Items added successfully");
+  };
+
+  // Reset all forms
+  const resetForms = () => {
+    setSingleItem({
       name: "",
       category: "",
       quantity: 0,
       unit: "",
       description: "",
-      supplier: "",
+      supplier: "none",
       reorderPoint: 0,
-      safetyStock: 0,
       location: "",
       unitCost: 0,
+      salePrice: 0,
     });
-    setShowCustomCategory(false);
-    setCustomCategory("");
+    setBatchForm({
+      supplier: "none",
+      location: "",
+      items: [
+        {
+          name: "",
+          category: "",
+          quantity: 0,
+          unit: "",
+          description: "",
+          reorderPoint: 0,
+          location: "",
+          unitCost: 0,
+          salePrice: 0,
+          isOpen: false,
+        },
+      ],
+    });
+    setBatchMode(false);
+    setCreatedItems([]);
+    setHasPDCBeenCreated(false);
+    setToastShown(false);
+    setShowPDCModal(false);
   };
 
   const handleCancel = () => {
-    // Reset form on cancel
-    setForm({
-      name: "",
-      category: "",
-      quantity: 0,
-      unit: "",
-      description: "",
-      supplier: "",
-      reorderPoint: 0,
-      safetyStock: 0,
-      location: "",
-      unitCost: 0,
-    });
-    setShowCustomCategory(false);
-    setCustomCategory("");
     setIsCreateProjectOpen(false);
+    resetForms();
   };
 
-  const calculatedTotalCost = form.quantity * form.unitCost;
+  const isSingleFormValid =
+    singleItem.name &&
+    singleItem.category &&
+    singleItem.unit &&
+    singleItem.unitCost > 0;
 
-  // Group units by category for better organization
-  const groupedUnits = CONSTRUCTION_UNITS.reduce(
-    (acc, unit) => {
-      if (!acc[unit.category]) {
-        acc[unit.category] = [];
-      }
-      acc[unit.category].push(unit);
-      return acc;
-    },
-    {} as Record<string, typeof CONSTRUCTION_UNITS>
-  );
+  const isBatchFormValid =
+    batchForm.supplier &&
+    batchForm.supplier !== "none" &&
+    validBatchItemsCount > 0;
+
+  // Get inventory items for PDC display
+  const getInventoryItemsForPDC = () => {
+    return createdItems.map((item) => ({
+      product_id: item.product_id,
+      name: item.name,
+      quantity: item.quantity,
+      unitCost: item.unitCost,
+      unit: item.unit,
+      category: item.category,
+    }));
+  };
+
+  // Get items list for display in PDC modal
+  const getItemsListForDisplay = () => {
+    return createdItems.map((item) => item.name);
+  };
 
   return (
     <TooltipProvider>
       <ProjectModalLayout
         open={isCreateProjectOpen}
-        onOpenChange={setIsCreateProjectOpen}
-        title="Add New Inventory Item"
-        description="Complete the form below to add a new item to your inventory. All fields with detailed descriptions to help you provide accurate information."
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancel();
+          } else {
+            setIsCreateProjectOpen(true);
+          }
+        }}
+        title="Add Inventory Items"
+        description={
+          batchMode
+            ? "Add multiple items from a single supplier. Perfect for bulk imports and efficient inventory management."
+            : "Complete the form below to add a new item to your inventory."
+        }
         footerActions={
           <>
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              className="flex-1 min-w-[120px] order-2 sm:order-1 border-gray-300 text-gray-700 hover:bg-gray-100 rounded-full font-geist"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={
-                !form.name || !form.category || !form.unit || form.unitCost <= 0
-              }
-              className="flex-1 min-w-[120px] order-1 sm:order-2 bg-gray-900 hover:bg-gray-800 text-white rounded-full font-geist disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              Add to Inventory
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="batchMode"
+                  checked={batchMode}
+                  onChange={(e) => setBatchMode(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="batchMode" className="text-sm font-geist">
+                  Add multiple items from one supplier
+                </Label>
+              </div>
+
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  onClick={handleCancel}
+                  className="min-w-[120px] border-gray-300 text-gray-700 hover:bg-gray-100 rounded-full font-geist"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={
+                    batchMode
+                      ? !isBatchFormValid
+                      : !isSingleFormValid || isProcessing
+                  }
+                  className="min-w-[120px] bg-gray-900 hover:bg-gray-800 text-white rounded-full font-geist disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {isProcessing
+                    ? "Creating..."
+                    : batchMode
+                      ? `Add ${validBatchItemsCount} Item${validBatchItemsCount !== 1 ? "s" : ""}`
+                      : "Add to Inventory"}
+                </Button>
+              </div>
+            </div>
           </>
         }
       >
         <div className="space-y-6">
-          {/* Name and Category */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="name"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Item Name
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Enter the descriptive name of the item as it will appear
-                      in your inventory lists and reports.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Input
-                id="name"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="e.g., 2x4 Lumber, Concrete Mix, Paint Brush"
-                className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-                required
-              />
-              <p className="text-xs text-gray-600 font-geist">
-                Example: 2x4 Lumber, Concrete Mix, Paint Brush
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="category"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Category
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Select an existing category or add a new one for better
-                      organization.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-
-              {showCustomCategory ? (
-                <div className="relative">
-                  <Input
-                    id="customCategory"
-                    value={customCategory}
-                    onChange={handleCustomCategoryChange}
-                    placeholder="Enter new category name"
-                    className="py-2.5 px-3.5 pr-10 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCancelCustomCategory}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <Select
-                  value={form.category}
-                  onValueChange={handleCategoryChange}
-                >
-                  <SelectTrigger className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist">
-                    <SelectValue
-                      placeholder={
-                        loadingCategories
-                          ? "Loading categories..."
-                          : "Select category..."
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                    {categories.length === 0 && !loadingCategories && (
-                      <SelectItem value="none" disabled>
-                        No categories found
-                      </SelectItem>
-                    )}
-                    <SelectItem
-                      value="add_new"
-                      className="flex items-center gap-2 text-blue-600 focus:text-blue-600"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add new category
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-              <p className="text-xs text-gray-600 font-geist">
-                Example: Lumber, Fasteners, Tools, Electrical
-              </p>
-            </div>
-          </div>
-
-          {/* Quantity and Unit */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="quantity"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Initial Quantity
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Enter the starting quantity of this item in your
-                      inventory. Use 0 if adding for future use.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Input
-                id="quantity"
-                type="number"
-                name="quantity"
-                value={form.quantity}
-                onChange={handleChange}
-                min="0"
-                placeholder="0"
-                className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-              />
-              <p className="text-xs text-gray-600 font-geist">
-                Current stock level for this item
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="unit"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Unit of Measurement
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Select the appropriate unit of measurement for this
-                      construction item.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Select value={form.unit} onValueChange={handleUnitChange}>
-                <SelectTrigger className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist">
-                  <SelectValue placeholder="Select unit..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-96">
-                  {Object.entries(groupedUnits).map(([category, units]) => (
-                    <div key={category}>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase bg-gray-100">
-                        {category}
-                      </div>
-                      {units.map((unit) => (
-                        <SelectItem key={unit.value} value={unit.value}>
-                          {unit.label}
-                        </SelectItem>
-                      ))}
-                    </div>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-600 font-geist">
-                Choose from construction-specific measurement units
-              </p>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Label
-                htmlFor="description"
-                className="text-sm font-medium text-gray-900 font-geist"
-              >
-                Item Description
-              </Label>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-sm">
-                    Add detailed specifications, quality notes, or any special
-                    characteristics of this item.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <Textarea
-              id="description"
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              placeholder="Optional: Specifications, quality notes, dimensions, or special characteristics..."
-              rows={3}
-              className="bg-white border-gray-300 focus:ring-gray-500 font-geist"
+          {batchMode ? (
+            <BatchItemForm
+              batchForm={batchForm}
+              setBatchForm={setBatchForm}
+              suppliers={suppliers}
+              categories={categories}
+              loadingSuppliers={loadingSuppliers}
+              loadingCategories={loadingCategories}
+              batchTotals={batchTotals}
+              validBatchItemsCount={validBatchItemsCount}
             />
-            <p className="text-xs text-gray-600 font-geist">
-              Helpful for identifying specific variants or quality levels
-            </p>
-          </div>
-
-          {/* Supplier Information */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Label
-                htmlFor="supplier"
-                className="text-sm font-medium text-gray-900 font-geist"
-              >
-                Primary Supplier
-              </Label>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-sm">
-                    Select the main supplier for this item from your active
-                    suppliers list.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <Select value={form.supplier} onValueChange={handleSupplierChange}>
-              <SelectTrigger className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist">
-                <SelectValue
-                  placeholder={
-                    loadingSuppliers
-                      ? "Loading suppliers..."
-                      : "Select supplier..."
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="string">None (No supplier)</SelectItem>
-                {suppliers.map((supplier) => (
-                  <SelectItem
-                    key={supplier.supplier_id}
-                    value={supplier.companyName}
-                  >
-                    {supplier.companyName}
-                  </SelectItem>
-                ))}
-                {suppliers.length === 0 && !loadingSuppliers && (
-                  <SelectItem value="" disabled>
-                    No active suppliers found
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-600 font-geist">
-              {loadingSuppliers
-                ? "Loading active suppliers..."
-                : suppliers.length > 0
-                  ? `Choose from ${suppliers.length} active suppliers`
-                  : "No active suppliers available. Add suppliers first."}
-            </p>
-          </div>
-
-          {/* Reorder Point, Safety Stock and Unit Cost */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="reorderPoint"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Reorder Point
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Set the minimum quantity that triggers a reorder alert.
-                      Helps prevent stockouts.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Input
-                id="reorderPoint"
-                type="number"
-                name="reorderPoint"
-                value={form.reorderPoint}
-                onChange={handleChange}
-                min="0"
-                placeholder="0"
-                className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-              />
-              <p className="text-xs text-gray-600 font-geist">
-                Alert when stock falls below this level
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="safetyStock"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Safety Stock
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Set the minimum buffer stock to handle unexpected demand
-                      or supply delays.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Input
-                id="safetyStock"
-                type="number"
-                name="safetyStock"
-                value={form.safetyStock}
-                onChange={handleChange}
-                min="0"
-                placeholder="0"
-                className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-              />
-              <p className="text-xs text-gray-600 font-geist">
-                Buffer stock for unexpected demand
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="unitCost"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Unit Cost
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Enter the cost per unit. This is used for inventory
-                      valuation and cost tracking.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600 font-geist">
-                  ₱
-                </span>
-                <Input
-                  id="unitCost"
-                  type="number"
-                  name="unitCost"
-                  value={form.unitCost}
-                  onChange={handleChange}
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  className="py-2.5 pl-8 pr-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-                  required
-                />
-              </div>
-              <p className="text-xs text-gray-600 font-geist">
-                Cost per unit for inventory valuation
-              </p>
-            </div>
-          </div>
-
-          {/* Location */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Label
-                htmlFor="location"
-                className="text-sm font-medium text-gray-900 font-geist"
-              >
-                Storage Location
-              </Label>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-sm">
-                    Specify where this item is stored (shelf, bin, room, or
-                    warehouse location).
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <Input
-              id="location"
-              name="location"
-              value={form.location}
-              onChange={handleChange}
-              placeholder="Optional: Shelf A5, Bin 12, Warehouse North"
-              className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
+          ) : (
+            <SingleItemForm
+              singleItem={singleItem}
+              setSingleItem={setSingleItem}
+              suppliers={suppliers}
+              categories={categories}
+              loadingSuppliers={loadingSuppliers}
+              loadingCategories={loadingCategories}
+              calculatedSingleTotalCapital={calculatedSingleTotalCapital}
             />
-            <p className="text-xs text-gray-600 font-geist">
-              Example: Shelf A5, Bin 12, Warehouse North
-            </p>
-          </div>
-
-          {/* Summary Card */}
-          {(form.quantity > 0 || form.unitCost > 0) && (
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h4 className="text-sm font-medium mb-3 text-blue-900 font-geist flex items-center gap-2">
-                <Info className="h-4 w-4" />
-                Inventory Summary
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                {form.quantity > 0 && (
-                  <div>
-                    <span className="text-blue-700 font-geist">
-                      Initial Stock:
-                    </span>
-                    <p className="font-medium text-blue-900 font-geist">
-                      {form.quantity.toLocaleString()} {form.unit || "units"}
-                    </p>
-                  </div>
-                )}
-                {form.unitCost > 0 && (
-                  <div>
-                    <span className="text-blue-700 font-geist">Unit Cost:</span>
-                    <p className="font-medium text-blue-900 font-geist">
-                      ₱
-                      {form.unitCost.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </p>
-                  </div>
-                )}
-                {form.quantity > 0 && form.unitCost > 0 && (
-                  <div>
-                    <span className="text-blue-700 font-geist">
-                      Total Inventory Value:
-                    </span>
-                    <p className="font-medium text-blue-900 font-geist">
-                      ₱
-                      {calculatedTotalCost.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </p>
-                  </div>
-                )}
-                {form.reorderPoint > 0 && (
-                  <div>
-                    <span className="text-blue-700 font-geist">
-                      Reorder Alert:
-                    </span>
-                    <p className="font-medium text-blue-900 font-geist">
-                      When stock drops below {form.reorderPoint}{" "}
-                      {form.unit || "units"}
-                    </p>
-                  </div>
-                )}
-                {form.safetyStock > 0 && (
-                  <div>
-                    <span className="text-blue-700 font-geist">
-                      Safety Stock:
-                    </span>
-                    <p className="font-medium text-blue-900 font-geist">
-                      {form.safetyStock.toLocaleString()} {form.unit || "units"}
-                    </p>
-                  </div>
-                )}
-                {form.supplier && (
-                  <div>
-                    <span className="text-blue-700 font-geist">
-                      Selected Supplier:
-                    </span>
-                    <p className="font-medium text-blue-900 font-geist">
-                      {form.supplier}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
           )}
 
           {/* Required Fields Note */}
           <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
             <p className="text-xs text-gray-600 font-geist">
-              <span className="font-medium">Note:</span> Fields marked with
-              detailed descriptions are required for proper inventory
-              management. All other fields are optional but recommended for
-              better organization.
+              <span className="font-medium">Note:</span> Fields marked with *
+              are required.
+              {batchMode &&
+                " In batch mode, you must select a supplier and each item must have a name, category, unit, and base price."}
             </p>
+            {totalCapital > 0 &&
+              selectedSupplier &&
+              selectedSupplier !== "none" && (
+                <p className="text-xs text-blue-600 mt-1 font-geist">
+                  ✓ Items will be created first, then you'll be prompted to
+                  create a PDC record.
+                </p>
+              )}
           </div>
         </div>
       </ProjectModalLayout>
+
+      {/* PDC Modal */}
+      <PDCModal
+        showPDCModal={showPDCModal}
+        pdcData={pdcData}
+        setPdcData={setPdcData}
+        onConfirm={handlePDCConfirm}
+        onCancel={handlePDCCancel}
+        itemsList={getItemsListForDisplay()}
+        inventoryItems={getInventoryItemsForPDC()}
+        batchMode={batchMode}
+      />
     </TooltipProvider>
   );
 }

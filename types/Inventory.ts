@@ -1,7 +1,6 @@
 // types/Inventory.ts
 export interface IInventory {
-  item_id: string; // xxxx-xxxx format
-  sku: string; // unique SKU code
+  product_id: string; // xxxx-xxxx format
   name: string;
   category: string;
   quantity: number;
@@ -9,9 +8,11 @@ export interface IInventory {
   description?: string;
   supplier?: string;
   reorderPoint: number; // stock threshold
-  safetyStock?: number; // safety stock level
   location?: string; // warehouse or site location
-  unitCost: number; // cost per unit
+  unitCost: number; // cost per unit (base price)
+  salePrice?: number; // selling price
+  totalCapital?: number; // unitCost * quantity (virtual)
+  totalValue?: number; // salePrice * quantity (virtual)
   timeCreated: string; // ISO string date
   timeUpdated: string; // ISO string date
   lastUpdated?: string; // alias for timeUpdated
@@ -27,13 +28,14 @@ export interface MaterialsViewProps {
   viewMode: "table" | "grid";
   columnVisibility: {
     id: boolean;
-    sku: boolean;
     name: boolean;
     category: boolean;
     quantity: boolean;
     unit: boolean;
     unitCost: boolean;
-    totalCost: boolean;
+    salePrice: boolean;
+    totalCapital: boolean;
+    totalValue: boolean;
     location: boolean;
     supplier: boolean;
     reorderPoint: boolean;
@@ -52,13 +54,14 @@ export interface MaterialsViewProps {
   onColumnVisibilityChange: (
     column:
       | "id"
-      | "sku"
       | "name"
       | "category"
       | "quantity"
       | "unit"
       | "unitCost"
-      | "totalCost"
+      | "salePrice"
+      | "totalCapital"
+      | "totalValue"
       | "location"
       | "supplier"
       | "reorderPoint"

@@ -1,6 +1,5 @@
 // app/admin/main-inventory/page.tsx
 "use client";
-
 import { useEffect, useState, useCallback } from "react";
 import { IInventory } from "@/types/Inventory";
 import { ISupplier } from "@/types/supplier";
@@ -11,6 +10,7 @@ import {
   deleteInventory,
   getInventoryByCategory,
   getCategories,
+  createBatchInventory,
 } from "@/action/inventory";
 import {
   getSuppliers,
@@ -28,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   CheckCircle,
   AlertTriangle,
@@ -36,6 +37,12 @@ import {
   Search,
   Plus,
   Filter,
+  Banknote,
+  Clock,
+  CheckSquare,
+  XCircle,
+  Eye,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmationModal from "@/components/ConfirmationModal";
@@ -57,12 +64,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PDCWithItems } from "@/types/pdc";
+import {
+  getAllPDCs,
+  getPDCStats,
+  updatePDCStatus,
+  deletePDC,
+  getPDCById,
+} from "@/action/pdc";
+import { PDCDetailsModal } from "@/components/admin/inventory/PDCDetailsModal";
+import { PDCTab } from "@/components/admin/inventory/tabs/PDCTab";
+import { format } from "date-fns";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
 type SupplierStatusFilter = "all" | "active" | "inactive" | "pending";
 type CategoryFilter = "all" | string;
 type ViewMode = "table" | "grid";
 type ActiveTab = "analytics" | "materials" | "pdc" | "suppliers";
+type PDCStatusFilter = "all" | "pending" | "issued" | "cancelled";
 
 interface CategoryData {
   category: string;
@@ -70,43 +90,55 @@ interface CategoryData {
     name: string;
     quantity: number;
     reorderPoint: number;
-    safetyStock?: number;
   }[];
 }
 
 export default function MainInventory() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<IInventory[]>([]);
   const [suppliers, setSuppliers] = useState<ISupplier[]>([]);
+  const [pdcs, setPdcs] = useState<PDCWithItems[]>([]);
+  const [pdcStats, setPdcStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [suppliersLoading, setSuppliersLoading] = useState(true);
+  const [pdcsLoading, setPdcsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
+  const [pdcSearchTerm, setPdcSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [supplierStatusFilter, setSupplierStatusFilter] =
     useState<SupplierStatusFilter>("all");
+  const [pdcStatusFilter, setPdcStatusFilter] =
+    useState<PDCStatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSupplierFilterOpen, setIsSupplierFilterOpen] = useState(false);
+  const [isPDCFilterOpen, setIsPDCFilterOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<IInventory | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<ISupplier | null>(
     null
   );
+  const [pdcToDelete, setPdcToDelete] = useState<PDCWithItems | null>(null);
+  const [selectedPDC, setSelectedPDC] = useState<PDCWithItems | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isSupplierDeleteModalOpen, setIsSupplierDeleteModalOpen] =
     useState(false);
+  const [isPDCDeleteModalOpen, setIsPDCDeleteModalOpen] = useState(false);
+  const [isPDCDetailsOpen, setIsPDCDetailsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [activeTab, setActiveTab] = useState<ActiveTab>("materials");
   const [selectedItem, setSelectedItem] = useState<IInventory | null>(null);
   const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState({
     id: true,
-    sku: true,
     name: true,
     category: true,
     quantity: true,
     unit: true,
     unitCost: true,
-    totalCost: true,
+    salePrice: true,
+    totalCapital: true,
+    totalValue: true,
     location: true,
     supplier: true,
     reorderPoint: true,
@@ -119,11 +151,23 @@ export default function MainInventory() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [supplierCurrentPage, setSupplierCurrentPage] = useState(1);
   const [supplierItemsPerPage, setSupplierItemsPerPage] = useState(10);
+  const [pdcCurrentPage, setPdcCurrentPage] = useState(1);
+  const [pdcItemsPerPage, setPdcItemsPerPage] = useState(10);
 
   // Chart data states
   const [chartData, setChartData] = useState<CategoryData[]>([]);
   const [chartCategories, setChartCategories] = useState<string[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
+
+  // Get active tab from URL or default to "materials"
+  const getActiveTabFromURL = (): ActiveTab => {
+    const tab = searchParams.get("tab") as ActiveTab;
+    return tab && ["analytics", "materials", "pdc", "suppliers"].includes(tab)
+      ? tab
+      : "materials";
+  };
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>(getActiveTabFromURL);
 
   // Extract the modal state from the store
   const {
@@ -138,6 +182,30 @@ export default function MainInventory() {
     setIsViewSupplierOpen,
     viewingSupplier,
   } = useModalStore();
+
+  // Update URL when tab changes
+  const updateURL = useCallback(
+    (tab: ActiveTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", tab);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // Handle tab change
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    updateURL(tab);
+  };
+
+  // Sync URL with state on initial load
+  useEffect(() => {
+    const tabFromURL = getActiveTabFromURL();
+    if (tabFromURL !== activeTab) {
+      setActiveTab(tabFromURL);
+    }
+  }, [searchParams]);
 
   // Fetch items only once on component mount
   useEffect(() => {
@@ -170,15 +238,40 @@ export default function MainInventory() {
         setSuppliersLoading(false);
       }
     };
-
     fetchSuppliers();
   }, []);
+
+  // Fetch PDCs when PDC tab is active
+  useEffect(() => {
+    const fetchPDCs = async () => {
+      if (activeTab === "pdc") {
+        setPdcsLoading(true);
+        try {
+          const [pdcsResult, statsResult] = await Promise.all([
+            getAllPDCs(),
+            getPDCStats(),
+          ]);
+          if (pdcsResult.success && pdcsResult.pdcs) {
+            setPdcs(pdcsResult.pdcs);
+          }
+          if (statsResult.success && statsResult.stats) {
+            setPdcStats(statsResult.stats);
+          }
+        } catch (error) {
+          console.error("Failed to fetch PDCs:", error);
+          toast.error("Failed to fetch PDC records");
+        } finally {
+          setPdcsLoading(false);
+        }
+      }
+    };
+    fetchPDCs();
+  }, [activeTab]);
 
   // Fetch chart data only once on component mount
   useEffect(() => {
     const fetchChartData = async () => {
       if (chartData.length > 0) return; // Don't fetch if already loaded
-
       setChartLoading(true);
       try {
         const [categoryData, categoryList] = await Promise.all([
@@ -194,7 +287,6 @@ export default function MainInventory() {
         setChartLoading(false);
       }
     };
-
     fetchChartData();
   }, [chartData.length]); // Only depend on chartData length
 
@@ -210,8 +302,7 @@ export default function MainInventory() {
       searchTerm &&
       !(
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.item_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.product_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.description &&
           item.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -221,7 +312,6 @@ export default function MainInventory() {
     ) {
       return false;
     }
-
     // Status filter
     if (statusFilter !== "all") {
       if (statusFilter === "inStock" && item.quantity <= 0) return false;
@@ -233,12 +323,10 @@ export default function MainInventory() {
         return false;
       }
     }
-
     // Category filter
     if (categoryFilter !== "all" && item.category !== categoryFilter) {
       return false;
     }
-
     return true;
   });
 
@@ -269,7 +357,6 @@ export default function MainInventory() {
     ) {
       return false;
     }
-
     // Status filter
     if (
       supplierStatusFilter !== "all" &&
@@ -277,7 +364,28 @@ export default function MainInventory() {
     ) {
       return false;
     }
+    return true;
+  });
 
+  // Filter PDCs based on search term and filters
+  const filteredPDCs = pdcs.filter((pdc) => {
+    // Search filter
+    if (
+      pdcSearchTerm &&
+      !(
+        (pdc.checkNumber || "")
+          .toLowerCase()
+          .includes(pdcSearchTerm.toLowerCase()) ||
+        pdc.supplier.toLowerCase().includes(pdcSearchTerm.toLowerCase()) ||
+        pdc.payee.toLowerCase().includes(pdcSearchTerm.toLowerCase())
+      )
+    ) {
+      return false;
+    }
+    // Status filter
+    if (pdcStatusFilter !== "all" && pdc.status !== pdcStatusFilter) {
+      return false;
+    }
     return true;
   });
 
@@ -292,31 +400,45 @@ export default function MainInventory() {
       (item) => item.quantity <= item.reorderPoint
     ).length,
     total: filteredItems.length,
+    totalCapital: filteredItems.reduce(
+      (total, item) =>
+        total + (item.totalCapital || item.quantity * (item.unitCost || 0)),
+      0
+    ),
     totalValue: filteredItems.reduce(
-      (total, item) => total + item.quantity * (item.unitCost || 0),
+      (total, item) =>
+        total + (item.totalValue || item.quantity * (item.salePrice || 0)),
       0
     ),
     categoryStats: Array.from(
       filteredItems.reduce((acc, item) => {
         const category = item.category || "Uncategorized";
-        const current = acc.get(category) || { count: 0, totalValue: 0 };
+        const current = acc.get(category) || {
+          count: 0,
+          totalCapital: 0,
+          totalValue: 0,
+        };
         current.count += 1;
-        current.totalValue += item.quantity * (item.unitCost || 0);
+        current.totalCapital +=
+          item.totalCapital || item.quantity * (item.unitCost || 0);
+        current.totalValue +=
+          item.totalValue || item.quantity * (item.salePrice || 0);
         acc.set(category, current);
         return acc;
       }, new Map())
     ).map(([category, data]) => ({
       category,
       count: data.count,
+      totalCapital: data.totalCapital,
       totalValue: data.totalValue,
     })),
   };
 
   const hasActiveFilters =
     !!searchTerm || statusFilter !== "all" || categoryFilter !== "all";
-
   const hasSupplierActiveFilters =
     !!supplierSearchTerm || supplierStatusFilter !== "all";
+  const hasPDCActiveFilters = !!pdcSearchTerm || pdcStatusFilter !== "all";
 
   // Reset to first page when filters change for materials
   useEffect(() => {
@@ -328,16 +450,22 @@ export default function MainInventory() {
     setSupplierCurrentPage(1);
   }, [supplierSearchTerm, supplierStatusFilter, filteredSuppliers.length]);
 
+  // Reset to first page when filters change for PDCs
+  useEffect(() => {
+    setPdcCurrentPage(1);
+  }, [pdcSearchTerm, pdcStatusFilter, filteredPDCs.length]);
+
   // Add item
   const handleAdd = async (
     newItem: Omit<
       IInventory,
-      | "item_id"
-      | "sku"
+      | "product_id"
       | "timeCreated"
       | "timeUpdated"
       | "lastUpdated"
       | "createdAt"
+      | "totalCapital"
+      | "totalValue"
     >
   ) => {
     try {
@@ -347,7 +475,6 @@ export default function MainInventory() {
         setItems((prev) => [...prev, result.item]);
         setIsCreateProjectOpen(false);
         toast.success("Item added successfully");
-
         // Invalidate chart data cache when new item is added
         setChartData([]);
       } else {
@@ -359,6 +486,36 @@ export default function MainInventory() {
     }
   };
 
+  // Add batch items
+  const handleBatchAdd = async (
+    items: Omit<
+      IInventory,
+      | "product_id"
+      | "timeCreated"
+      | "timeUpdated"
+      | "lastUpdated"
+      | "createdAt"
+      | "totalCapital"
+      | "totalValue"
+    >[]
+  ) => {
+    try {
+      const result = await createBatchInventory(items);
+      if (result.success && result.items) {
+        setItems((prev) => [...prev, ...result.items]);
+        setIsCreateProjectOpen(false);
+        toast.success(`Successfully added ${result.count} items`);
+        // Invalidate chart data cache when new items are added
+        setChartData([]);
+      } else {
+        toast.error(result.error || "Failed to add items");
+      }
+    } catch (error) {
+      toast.error("Failed to add items");
+      console.error("Error creating batch items:", error);
+    }
+  };
+
   // Edit item
   const handleEdit = (item: IInventory) => {
     setIsEditInventoryOpen(true, item);
@@ -366,28 +523,30 @@ export default function MainInventory() {
 
   // Update item
   const handleUpdate = async (
-    item_id: string,
+    product_id: string,
     data: Partial<
       Omit<
         IInventory,
-        | "item_id"
-        | "sku"
+        | "product_id"
         | "timeCreated"
         | "timeUpdated"
         | "lastUpdated"
         | "createdAt"
+        | "totalCapital"
+        | "totalValue"
       >
     >
   ) => {
     try {
-      const result = await updateInventory(item_id, data);
+      const result = await updateInventory(product_id, data);
       if (result.success && result.item) {
         setItems((prev) =>
-          prev.map((item) => (item.item_id === item_id ? result.item : item))
+          prev.map((item) =>
+            item.product_id === product_id ? result.item : item
+          )
         );
         setIsEditInventoryOpen(false, null);
         toast.success("Item updated successfully");
-
         // Invalidate chart data cache when item is updated
         setChartData([]);
       } else {
@@ -399,14 +558,13 @@ export default function MainInventory() {
     }
   };
 
-  // Delete item using item_id
-  const handleDelete = async (item_id: string) => {
+  // Delete item using product_id
+  const handleDelete = async (product_id: string) => {
     try {
-      const result = await deleteInventory(item_id);
+      const result = await deleteInventory(product_id);
       if (result.success) {
-        setItems((prev) => prev.filter((i) => i.item_id !== item_id));
+        setItems((prev) => prev.filter((i) => i.product_id !== product_id));
         toast.success("Item deleted successfully");
-
         // Invalidate chart data cache when item is deleted
         setChartData([]);
       } else {
@@ -480,13 +638,75 @@ export default function MainInventory() {
         inStockCount: inventoryStats.inStock,
         restockNeededCount: inventoryStats.restockNeeded,
       });
-
       await exportToPDF();
       toast.success("Inventory report exported to PDF");
     } catch (error) {
       console.error("Error exporting PDF:", error);
       toast.error("Failed to export PDF");
     }
+  };
+
+  // PDC Functions
+  const handleViewPDCDetails = async (pdc: PDCWithItems) => {
+    setSelectedPDC(pdc);
+    setIsPDCDetailsOpen(true);
+  };
+
+  const handlePDCDetailsClose = () => {
+    setIsPDCDetailsOpen(false);
+    setSelectedPDC(null);
+  };
+
+  const handleMarkAsIssued = async (pdc_id: string) => {
+    try {
+      const result = await updatePDCStatus(pdc_id, { status: "issued" });
+      if (result.success) {
+        toast.success("PDC marked as issued");
+        // Refresh PDCs
+        const pdcsResult = await getAllPDCs();
+        if (pdcsResult.success && pdcsResult.pdcs) {
+          setPdcs(pdcsResult.pdcs);
+        }
+      } else {
+        toast.error(result.error || "Failed to update PDC status");
+      }
+    } catch (error) {
+      toast.error("Failed to update PDC status");
+      console.error("Error updating PDC:", error);
+    }
+  };
+
+  const handlePDCDeleteClick = (pdc: PDCWithItems) => {
+    setPdcToDelete(pdc);
+    setIsPDCDeleteModalOpen(true);
+  };
+
+  const handlePDCDeleteConfirm = async () => {
+    if (!pdcToDelete) return;
+    try {
+      const result = await deletePDC(pdcToDelete.pdc_id);
+      if (result.success) {
+        toast.success("PDC deleted successfully");
+        // Refresh PDCs
+        const pdcsResult = await getAllPDCs();
+        if (pdcsResult.success && pdcsResult.pdcs) {
+          setPdcs(pdcsResult.pdcs);
+        }
+      } else {
+        toast.error(result.error || "Failed to delete PDC");
+      }
+    } catch (error) {
+      toast.error("Failed to delete PDC");
+      console.error("Error deleting PDC:", error);
+    } finally {
+      setIsPDCDeleteModalOpen(false);
+      setPdcToDelete(null);
+    }
+  };
+
+  const handlePDCDeleteCancel = () => {
+    setIsPDCDeleteModalOpen(false);
+    setPdcToDelete(null);
   };
 
   const handleDeleteClick = (item: IInventory) => {
@@ -496,7 +716,7 @@ export default function MainInventory() {
 
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
-    await handleDelete(itemToDelete.item_id);
+    await handleDelete(itemToDelete.product_id);
     setIsDeleteModalOpen(false);
     setItemToDelete(null);
   };
@@ -534,6 +754,11 @@ export default function MainInventory() {
     setSupplierStatusFilter("all");
   };
 
+  const clearPDCFilters = () => {
+    setPdcSearchTerm("");
+    setPdcStatusFilter("all");
+  };
+
   const handleAddItem = () => {
     setIsCreateProjectOpen(true);
   };
@@ -546,13 +771,8 @@ export default function MainInventory() {
   const getStatusInfo = (item: IInventory) => {
     const quantity = item.quantity;
     const reorderPoint = item.reorderPoint ?? 0;
-    const safetyStock = item.safetyStock ?? 0;
-
     if (quantity === 0) {
       return { text: "Out of Stock", variant: "destructive" as const };
-    }
-    if (quantity <= safetyStock) {
-      return { text: "Critical", variant: "destructive" as const };
     }
     if (quantity <= reorderPoint) {
       return { text: "Low Stock", variant: "secondary" as const };
@@ -578,7 +798,6 @@ export default function MainInventory() {
             loading={chartLoading}
           />
         </div>
-
         {/* Additional Analytics Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           <Card className="rounded-sm border">
@@ -593,7 +812,6 @@ export default function MainInventory() {
               <p className="text-xs text-gray-600">Items available</p>
             </CardContent>
           </Card>
-
           <Card className="rounded-sm border">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
@@ -606,7 +824,6 @@ export default function MainInventory() {
               <p className="text-xs text-gray-600">Need attention</p>
             </CardContent>
           </Card>
-
           <Card className="rounded-sm border">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
@@ -619,7 +836,6 @@ export default function MainInventory() {
               <p className="text-xs text-gray-600">Require restocking</p>
             </CardContent>
           </Card>
-
           <Card className="rounded-sm border">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
@@ -627,37 +843,43 @@ export default function MainInventory() {
                 <span className="text-sm font-medium">Total Value</span>
               </div>
               <p className="text-2xl font-bold mt-2">
-                ${inventoryStats.totalValue.toLocaleString()}
+                ₱{inventoryStats.totalValue.toLocaleString()}
               </p>
               <p className="text-xs text-gray-600">Inventory worth</p>
             </CardContent>
           </Card>
         </div>
-      </CardContent>
-    </Card>
-  );
-
-  const PDCTab = () => (
-    <Card className="w-full rounded-none shadow-none border-none">
-      <CardHeader>
-        <CardTitle className="text-foreground-900 font-geist">
-          Production & Distribution Center (PDC)
-        </CardTitle>
-        <CardDescription className="font-geist">
-          Manage production planning, distribution, and supply chain operations
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="text-center p-12">
-          <TrendingUp className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-900 font-geist mb-2">
-            PDC Module Coming Soon
-          </h3>
-          <p className="text-gray-600 font-geist max-w-md mx-auto">
-            Production and Distribution Center features are currently under
-            development. This module will include production planning,
-            distribution tracking, and supply chain management capabilities.
-          </p>
+        {/* Additional Financial Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium">Total Capital</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                ₱{inventoryStats.totalCapital.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-600">
+                Total investment in inventory
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-sm border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-medium">Potential Profit</span>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                ₱
+                {(
+                  inventoryStats.totalValue - inventoryStats.totalCapital
+                ).toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-600">Total value minus capital</p>
+            </CardContent>
+          </Card>
         </div>
       </CardContent>
     </Card>
@@ -708,7 +930,28 @@ export default function MainInventory() {
           />
         );
       case "pdc":
-        return <PDCTab />;
+        return (
+          <PDCTab
+            pdcs={pdcs}
+            pdcStats={pdcStats}
+            pdcsLoading={pdcsLoading}
+            pdcSearchTerm={pdcSearchTerm}
+            setPdcSearchTerm={setPdcSearchTerm}
+            pdcStatusFilter={pdcStatusFilter}
+            setPdcStatusFilter={setPdcStatusFilter}
+            isPDCFilterOpen={isPDCFilterOpen}
+            setIsPDCFilterOpen={setIsPDCFilterOpen}
+            hasPDCActiveFilters={hasPDCActiveFilters}
+            pdcCurrentPage={pdcCurrentPage}
+            pdcItemsPerPage={pdcItemsPerPage}
+            filteredPDCs={filteredPDCs}
+            onViewPDCDetails={handleViewPDCDetails}
+            onMarkAsIssued={handleMarkAsIssued}
+            onPDCDeleteClick={handlePDCDeleteClick}
+            onClearPDCFilters={clearPDCFilters}
+            setPdcCurrentPage={setPdcCurrentPage}
+          />
+        );
       case "suppliers":
         return (
           <SupplierView
@@ -776,20 +1019,19 @@ export default function MainInventory() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4 px-5 pt-5">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground font-geist">
-              Inventory Management
+              Manage your Inventory
             </h1>
             <p className="text-gray-600 mt-1 text-sm font-geist">
-              Manage and track all inventory items and suppliers in your system
+              Manage and track all inventory items and suppliers.
             </p>
           </div>
         </div>
-
         {/* Tabs Navigation - Transaction Page Style */}
         <div className="flex border-b border-gray-200 mt-6">
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as ActiveTab)}
+              onClick={() => handleTabChange(tab.id as ActiveTab)}
               className={`px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2 font-geist ${
                 activeTab === tab.id
                   ? "border-foreground text-foreground"
@@ -808,9 +1050,8 @@ export default function MainInventory() {
       </div>
 
       {/* Modals */}
-      <AddItemModal onAdd={handleAdd} />
+      <AddItemModal onAdd={handleAdd} onBatchAdd={handleBatchAdd} />
       <AddSupplierModal onAdd={handleAddSupplier} />
-
       {editingInventory && (
         <EditItemModal item={editingInventory} onUpdate={handleUpdate} />
       )}
@@ -843,12 +1084,32 @@ export default function MainInventory() {
         cancelText="Cancel"
       />
 
+      <ConfirmationModal
+        isOpen={isPDCDeleteModalOpen}
+        onConfirm={handlePDCDeleteConfirm}
+        onCancel={handlePDCDeleteCancel}
+        title="Delete PDC"
+        description={`Are you sure you want to delete PDC "${pdcToDelete?.checkNumber}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
+
       {/* View Details Modal - Using the new full-screen modal */}
       {selectedItem && (
         <ItemDetailsModal
           item={selectedItem}
           isOpen={isViewDetailsOpen}
           onClose={handleModalClose}
+        />
+      )}
+
+      {/* PDC Details Modal - Now using the imported component */}
+      {selectedPDC && (
+        <PDCDetailsModal
+          pdc={selectedPDC}
+          isOpen={isPDCDetailsOpen}
+          onClose={handlePDCDetailsClose}
+          onMarkIssued={handleMarkAsIssued}
         />
       )}
     </div>

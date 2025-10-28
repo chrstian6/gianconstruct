@@ -169,7 +169,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           },
           {
             name: "Inventory",
-            href: "/admin/main-inventory",
+            href: "/admin/inventory",
             description: "Manage inventory items and materials",
             icon: <Warehouse className="h-5 w-5" />,
           },
