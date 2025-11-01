@@ -24,18 +24,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/lib/stores";
-import {
-  LayoutDashboard,
-  Calendar,
-  Briefcase,
-  BookOpen,
-  Warehouse,
-  UserCog,
-  Settings,
-  Receipt,
-  LogOut,
-  CalendarCheck,
-} from "lucide-react";
 import { getAppointmentStats } from "@/action/appointments";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,7 +41,6 @@ interface MenuItem {
   href?: string;
   onClick?: () => void;
   description?: string;
-  icon: React.ReactNode;
   badgeCount?: number;
   showBadge?: boolean;
 }
@@ -139,13 +126,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             name: "Dashboard",
             href: "/admin/admindashboard",
             description: "Overview and analytics",
-            icon: <LayoutDashboard className="h-5 w-5" />,
           },
           {
             name: "Appointments",
             href: "/admin/appointments",
             description: "Manage client appointments and consultations",
-            icon: <CalendarCheck className="h-5 w-5" />,
             badgeCount: appointmentStats.pendingCount,
             showBadge: appointmentStats.pendingCount > 0,
           },
@@ -153,37 +138,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             name: "Transactions",
             href: "/admin/transaction",
             description: "Process client payments and generate receipts",
-            icon: <Receipt className="h-5 w-5" />,
           },
           {
             name: "Projects",
             href: "/admin/admin-project",
             description: "Manage construction projects",
-            icon: <Briefcase className="h-5 w-5" />,
           },
           {
             name: "Catalog",
             href: "/admin/catalog",
             description: "Design catalog management",
-            icon: <BookOpen className="h-5 w-5" />,
           },
           {
             name: "Inventory",
             href: "/admin/inventory",
             description: "Manage inventory items and materials",
-            icon: <Warehouse className="h-5 w-5" />,
           },
           {
             name: "User Management",
             href: "/admin/usermanagement",
             description: "Team and user administration",
-            icon: <UserCog className="h-5 w-5" />,
           },
           {
             name: "Settings",
             href: "/admin/settings",
             description: "System configuration",
-            icon: <Settings className="h-5 w-5" />,
           },
         ],
       },
@@ -268,7 +247,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             )}
                           >
                             <a href={subItem.href}>
-                              {subItem.icon}
                               <span className="flex-1">{subItem.name}</span>
                               {subItem.name === "Appointments" &&
                                 subItem.showBadge && (
@@ -314,7 +292,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       onClick={handleLogoutClick}
                       className="flex items-center gap-3 py-3 text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
                     >
-                      <LogOut className="h-5 w-5" />
                       <span>Sign Out</span>
                     </SidebarMenuButton>
                   </TooltipTrigger>
@@ -341,7 +318,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <LogOut className="h-5 w-5" />
               Confirm Logout
             </DialogTitle>
             <DialogDescription>
