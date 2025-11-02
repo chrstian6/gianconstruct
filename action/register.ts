@@ -126,6 +126,9 @@ export async function registerUser(formData: FormData) {
       email: user.email,
       user_id: user.user_id,
       firstName: user.firstName,
+      lastName: user.lastName,
+      contactNo: user.contactNo || "",
+      avatar: "",
     });
 
     try {
