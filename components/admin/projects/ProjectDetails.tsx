@@ -1,22 +1,32 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // Added for App Router back navigation
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Hash,
   ArrowLeft,
-  Loader2,
-  User,
   Calendar,
   MapPin,
   Clock,
+  DollarSign,
+  Edit,
+  Plus,
+  Upload,
+  FileText,
+  Layout,
+  Users,
+  Info,
+  Images,
+  Activity,
+  MoreHorizontal,
+  Loader2,
 } from "lucide-react";
 import { Project, Task } from "@/types/project";
 import { updateProject } from "@/action/project";
-import { getTasks, createTask, updateTask, deleteTask } from "@/action/task";
+import { getTasks } from "@/action/task";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -35,13 +45,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ClientInformation from "./details/ClientInformation";
 import ProjectTimeline from "./ProjectTimeline";
-import TaskSection from "./tasks/TaskSection";
+import ProposedDesignTab from "./design/ProposedDesignTab";
 import Documents from "./details/Documents";
 import Gallery from "./details/Gallery";
+import AddTimelineUpdateModal from "@/components/admin/projects/AddTimelineUpdateModal";
+import { useModalStore } from "@/lib/stores";
+import NotFound from "@/components/admin/NotFound";
+import { getProjectDocuments, uploadDocument } from "@/action/document";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 
+// --- Types ---
 interface User {
   user_id: string;
   firstName: string;
@@ -57,12 +79,22 @@ interface ProjectDetailsProps {
   onBack: () => void;
   onUpdate?: (updatedProject: Project) => void;
   isLoading?: boolean;
-  // Add these new props for tasks
   tasks?: Task[];
   onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
   onTaskCreate?: (task: Omit<Task, "id">) => void;
   onTaskDelete?: (taskId: string) => void;
   tasksLoading?: boolean;
+}
+
+interface Document {
+  id: string;
+  name: string;
+  original_name: string;
+  file_type: string;
+  file_size: number;
+  uploaded_at: string;
+  uploaded_by: string;
+  file_url: string;
 }
 
 export default function ProjectDetails({
@@ -72,23 +104,37 @@ export default function ProjectDetails({
   onUpdate,
   isLoading: externalLoading = false,
 }: ProjectDetailsProps) {
-  const router = useRouter(); // Added for smooth back navigation
+  const router = useRouter();
+
+  // Modal States
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  // Edit Form State
   const [editedProject, setEditedProject] = useState({
     name: "",
-    status: "active" as
-      | "active"
-      | "completed"
-      | "pending"
-      | "not-started"
-      | "cancelled",
+    status: "pending" as "pending" | "active" | "completed" | "cancelled",
     startDate: "",
     estCompletion: "",
   });
+
+  // Data States
   const [internalLoading, setInternalLoading] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [tasks, setTasks] = useState<Task[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [tasksLoading, setTasksLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+
+  // UI States
+  const [activeTab, setActiveTab] = useState("timeline");
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
+
+  // Document State
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Store
+  const { setIsAddTimelineUpdateOpen, timelineProject } = useModalStore();
 
   const isLoading = externalLoading || internalLoading;
 
@@ -106,6 +152,7 @@ export default function ProjectDetails({
       });
       setInternalLoading(false);
       fetchTasks();
+      fetchDocuments();
     } else if (project === null) {
       setInternalLoading(false);
     }
@@ -113,7 +160,6 @@ export default function ProjectDetails({
 
   const fetchTasks = async () => {
     if (!project) return;
-
     setTasksLoading(true);
     try {
       const tasksData = await getTasks(project.project_id);
@@ -123,6 +169,62 @@ export default function ProjectDetails({
       console.error("Error fetching tasks:", error);
     } finally {
       setTasksLoading(false);
+    }
+  };
+
+  const fetchDocuments = async () => {
+    if (!project) return;
+    setDocumentsLoading(true);
+    try {
+      const result = await getProjectDocuments(project.project_id);
+      if (result.success && result.documents) {
+        const transformedDocs = result.documents.map((doc: any) => ({
+          id: doc.doc_id || "",
+          name: doc.name,
+          original_name: doc.original_name,
+          file_type: doc.file_type,
+          file_size: doc.file_size,
+          uploaded_at: doc.uploaded_at.toString(),
+          uploaded_by: doc.uploaded_by_name,
+          file_url: doc.file_url,
+        }));
+        setDocuments(transformedDocs);
+      } else {
+        toast.error(result.error || "Failed to fetch documents");
+      }
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      toast.error("Failed to fetch documents");
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !project) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", files[0]);
+
+      const result = await uploadDocument(project.project_id, formData);
+
+      if (result.success && result.document) {
+        toast.success(`Document "${files[0].name}" uploaded successfully`);
+        fetchDocuments();
+      } else {
+        toast.error(result.error || "Failed to upload document");
+      }
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      toast.error("Failed to upload document");
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
     }
   };
 
@@ -137,23 +239,15 @@ export default function ProjectDetails({
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("en-US", {
-      month: "long",
+      month: "short",
       day: "numeric",
       year: "numeric",
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: "PHP",
-    }).format(amount);
-  };
-
   const handleSave = async () => {
     try {
       if (!project) return;
-
       const formData = new FormData();
       formData.append("name", editedProject.name);
       formData.append("status", editedProject.status);
@@ -179,107 +273,60 @@ export default function ProjectDetails({
     }
   };
 
-  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
-    try {
-      const updatedTask = await updateTask(taskId, updates);
-      setTasks((prev) =>
-        prev.map((task) => (task.id === taskId ? updatedTask : task))
-      );
-      toast.success("Task updated successfully");
-    } catch (error) {
-      toast.error("Failed to update task");
-      console.error("Error updating task:", error);
-    }
-  };
-
-  const handleTaskCreate = async (newTaskData: Omit<Task, "id">) => {
-    if (!project) return;
-
-    try {
-      const newTask = await createTask(project.project_id, newTaskData);
-      setTasks((prev) => [...prev, newTask]);
-      toast.success("Task created successfully");
-    } catch (error) {
-      toast.error("Failed to create task");
-      console.error("Error creating task:", error);
-    }
-  };
-
-  const handleTaskDelete = async (taskId: string) => {
-    try {
-      await deleteTask(taskId);
-      setTasks((prev) => prev.filter((task) => task.id !== taskId));
-      toast.success("Task deleted successfully");
-    } catch (error) {
-      toast.error("Failed to delete task");
-      console.error("Error deleting task:", error);
-    }
-  };
-
-  // Updated: Handle back navigation with router for smooth SPA feel
   const handleBack = () => {
-    if (onBack) {
-      onBack();
-    } else {
-      router.back(); // Falls back to browser history
-    }
+    if (onBack) onBack();
+    else router.back();
   };
 
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        {" "}
-        {/* Updated h-screen to min-h-screen */}
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-600" />
-          <p className="text-base text-gray-600 font-geist">
-            Loading project details...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const handleAddUpdateClick = () => {
+    if (project) setIsAddTimelineUpdateOpen(true, project);
+  };
 
-  // Show error state if project is null (not found)
+  const handleUpdateAdded = () => {
+    setTimelineRefreshKey((prev) => prev + 1);
+  };
+
+  // --- Skeletons ---
+  const GenericSkeleton = () => (
+    <div className="space-y-6 animate-pulse max-w-[1600px] mx-auto p-6">
+      <div className="h-40 bg-zinc-100 rounded-xl mb-6" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="h-32 bg-zinc-100 rounded-xl" />
+        <div className="h-32 bg-zinc-100 rounded-xl" />
+        <div className="h-32 bg-zinc-100 rounded-xl" />
+      </div>
+    </div>
+  );
+
   if (project === null) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 gap-4">
-        {" "}
-        {/* Updated h-screen to min-h-screen */}
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 gap-4 font-geist">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 font-geist mb-2">
+          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 mb-2">
             Project Not Found
           </h2>
-          <p className="text-base text-gray-600 font-geist">
-            The project you're looking for doesn't exist.
+          <p className="text-zinc-500">
+            The project you're looking for doesn't exist or has been deleted.
           </p>
         </div>
         <Button
-          variant="ghost"
-          onClick={handleBack} // Updated to use handleBack
-          className="flex items-center gap-2 text-base text-gray-600 hover:text-gray-900 font-geist"
+          variant="outline"
+          onClick={handleBack}
+          className="gap-2 font-geist"
         >
-          <ArrowLeft className="h-5 w-5" />
-          Back
+          <ArrowLeft className="h-4 w-4" /> Back to Projects
         </Button>
       </div>
     );
   }
 
-  // Final safety check - should never reach here if project is undefined
   if (!project) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        {" "}
-        {/* Updated h-screen to min-h-screen */}
+      <div className="flex items-center justify-center min-h-screen bg-zinc-50 font-geist">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 font-geist mb-2">
-            Unexpected Error
+          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 mb-2">
+            Loading...
           </h2>
-          <p className="text-base text-gray-600 font-geist">
-            Failed to load project details.
-          </p>
         </div>
       </div>
     );
@@ -293,511 +340,460 @@ export default function ProjectDetails({
         ? "overdue"
         : project.status;
 
+  // Modern Monochrome Status Configuration
   const statusConfig = {
     active: {
       label: "Active",
-      color: "bg-blue-100 text-blue-800 border-blue-200",
+      className: "bg-zinc-900 text-white border-zinc-900",
     },
     completed: {
       label: "Completed",
-      color: "bg-green-100 text-green-800 border-green-200",
+      className: "bg-emerald-100 text-emerald-900 border-emerald-200",
     },
     overdue: {
       label: "Overdue",
-      color: "bg-red-100 text-red-800 border-red-200",
+      className: "bg-red-50 text-red-700 border-red-100",
     },
     pending: {
       label: "Pending",
-      color: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    },
-    "not-started": {
-      label: "Not Started",
-      color: "bg-gray-100 text-gray-800 border-gray-200",
+      className: "bg-zinc-100 text-zinc-700 border-zinc-200",
     },
     cancelled: {
       label: "Cancelled",
-      color: "bg-red-200 text-red-900 border-red-300",
+      className:
+        "bg-zinc-50 text-zinc-400 border-zinc-200 decoration-slice line-through",
     },
   };
 
+  const tabs = [
+    { id: "timeline", label: "Timeline", icon: Activity },
+    { id: "proposed-design", label: "Design", icon: Layout },
+    { id: "client", label: "Client", icon: Users },
+    { id: "details", label: "Details", icon: Info },
+    { id: "documents", label: "Docs", icon: FileText },
+    { id: "gallery", label: "Gallery", icon: Images },
+  ];
+
   return (
-    <div className="min-h-screen flex font-geist max-w-7xl mx-auto">
-      {" "}
-      {/* Updated h-screen to min-h-screen */}
-      {/* Sidebar with Back Button */}
-      <div className="w-25 flex-shrink-0 bg-gray-50 flex flex-col items-center py-5 pt-5">
-        <Button
-          variant="ghost"
-          onClick={handleBack} // Updated to use handleBack
-          className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-900 font-geist"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          <span>Back</span>
-        </Button>
-      </div>
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col bg-gray-50 overflow-y-auto">
-        {" "}
-        {/* Added overflow-y-auto for full scrolling */}
-        {/* Project Header */}
-        <div className="flex-shrink-0 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900">
-                {project.name}
-              </h1>
-              <div className="flex items-center text-gray-600 mt-2">
-                <Hash className="h-5 w-5 mr-2 text-gray-500" />
-                <span className="font-mono text-sm">{project.project_id}</span>
+    <div className="flex flex-col min-h-screen font-geist bg-zinc-50">
+      {/* Static, Clean Header Section */}
+      <div className="w-full bg-white border-b border-zinc-200">
+        <div className="max-w-[1600px] mx-auto">
+          {/* Top Row: Navigation & Actions */}
+          <div className="flex items-center justify-between px-6 pt-6 pb-4">
+            <Button
+              variant="ghost"
+              onClick={handleBack}
+              className="pl-0 hover:bg-transparent text-zinc-500 hover:text-zinc-900 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Projects
+            </Button>
+
+            <div className="flex items-center gap-3">
+              {/* Hidden File Input */}
+              <Input
+                type="file"
+                id="document-upload"
+                className="hidden"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+              />
+
+              <div className="hidden md:flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                  onClick={() =>
+                    document.getElementById("document-upload")?.click()
+                  }
+                  disabled={isUploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                  onClick={() => setIsEditDialogOpen(true)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Details
+                </Button>
+
+                <Button
+                  size="sm"
+                  className="h-9 bg-zinc-900 text-white hover:bg-zinc-800 shadow-none"
+                  onClick={handleAddUpdateClick}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Update
+                </Button>
+              </div>
+
+              {/* Mobile Menu */}
+              <div className="md:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-9 w-9">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() =>
+                        document.getElementById("document-upload")?.click()
+                      }
+                    >
+                      Upload File
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>
+                      Edit Details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleAddUpdateClick}>
+                      New Update
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+          </div>
+
+          {/* Title Row */}
+          <div className="px-6 pb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900">
+                {project.name}
+              </h1>
               <Badge
-                className={`${statusConfig[status].color} border-0 text-sm font-medium`}
+                variant="outline"
+                className={cn(
+                  "text-xs font-medium px-2.5 py-0.5 rounded-full border transition-colors",
+                  statusConfig[status].className
+                )}
               >
                 {statusConfig[status].label}
               </Badge>
-              <Button
-                variant="outline"
-                className="border-gray-300 text-gray-700 hover:bg-gray-50 text-xs rounded-sm font-medium"
-                onClick={() => setIsEditDialogOpen(true)}
-              >
-                Edit Project
-              </Button>
             </div>
-          </div>
-          {/* Project Metadata */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-gray-100 border-1 p-4">
-            <div className="flex items-center gap-3">
-              <Calendar className="h-5 w-5 text-gray-500" />
-              <div>
-                <p className="text-xs text-gray-600 font-medium">Start Date</p>
-                <p className="text-sm font-semibold text-gray-900">
+
+            {/* Information Grid - Replaces Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-x-8 gap-y-6 mt-8 pt-6 border-t border-zinc-100">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Project ID
+                </span>
+                <div className="flex items-center gap-1.5 font-mono text-sm text-zinc-700">
+                  <Hash className="h-3.5 w-3.5 text-zinc-400" />
+                  {project.project_id.substring(0, 8)}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Location
+                </span>
+                <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
+                  <MapPin className="h-3.5 w-3.5 text-zinc-400" />
+                  <span
+                    className="truncate block max-w-[200px]"
+                    title={project.location?.fullAddress}
+                  >
+                    {project.location?.fullAddress || "No address"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Start Date
+                </span>
+                <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
+                  <Calendar className="h-3.5 w-3.5 text-zinc-400" />
                   {formatDate(project.startDate)}
-                </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <Clock className="h-5 w-5 text-gray-500" />
-              <div>
-                <p className="text-xs text-gray-600 font-medium">
-                  Est. Completion
-                </p>
-                <p className="text-sm font-semibold text-black">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Completion (Est.)
+                </span>
+                <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
+                  <Clock className="h-3.5 w-3.5 text-zinc-400" />
                   {project.endDate ? formatDate(project.endDate) : "TBD"}
-                </p>
-              </div>
-            </div>
-
-            {project.location?.fullAddress && (
-              <div className="flex items-center gap-3">
-                <MapPin className="h-8s w-8 text-gray-500" />
-                <div>
-                  <p className="text-xs text-gray-600 font-medium">Location</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {project.location.fullAddress}
-                  </p>
                 </div>
               </div>
-            )}
-          </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center gap-3">
-              <p className="text-xl text-gray-500">₱</p>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Total Cost</p>
-                <p className="text-xl font-bold text-gray-900">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Budget
+                </span>
+                <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
+                  <DollarSign className="h-3.5 w-3.5 text-zinc-400" />
                   {project.totalCost
-                    ? formatCurrency(project.totalCost)
+                    ? `₱${project.totalCost.toLocaleString()}`
                     : "TBD"}
-                </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        {/* Main Content Area - Scrollable */}
-        <div className="flex-1 bg-gray-50 p-6 overflow-y-auto">
-          {" "}
-          {/* Added overflow-y-auto for tab content */}
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="w-full"
-          >
-            <TabsList className="justify-start bg-transparent h-auto gap-1 border-b rounded-none">
-              <TabsTrigger
-                value="overview"
-                className="rounded-sm data-[state=active]:bg-gray-100 data-[state=active]:text-black data-[state=active]:shadow-none px-2 py-2 text-sm font-medium cursor-pointer"
-              >
-                Overview
-              </TabsTrigger>
-              <TabsTrigger
-                value="client"
-                className="rounded-sm data-[state=active]:bg-gray-100 data-[state=active]:text-black data-[state=active]:shadow-none px-2 py-2 text-sm font-medium cursor-pointer"
-              >
-                Client
-              </TabsTrigger>
-              <TabsTrigger
-                value="details"
-                className="rounded-sm data-[state=active]:bg-gray-100 data-[state=active]:text-black data-[state=active]:shadow-none px-2 py-2 text-sm font-medium cursor-pointer"
-              >
-                Details
-              </TabsTrigger>
-              <TabsTrigger
-                value="documents"
-                className="rounded-sm data-[state=active]:bg-gray-100 data-[state=active]:text-black data-[state=active]:shadow-none px-2 py-2 text-sm font-medium cursor-pointer"
-              >
-                Documents
-              </TabsTrigger>
-              <TabsTrigger
-                value="gallery"
-                className="rounded-sm data-[state=active]:bg-gray-100 data-[state=active]:text-black data-[state=active]:shadow-none px-2 py-2 text-sm font-medium cursor-pointer"
-              >
-                Gallery
-              </TabsTrigger>
-            </TabsList>
 
-            {/* Overview Tab */}
-            <TabsContent value="overview" className="mt-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                  <div>
-                    <ProjectTimeline project={project} />
-                  </div>
-                  <div>
-                    <TaskSection
-                      tasks={tasks}
-                      onTaskUpdate={handleTaskUpdate}
-                      onTaskCreate={handleTaskCreate}
-                      onTaskDelete={handleTaskDelete}
-                      loading={tasksLoading}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-6">
-                  {/* Project Summary Card */}
-                  <Card className="border border-gray-200 shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg font-semibold text-gray-900">
-                        Project Summary
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <p className="text-sm text-gray-600 font-medium">
-                          Status
-                        </p>
-                        <Badge
-                          className={`${statusConfig[status].color} border-0 mt-1 text-sm font-medium`}
-                        >
-                          {statusConfig[status].label}
-                        </Badge>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600 font-medium">
-                          Timeline
-                        </p>
-                        <p className="text-base font-semibold text-gray-900 mt-1">
-                          {formatDate(project.startDate)} -{" "}
-                          {project.endDate
-                            ? formatDate(project.endDate)
-                            : "Present"}
-                        </p>
-                      </div>
-                      {project.location?.fullAddress && (
-                        <div>
-                          <p className="text-sm text-gray-600 font-medium">
-                            Location
-                          </p>
-                          <p className="text-base font-semibold text-gray-900 mt-1">
-                            {project.location.fullAddress}
-                          </p>
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-sm text-gray-600 font-medium">
-                          Total Cost
-                        </p>
-                        <p className="text-base font-semibold text-gray-900 mt-1">
-                          {project.totalCost
-                            ? formatCurrency(project.totalCost)
-                            : "TBD"}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  {/* Recent Activity */}
-                  <Card className="border border-gray-200 shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg font-semibold text-gray-900">
-                        Recent Activity
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
-                        <p className="text-base font-semibold text-gray-900">
-                          Project updated
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Status changed to {statusConfig[status].label}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          2 hours ago
-                        </p>
-                      </div>
-                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
-                        <p className="text-base font-semibold text-gray-900">
-                          New task created
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          "Foundation Work" added
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">Yesterday</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* Client Information Tab */}
-            <TabsContent value="client" className="mt-6">
-              <Card className="border border-gray-200 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-900">
-                    Client Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ClientInformation user={user} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Project Details Tab */}
-            <TabsContent value="details" className="mt-6">
-              <Card className="border border-gray-200 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-900">
-                    Project Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                        Basic Information
-                      </h3>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm text-gray-600 font-medium">
-                            Project ID
-                          </p>
-                          <p className="text-base font-semibold text-gray-900">
-                            {project.project_id}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600 font-medium">
-                            Status
-                          </p>
-                          <Badge
-                            className={`${statusConfig[status].color} border-0 text-sm font-medium`}
-                          >
-                            {statusConfig[status].label}
-                          </Badge>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600 font-medium">
-                            Start Date
-                          </p>
-                          <p className="text-base font-semibold text-gray-900">
-                            {formatDate(project.startDate)}
-                          </p>
-                        </div>
-                        {project.endDate && (
-                          <div>
-                            <p className="text-sm text-gray-600 font-medium">
-                              Est. Completion
-                            </p>
-                            <p className="text-base font-semibold text-gray-900">
-                              {formatDate(project.endDate)}
-                            </p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-sm text-gray-600 font-medium">
-                            Total Cost
-                          </p>
-                          <p className="text-base font-semibold text-gray-900">
-                            {project.totalCost
-                              ? formatCurrency(project.totalCost)
-                              : "TBD"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                        Location Details
-                      </h3>
-                      {project.location ? (
-                        <div className="space-y-3">
-                          {project.location.region && (
-                            <div>
-                              <p className="text-sm text-gray-600 font-medium">
-                                Region
-                              </p>
-                              <p className="text-base font-semibold text-gray-900">
-                                {project.location.region}
-                              </p>
-                            </div>
-                          )}
-                          {project.location.province && (
-                            <div>
-                              <p className="text-sm text-gray-600 font-medium">
-                                Province
-                              </p>
-                              <p className="text-base font-semibold text-gray-900">
-                                {project.location.province}
-                              </p>
-                            </div>
-                          )}
-                          {project.location.municipality && (
-                            <div>
-                              <p className="text-sm text-gray-600 font-medium">
-                                Municipality
-                              </p>
-                              <p className="text-base font-semibold text-gray-900">
-                                {project.location.municipality}
-                              </p>
-                            </div>
-                          )}
-                          {project.location.barangay && (
-                            <div>
-                              <p className="text-sm text-gray-600 font-medium">
-                                Barangay
-                              </p>
-                              <p className="text-base font-semibold text-gray-900">
-                                {project.location.barangay}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-base text-gray-600 font-geist">
-                          No location information available
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Documents Tab */}
-            <TabsContent value="documents" className="mt-6">
-              <Card className="border border-gray-200 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-900">
-                    Documents
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Documents projectId={project.project_id} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Gallery Tab */}
-            <TabsContent value="gallery" className="mt-6">
-              <Card className="border border-gray-200 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-900">
-                    Gallery
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Gallery projectId={project.project_id} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          {/* Tabs Navigation */}
+          <div className="px-6 flex items-center gap-8 overflow-x-auto scrollbar-hide">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 pb-3 text-sm font-medium transition-all relative whitespace-nowrap",
+                    isActive
+                      ? "text-zinc-900"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4",
+                      isActive ? "text-zinc-900" : "text-zinc-400"
+                    )}
+                  />
+                  {tab.label}
+                  {isActive && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-900 rounded-t-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-      {/* Edit Project Dialog - Unchanged */}
+
+      {/* Content Area */}
+      <div className="flex-1 max-w-[1600px] mx-auto w-full p-6 md:p-8">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {isLoading ? (
+            <GenericSkeleton />
+          ) : (
+            <>
+              {activeTab === "timeline" && (
+                <div className="space-y-6">
+                  <ProjectTimeline
+                    project={project}
+                    key={timelineRefreshKey}
+                    onUpdate={onUpdate}
+                  />
+                </div>
+              )}
+
+              {activeTab === "proposed-design" && (
+                <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
+                  <CardHeader className="border-b border-zinc-100 pb-4">
+                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                      Proposed Design
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <ProposedDesignTab project={project} />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "client" && (
+                <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
+                  <CardHeader className="border-b border-zinc-100 pb-4">
+                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                      Client Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    {user ? (
+                      <ClientInformation user={user} />
+                    ) : (
+                      <NotFound
+                        title="No client assigned"
+                        description="Client details haven't been linked to this project yet."
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "details" && (
+                <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
+                  <CardHeader className="border-b border-zinc-100 pb-4">
+                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                      Project Specifications
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="space-y-6">
+                        <h3 className="text-sm font-medium text-zinc-900 uppercase tracking-wide">
+                          General Info
+                        </h3>
+                        <div className="space-y-4">
+                          <div className="flex justify-between py-2 border-b border-zinc-100">
+                            <span className="text-sm text-zinc-500">
+                              Project ID
+                            </span>
+                            <span className="text-sm font-medium font-mono text-zinc-900">
+                              {project.project_id}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-2 border-b border-zinc-100">
+                            <span className="text-sm text-zinc-500">
+                              Status
+                            </span>
+                            <span className="text-sm font-medium text-zinc-900 capitalize">
+                              {project.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-6">
+                        <h3 className="text-sm font-medium text-zinc-900 uppercase tracking-wide">
+                          Location Info
+                        </h3>
+                        {project.location ? (
+                          <div className="space-y-4">
+                            <div className="flex justify-between py-2 border-b border-zinc-100">
+                              <span className="text-sm text-zinc-500">
+                                Region
+                              </span>
+                              <span className="text-sm font-medium text-zinc-900">
+                                {project.location.region || "N/A"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between py-2 border-b border-zinc-100">
+                              <span className="text-sm text-zinc-500">
+                                Province
+                              </span>
+                              <span className="text-sm font-medium text-zinc-900">
+                                {project.location.province || "N/A"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between py-2 border-b border-zinc-100">
+                              <span className="text-sm text-zinc-500">
+                                Municipality
+                              </span>
+                              <span className="text-sm font-medium text-zinc-900">
+                                {project.location.municipality || "N/A"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-zinc-400 italic">
+                            No location data available.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "documents" && (
+                <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
+                  <CardHeader className="border-b border-zinc-100 pb-4">
+                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                      Documents
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    {documentsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mr-2" />
+                        <p className="text-zinc-500">Loading documents...</p>
+                      </div>
+                    ) : (
+                      <Documents
+                        projectId={project.project_id}
+                        documents={documents}
+                        onDocumentsUpdate={fetchDocuments}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "gallery" && (
+                <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
+                  <CardHeader className="border-b border-zinc-100 pb-4">
+                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                      Project Gallery
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <Gallery projectId={project.project_id} />
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Modal */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white border border-gray-300 shadow-none">
+        <DialogContent className="sm:max-w-[500px] bg-white font-geist border-zinc-200">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-gray-900">
+            <DialogTitle className="text-xl font-bold text-zinc-900">
               Edit Project
             </DialogTitle>
-            <DialogDescription className="text-base text-gray-600">
-              Update project details and timeline
+            <DialogDescription className="text-zinc-500">
+              Make changes to the project details here.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor="edit-name"
-                className="text-sm font-medium text-gray-900"
-              >
+          <div className="grid gap-6 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name" className="text-zinc-700 font-medium">
                 Project Name
               </Label>
               <Input
-                id="edit-name"
+                id="name"
                 value={editedProject.name}
                 onChange={(e) =>
                   setEditedProject({ ...editedProject, name: e.target.value })
                 }
-                className="border-gray-300 text-base"
+                className="border-zinc-200 focus:ring-zinc-900"
               />
             </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="edit-status"
-                className="text-sm font-medium text-gray-900"
-              >
-                Status
-              </Label>
-              <Select
-                value={editedProject.status}
-                onValueChange={(
-                  value:
-                    | "active"
-                    | "completed"
-                    | "pending"
-                    | "not-started"
-                    | "cancelled"
-                ) => setEditedProject({ ...editedProject, status: value })}
-              >
-                <SelectTrigger
-                  id="edit-status"
-                  className="border-gray-300 text-base"
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="status" className="text-zinc-700 font-medium">
+                  Status
+                </Label>
+                <Select
+                  value={editedProject.status}
+                  onValueChange={(value: any) =>
+                    setEditedProject({ ...editedProject, status: value })
+                  }
                 >
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="not-started">Not Started</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
+                  <SelectTrigger className="border-zinc-200 focus:ring-zinc-900">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
                 <Label
-                  htmlFor="edit-startDate"
-                  className="text-sm font-medium text-gray-900"
+                  htmlFor="startDate"
+                  className="text-zinc-700 font-medium"
                 >
                   Start Date
                 </Label>
                 <Input
-                  id="edit-startDate"
+                  id="startDate"
                   type="date"
                   value={editedProject.startDate}
                   onChange={(e) =>
@@ -806,49 +802,60 @@ export default function ProjectDetails({
                       startDate: e.target.value,
                     })
                   }
-                  className="border-gray-300 text-base"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label
-                  htmlFor="edit-estCompletion"
-                  className="text-sm font-medium text-gray-900"
-                >
-                  Est. Completion
-                </Label>
-                <Input
-                  id="edit-estCompletion"
-                  type="date"
-                  value={editedProject.estCompletion}
-                  onChange={(e) =>
-                    setEditedProject({
-                      ...editedProject,
-                      estCompletion: e.target.value,
-                    })
-                  }
-                  className="border-gray-300 text-base"
-                  min={editedProject.startDate}
+                  className="border-zinc-200 focus:ring-zinc-900"
                 />
               </div>
             </div>
+            <div className="grid gap-2">
+              <Label
+                htmlFor="estCompletion"
+                className="text-zinc-700 font-medium"
+              >
+                Estimated Completion
+              </Label>
+              <Input
+                id="estCompletion"
+                type="date"
+                value={editedProject.estCompletion}
+                onChange={(e) =>
+                  setEditedProject({
+                    ...editedProject,
+                    estCompletion: e.target.value,
+                  })
+                }
+                className="border-zinc-200 focus:ring-zinc-900"
+              />
+            </div>
           </div>
-          <DialogFooter className="gap-3 sm:gap-2 flex flex-col sm:flex-row">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setIsEditDialogOpen(false)}
-              className="border-gray-300 text-gray-700 hover:bg-gray-50 text-base font-medium"
+              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSave}
-              className="bg-gray-900 hover:bg-gray-800 text-white text-base font-medium"
+              className="bg-zinc-900 text-white hover:bg-zinc-800"
             >
               Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add Timeline Update Modal */}
+      {timelineProject && timelineProject.project_id === project.project_id && (
+        <AddTimelineUpdateModal
+          isOpen={true}
+          setIsOpen={(open) => {
+            if (!open) setIsAddTimelineUpdateOpen(false);
+          }}
+          project={project}
+          onUpdateAdded={handleUpdateAdded}
+        />
+      )}
     </div>
   );
 }

@@ -70,6 +70,8 @@
     "react-dom": "^19.0.0",
     "react-email": "^4.0.16",
     "react-hook-form": "^7.56.4",
+    "react-loading-indicator": "^1.0.2",
+    "react-loading-indicators": "^1.0.1",
     "react-resizable-panels": "^3.0.2",
     "recharts": "^2.15.3",
     "resend": "^4.5.1",

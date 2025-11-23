@@ -2,7 +2,7 @@
 "use server";
 
 import { nanoid } from "nanoid";
-import { getSession, setSession, deleteSession } from "../lib/redis";
+import { setSession, deleteSession, verifySession } from "../lib/redis";
 import User from "../models/User";
 
 export async function manageSession(
@@ -45,5 +45,27 @@ export async function endSession(sessionId: string) {
   } catch (error: any) {
     console.error("Session end error:", error);
     throw new Error("Failed to end session");
+  }
+}
+export async function getSession() {
+  try {
+    const session = await verifySession();
+    if (!session) {
+      return null;
+    }
+    return session;
+  } catch (error) {
+    console.error("Error getting session:", error);
+    return null;
+  }
+}
+
+export async function getUserId() {
+  try {
+    const session = await verifySession();
+    return session?.userId || null;
+  } catch (error) {
+    console.error("Error getting user ID:", error);
+    return null;
   }
 }

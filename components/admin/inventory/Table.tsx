@@ -1,5 +1,5 @@
-// components/admin/inventory/Table.tsx
 "use client";
+
 import { IInventory } from "@/types/Inventory";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,12 +15,23 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MoreHorizontal, Trash2, Edit, Eye, Package } from "lucide-react";
+import {
+  MoreHorizontal,
+  Trash2,
+  Edit,
+  Eye,
+  Package,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface InventoryTableProps {
   items: IInventory[];
@@ -67,22 +78,30 @@ export function InventoryTable({
     }
   };
 
-  const getStatusVariant = (item: IInventory) => {
+  // Modern Status Config
+  const getStatusConfig = (item: IInventory) => {
     const quantity = item.quantity;
     const reorderPoint = item.reorderPoint ?? 0;
 
-    if (quantity === 0) return "destructive";
-    if (quantity <= reorderPoint) return "secondary";
-    return "default";
-  };
-
-  const getStatusText = (item: IInventory) => {
-    const quantity = item.quantity;
-    const reorderPoint = item.reorderPoint ?? 0;
-
-    if (quantity === 0) return "Out of Stock";
-    if (quantity <= reorderPoint) return "Low Stock";
-    return "In Stock";
+    if (quantity === 0) {
+      return {
+        label: "Out of Stock",
+        className: "bg-red-50 text-red-700 border-red-200",
+        icon: XCircle,
+      };
+    }
+    if (quantity <= reorderPoint) {
+      return {
+        label: "Low Stock",
+        className: "bg-amber-50 text-amber-700 border-amber-200",
+        icon: AlertCircle,
+      };
+    }
+    return {
+      label: "In Stock",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      icon: CheckCircle2,
+    };
   };
 
   const formatDate = (dateString: string) => {
@@ -94,21 +113,24 @@ export function InventoryTable({
     });
   };
 
-  // Essential columns that should always be visible
-  const essentialColumns = [
-    { key: "name", label: "Product Name", visible: true, align: "left" },
-    { key: "quantity", label: "Quantity", visible: true, align: "right" },
-    { key: "unitCost", label: "Base Price", visible: true, align: "right" },
-  ];
-
-  // Optional columns based on visibility settings
-  const optionalColumns = [
+  // Column Definitions
+  const allColumns = [
+    { key: "id", label: "ID", visible: columnVisibility.id, align: "left" },
+    { key: "name", label: "Product Details", visible: true, align: "left" },
     {
       key: "category",
       label: "Category",
       visible: columnVisibility.category,
       align: "left",
     },
+    {
+      key: "status",
+      label: "Status",
+      visible: columnVisibility.status,
+      align: "left",
+    },
+    { key: "quantity", label: "Qty", visible: true, align: "right" },
+    { key: "unitCost", label: "Base Price", visible: true, align: "right" },
     {
       key: "salePrice",
       label: "Sale Price",
@@ -117,154 +139,100 @@ export function InventoryTable({
     },
     {
       key: "totalCapital",
-      label: "Total Capital",
+      label: "Capital",
       visible: columnVisibility.totalCapital,
       align: "right",
     },
     {
       key: "totalValue",
-      label: "Total Value",
+      label: "Value",
       visible: columnVisibility.totalValue,
       align: "right",
     },
+    { key: "date", label: "Date Added", visible: true, align: "right" },
+    { key: "actions", label: "", visible: true, align: "center" },
   ];
 
-  // End columns - Status, Date, Actions
-  const endColumns = [
-    {
-      key: "status",
-      label: "Status",
-      visible: columnVisibility.status,
-      align: "left",
-    },
-    { key: "date", label: "Date Added", visible: true, align: "left" },
-    { key: "actions", label: "Actions", visible: true, align: "center" },
-  ];
-
-  // Product ID at the start (if visible)
-  const productIdColumn = [
-    {
-      key: "id",
-      label: "Product ID",
-      visible: columnVisibility.id,
-      align: "left",
-    },
-  ];
-
-  const allColumns = [
-    ...productIdColumn,
-    ...essentialColumns,
-    ...optionalColumns,
-    ...endColumns,
-  ];
-
+  // --- Loading State ---
   if (loading) {
     return (
-      <div className="w-full overflow-x-auto rounded-md border-none max-w-full">
-        <div className="min-w-max">
-          <Table>
-            <TableHeader>
-              <TableRow>
+      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+        <Table>
+          <TableHeader className="bg-zinc-50/50">
+            <TableRow>
+              {allColumns.map(
+                (col) =>
+                  col.visible && (
+                    <TableHead
+                      key={col.key}
+                      className={cn(
+                        "h-10",
+                        col.align === "right" && "text-right",
+                        col.align === "center" && "text-center"
+                      )}
+                    >
+                      <Skeleton className="h-4 w-20" />
+                    </TableHead>
+                  )
+              )}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <TableRow key={i}>
                 {allColumns.map(
-                  (column) =>
-                    column.visible && (
-                      <TableHead
-                        key={column.key}
-                        className={`p-3 border border-gray-300 bg-gray-50 ${
-                          column.align === "right"
-                            ? "text-right"
-                            : column.align === "center"
-                              ? "text-center"
-                              : "text-left"
-                        }`}
-                      >
-                        {column.label}
-                      </TableHead>
+                  (col) =>
+                    col.visible && (
+                      <TableCell key={col.key} className="py-3">
+                        <Skeleton className="h-4 w-full" />
+                      </TableCell>
                     )
                 )}
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: 5 }).map((_, index) => (
-                <TableRow key={index}>
-                  {allColumns.map(
-                    (column) =>
-                      column.visible && (
-                        <TableCell
-                          key={column.key}
-                          className={`p-3 border border-gray-300 ${
-                            column.align === "right"
-                              ? "text-right"
-                              : column.align === "center"
-                                ? "text-center"
-                                : "text-left"
-                          }`}
-                        >
-                          {column.key === "actions" ? (
-                            <Skeleton className="h-8 w-8 mx-auto" />
-                          ) : column.key === "status" ? (
-                            <Skeleton className="h-6 w-20" />
-                          ) : column.key === "date" ? (
-                            <Skeleton className="h-4 w-20" />
-                          ) : column.key === "id" ? (
-                            <Skeleton className="h-4 w-24" />
-                          ) : column.key === "name" ? (
-                            <Skeleton className="h-4 w-32" />
-                          ) : column.key === "quantity" ? (
-                            <Skeleton className="h-4 w-16 ml-auto" />
-                          ) : column.key === "unitCost" ? (
-                            <Skeleton className="h-4 w-20 ml-auto" />
-                          ) : column.key === "category" ? (
-                            <Skeleton className="h-4 w-20" />
-                          ) : (
-                            <Skeleton className="h-4 w-20 ml-auto" />
-                          )}
-                        </TableCell>
-                      )
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     );
   }
 
+  // --- Empty State ---
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center px-10 py-16 text-center border border-gray-300 rounded-md">
-        <div className="text-muted-foreground mb-4">
-          <Package className="h-12 w-12 text-gray-400 mx-auto" />
+      <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 flex flex-col items-center justify-center py-24 text-center">
+        <div className="h-12 w-12 bg-white rounded-full border border-zinc-200 flex items-center justify-center mb-4">
+          <Package className="h-6 w-6 text-zinc-400" />
         </div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">
-          No inventory items found
+        <h3 className="text-sm font-semibold text-zinc-900">
+          No inventory found
         </h3>
-        <p className="text-sm text-muted-foreground">
-          Get started by adding your first inventory item.
+        <p className="text-sm text-zinc-500 mt-1 max-w-xs">
+          Your inventory is empty. Add items to start tracking your stock.
         </p>
       </div>
     );
   }
 
+  // --- Main Table ---
   return (
-    <div className="w-full overflow-x-auto max-w-full">
-      <div className="min-w-max">
-        <Table className="w-full border-0">
-          <TableHeader>
-            <TableRow>
+    <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader className="bg-zinc-50/50 border-b border-zinc-200">
+            <TableRow className="hover:bg-transparent border-none">
               {allColumns.map(
                 (column) =>
                   column.visible && (
                     <TableHead
                       key={column.key}
-                      className={`p-3 border border-gray-300 bg-gray-50 ${
+                      className={cn(
+                        "h-11 text-xs font-medium uppercase tracking-wider text-zinc-500",
                         column.align === "right"
                           ? "text-right"
                           : column.align === "center"
                             ? "text-center"
                             : "text-left"
-                      }`}
+                      )}
                     >
                       {column.label}
                     </TableHead>
@@ -274,6 +242,7 @@ export function InventoryTable({
           </TableHeader>
           <TableBody>
             {items.map((item) => {
+              const status = getStatusConfig(item);
               const unitCost = item.unitCost ?? 0;
               const salePrice = item.salePrice ?? 0;
               const totalCapital =
@@ -281,142 +250,136 @@ export function InventoryTable({
               const totalValue = item.totalValue ?? item.quantity * salePrice;
 
               return (
-                <TableRow key={item.product_id} className="hover:bg-gray-50">
-                  {/* Product ID at the start */}
+                <TableRow
+                  key={item.product_id}
+                  className="group hover:bg-zinc-50/50 border-b border-zinc-100 last:border-none transition-colors"
+                >
+                  {/* ID */}
                   {columnVisibility.id && (
-                    <TableCell className="p-3 border border-gray-300">
-                      <code className="text-xs font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded">
-                        {item.product_id}
-                      </code>
+                    <TableCell className="py-3">
+                      <span className="font-mono text-xs text-zinc-500">
+                        {item.product_id.substring(0, 8)}...
+                      </span>
                     </TableCell>
                   )}
 
-                  {/* Essential Columns */}
-
                   {/* Product Name */}
-                  <TableCell className="p-3 border border-gray-300">
-                    <div className="flex flex-col min-w-0 max-w-[200px]">
-                      <span className="font-medium text-sm truncate">
+                  <TableCell className="py-3 max-w-[250px]">
+                    <div className="flex flex-col">
+                      <span
+                        className="font-medium text-sm text-zinc-900 truncate block"
+                        title={item.name}
+                      >
                         {item.name}
                       </span>
                       {item.description && (
-                        <span className="text-xs text-muted-foreground truncate">
+                        <span
+                          className="text-xs text-zinc-500 truncate block mt-0.5"
+                          title={item.description}
+                        >
                           {item.description}
                         </span>
                       )}
                     </div>
                   </TableCell>
 
+                  {/* Category */}
+                  {columnVisibility.category && (
+                    <TableCell className="py-3">
+                      <Badge
+                        variant="secondary"
+                        className="bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border-zinc-200 rounded-md font-normal"
+                      >
+                        {item.category}
+                      </Badge>
+                    </TableCell>
+                  )}
+
+                  {/* Status */}
+                  {columnVisibility.status && (
+                    <TableCell className="py-3">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-medium flex w-fit items-center gap-1 pr-2.5",
+                          status.className
+                        )}
+                      >
+                        <status.icon className="h-3 w-3" />
+                        {status.label}
+                      </Badge>
+                    </TableCell>
+                  )}
+
                   {/* Quantity */}
-                  <TableCell className="p-3 text-right border border-gray-300">
+                  <TableCell className="py-3 text-right">
                     <div className="flex flex-col items-end">
-                      <span className="font-medium">
+                      <span className="font-semibold text-sm text-zinc-900 font-mono">
                         {item.quantity.toLocaleString()}
                       </span>
-                      <span className="text-xs text-muted-500 uppercase">
+                      <span className="text-[10px] text-zinc-400 uppercase tracking-wide">
                         {item.unit}
                       </span>
                     </div>
                   </TableCell>
 
                   {/* Base Price */}
-                  <TableCell className="p-3 text-right border border-gray-300">
-                    <div className="flex flex-col items-end">
-                      <span className="font-medium">
-                        ₱
-                        {unitCost.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                      <span className="text-xs text-muted-500">
-                        per {item.unit}
-                      </span>
+                  <TableCell className="py-3 text-right">
+                    <div className="font-mono text-sm text-zinc-700">
+                      <span className="text-zinc-400 mr-0.5">₱</span>
+                      {unitCost.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </div>
                   </TableCell>
 
-                  {/* Optional Columns */}
-
-                  {/* Category */}
-                  {columnVisibility.category && (
-                    <TableCell className="p-3 border border-gray-300">
-                      <Badge variant="outline" className="text-xs">
-                        {item.category}
-                      </Badge>
-                    </TableCell>
-                  )}
-
                   {/* Sale Price */}
                   {columnVisibility.salePrice && (
-                    <TableCell className="p-3 text-right border border-gray-300">
-                      <div className="flex flex-col items-end">
-                        <span className="font-medium">
-                          ₱
-                          {salePrice.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                        <span className="text-xs text-muted-500">
-                          per {item.unit}
-                        </span>
+                    <TableCell className="py-3 text-right">
+                      <div className="font-mono text-sm text-zinc-700">
+                        <span className="text-zinc-400 mr-0.5">₱</span>
+                        {salePrice.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
                     </TableCell>
                   )}
 
                   {/* Total Capital */}
                   {columnVisibility.totalCapital && (
-                    <TableCell className="p-3 text-right border border-gray-300">
-                      <div className="flex flex-col items-end">
-                        <span className="font-medium text-green-700">
-                          ₱
-                          {totalCapital.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                        <span className="text-xs text-muted-500">capital</span>
+                    <TableCell className="py-3 text-right">
+                      <div className="font-mono text-sm text-zinc-900 font-medium">
+                        <span className="text-zinc-400 mr-0.5">₱</span>
+                        {totalCapital.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
                     </TableCell>
                   )}
 
                   {/* Total Value */}
                   {columnVisibility.totalValue && (
-                    <TableCell className="p-3 text-right border border-gray-300">
-                      <div className="flex flex-col items-end">
-                        <span className="font-medium text-blue-700">
-                          ₱
-                          {totalValue.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                        <span className="text-xs text-muted-500">value</span>
+                    <TableCell className="py-3 text-right">
+                      <div className="font-mono text-sm text-zinc-900 font-medium">
+                        <span className="text-zinc-400 mr-0.5">₱</span>
+                        {totalValue.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
                     </TableCell>
                   )}
 
-                  {/* End Columns */}
-
-                  {/* Status */}
-                  {columnVisibility.status && (
-                    <TableCell className="p-3 border border-gray-300">
-                      <Badge
-                        variant={getStatusVariant(item)}
-                        className="text-xs"
-                      >
-                        {getStatusText(item)}
-                      </Badge>
-                    </TableCell>
-                  )}
-
-                  {/* Date Added */}
-                  <TableCell className="p-3 border border-gray-300">
-                    <div className="flex flex-col">
-                      <span className="text-sm">
+                  {/* Date */}
+                  <TableCell className="py-3 text-right">
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs text-zinc-600">
                         {formatDate(item.timeCreated)}
                       </span>
-                      <span className="text-xs text-muted-500">
+                      <span className="text-[10px] text-zinc-400">
                         {new Date(item.timeCreated).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -426,56 +389,44 @@ export function InventoryTable({
                   </TableCell>
 
                   {/* Actions */}
-                  <TableCell className="p-3 text-center border border-gray-300">
+                  <TableCell className="py-3 text-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
-                          className="h-8 w-8 p-0"
+                          className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100"
                           disabled={isDeleting === item.product_id}
                         >
                           <span className="sr-only">Open menu</span>
                           {isDeleting === item.product_id ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-900 border-t-transparent" />
                           ) : (
                             <MoreHorizontal className="h-4 w-4" />
                           )}
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={() => onViewDetails(item)}
-                          className="cursor-pointer"
-                        >
-                          <Eye className="mr-2 h-4 w-4" />
-                          View details
+                      <DropdownMenuContent
+                        align="end"
+                        className="w-40 font-geist"
+                      >
+                        <DropdownMenuLabel className="text-xs text-zinc-500 font-normal">
+                          Actions
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => onViewDetails(item)}>
+                          <Eye className="mr-2 h-3.5 w-3.5" /> View
                         </DropdownMenuItem>
                         {onEdit && (
-                          <DropdownMenuItem
-                            onClick={() => onEdit(item)}
-                            className="cursor-pointer"
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit item
+                          <DropdownMenuItem onClick={() => onEdit(item)}>
+                            <Edit className="mr-2 h-3.5 w-3.5" /> Edit
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => handleDeleteItem(item)}
-                          className="cursor-pointer text-destructive focus:text-destructive"
+                          className="text-red-600 focus:text-red-600 focus:bg-red-50"
                           disabled={isDeleting === item.product_id}
                         >
-                          {isDeleting === item.product_id ? (
-                            <>
-                              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-destructive border-t-transparent" />
-                              Deleting...
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete item
-                            </>
-                          )}
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

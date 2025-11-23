@@ -58,14 +58,9 @@ const data = {
   ],
   projects: [
     {
-      name: "Active Projects",
-      url: "/user/projects/active",
-      icon: Clock,
-    },
-    {
-      name: "Completed Projects",
-      url: "/user/projects/completed",
-      icon: CheckCircle,
+      name: "My Projects",
+      url: "/user/projects",
+      icon: Folder,
     },
   ],
 };

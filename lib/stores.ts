@@ -54,6 +54,10 @@ interface ModalStore {
   isEditUserOpen: boolean;
   editingUser: User | null;
 
+  // Timeline modals
+  isAddTimelineUpdateOpen: boolean;
+  timelineProject: any | null;
+
   // Create account from notification
   createAccountData: CreateAccountData | null;
 
@@ -70,6 +74,7 @@ interface ModalStore {
   setIsCreateSupplierOpen: (open: boolean) => void;
   setIsViewSupplierOpen: (open: boolean, supplier?: ISupplier | null) => void;
   setIsEditUserOpen: (open: boolean, user?: User | null) => void;
+  setIsAddTimelineUpdateOpen: (open: boolean, project?: any) => void;
   setCreateAccountData: (data: CreateAccountData | null) => void;
 }
 
@@ -112,12 +117,14 @@ export const useModalStore = create<ModalStore>((set) => ({
   isCreateSupplierOpen: false,
   isViewSupplierOpen: false,
   isEditUserOpen: false,
+  isAddTimelineUpdateOpen: false,
 
   designIdToDelete: null,
   editingProject: null,
   editingInventory: null,
   viewingSupplier: null,
   editingUser: null,
+  timelineProject: null,
   createAccountData: null,
 
   // Modal control methods
@@ -172,6 +179,13 @@ export const useModalStore = create<ModalStore>((set) => ({
     set({
       isEditUserOpen: open,
       editingUser: open ? user : null,
+    });
+  },
+
+  setIsAddTimelineUpdateOpen: (open: boolean, project?: any) => {
+    set({
+      isAddTimelineUpdateOpen: open,
+      timelineProject: open ? project : null,
     });
   },
 

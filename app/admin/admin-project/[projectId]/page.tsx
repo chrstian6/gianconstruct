@@ -9,6 +9,7 @@ import { getTasks, createTask, updateTask, deleteTask } from "@/action/task";
 import { Button } from "@/components/ui/button";
 import ProjectDetails from "@/components/admin/projects/ProjectDetails";
 import { Project, Task } from "@/types/project";
+import DotLoader from "@/components/ui/dot-loader";
 
 interface User {
   user_id: string;
@@ -28,6 +29,7 @@ export default function ProjectDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showLoading, setShowLoading] = useState(true);
 
   const projectId = params?.projectId as string;
 
@@ -36,11 +38,13 @@ export default function ProjectDetailPage() {
       if (!projectId) {
         setError("No project ID provided");
         setIsLoading(false);
+        setShowLoading(false);
         return;
       }
 
       try {
         setIsLoading(true);
+        setShowLoading(true);
 
         // Fetch all projects to find the matching one
         const projectResponse = await getProjects();
@@ -74,6 +78,8 @@ export default function ProjectDetailPage() {
         console.error("Client-side fetch error:", error);
       } finally {
         setIsLoading(false);
+        // Delay hiding loading to ensure smooth transition
+        setTimeout(() => setShowLoading(false), 500);
       }
     };
 
@@ -140,19 +146,24 @@ export default function ProjectDetailPage() {
     }
   };
 
+  // Show loading screen
+  if (showLoading) {
+    return <DotLoader />;
+  }
+
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 gap-4">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 font-geist mb-2">
+          <h2 className="text-3xl font-bold text-foreground font-geist mb-2">
             Error
           </h2>
-          <p className="text-base text-gray-600 font-geist">{error}</p>
+          <p className="text-base text-muted-foreground font-geist">{error}</p>
         </div>
         <Button
           variant="ghost"
           onClick={handleBack}
-          className="flex items-center gap-2 text-base text-gray-600 hover:text-gray-900 font-geist"
+          className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground font-geist"
         >
           Back to Projects
         </Button>
@@ -160,34 +171,21 @@ export default function ProjectDetailPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          <p className="text-base text-gray-600 font-geist">
-            Loading project details...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (!project) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 gap-4">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 font-geist mb-2">
+          <h2 className="text-3xl font-bold text-foreground font-geist mb-2">
             Project Not Found
           </h2>
-          <p className="text-base text-gray-600 font-geist">
+          <p className="text-base text-muted-foreground font-geist">
             The project you're looking for doesn't exist.
           </p>
         </div>
         <Button
           variant="ghost"
           onClick={handleBack}
-          className="flex items-center gap-2 text-base text-gray-600 hover:text-gray-900 font-geist"
+          className="flex items-center gap-2 text-base text-muted-foreground hover:text-foreground font-geist"
         >
           Back to Projects
         </Button>
@@ -201,7 +199,7 @@ export default function ProjectDetailPage() {
       user={user}
       onBack={handleBack}
       onUpdate={handleUpdate}
-      isLoading={false}
+      isLoading={isLoading}
       // Pass tasks and task handlers as props
       tasks={tasks}
       onTaskUpdate={handleTaskUpdate}

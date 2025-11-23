@@ -430,7 +430,7 @@ export default function TransactionPage() {
       <div className="flex-shrink-0 bg-white border-b border-gray-200">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 px-5 pt-5 pb-0">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground font-geist">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground font-geist">
               Payment Transactions
             </h1>
             <p className="text-gray-600 mt-1 text-sm font-geist">

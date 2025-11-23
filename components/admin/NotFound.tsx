@@ -16,7 +16,7 @@ export default function NotFound({
         {/* Image */}
         <div className="mb-6">
           <img
-            src="/images/larry-designnotfound.png"
+            src="/images/notfound2.jpg"
             alt="Clean empty space"
             className="mx-auto w-48 h-48 object-contain"
           />

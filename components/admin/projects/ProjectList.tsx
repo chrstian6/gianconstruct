@@ -15,19 +15,19 @@ import {
 import {
   Filter,
   Plus,
-  Clock,
-  CheckCircle,
   Search,
-  Eye,
   X,
   Trash2,
   CheckSquare,
+  ListFilter,
+  ArrowUpDown,
+  LayoutGrid,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Pagination,
@@ -43,6 +43,7 @@ import {
   getProjectsPaginated,
   deleteProject,
   deleteMultipleProjects,
+  cancelProject,
   PaginatedProjectsResponse,
 } from "@/action/project";
 import { getUsers } from "@/action/userManagement";
@@ -54,15 +55,7 @@ import ConfirmationModal from "@/components/ConfirmationModal";
 import NotFound from "../NotFound";
 import { useModalStore } from "@/lib/stores";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Checkbox } from "@/components/ui/checkbox";
 
 interface User {
   user_id: string;
@@ -73,7 +66,7 @@ interface User {
   address: string;
 }
 
-type StatusFilter = "all" | "not-started" | "active" | "completed" | "pending";
+type StatusFilter = "all" | "pending" | "active" | "completed" | "cancelled";
 type DateFilter = "any" | "today" | "thisWeek" | "thisMonth" | "overdue";
 
 export default function ProjectList() {
@@ -83,8 +76,7 @@ export default function ProjectList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dateFilter, setDateFilter] = useState<DateFilter>("any");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active"); // Default to "active"
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -109,10 +101,9 @@ export default function ProjectList() {
     editingProject,
   } = useModalStore();
 
-  // Available statuses for tags - Always visible regardless of data
-  const statuses = ["all", "not-started", "active", "completed", "pending"];
+  // Available statuses for tags
+  const statuses = ["all", "pending", "active", "completed", "cancelled"];
 
-  // ✅ useCallback to prevent re-creation
   const fetchProjects = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -182,7 +173,6 @@ export default function ProjectList() {
   const handleProjectSelect = useCallback(
     (project: Project) => {
       if (isSelectMode) {
-        // Toggle selection in select mode
         const newSelected = new Set(selectedProjects);
         if (newSelected.has(project.project_id)) {
           newSelected.delete(project.project_id);
@@ -191,7 +181,6 @@ export default function ProjectList() {
         }
         setSelectedProjects(newSelected);
       } else {
-        // Navigate to project detail in normal mode
         router.push(`/admin/admin-project/${project.project_id}`);
       }
     },
@@ -205,13 +194,10 @@ export default function ProjectList() {
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!projectToDelete) return;
-
     try {
       const response = await deleteProject(projectToDelete.project_id);
-
       if (response.success) {
         toast.success("Project deleted successfully");
-        // Refetch projects to get updated data
         await fetchProjects();
       } else {
         toast.error(response.error || "Failed to delete project");
@@ -227,16 +213,13 @@ export default function ProjectList() {
 
   const handleMultiDeleteConfirm = useCallback(async () => {
     if (selectedProjects.size === 0) return;
-
     try {
       const projectIds = Array.from(selectedProjects);
       const response = await deleteMultipleProjects(projectIds);
-
       if (response.success) {
         toast.success(
           `Successfully deleted ${selectedProjects.size} project${selectedProjects.size > 1 ? "s" : ""}`
         );
-        // Refetch projects to get updated data
         await fetchProjects();
         setSelectedProjects(new Set());
         setIsSelectMode(false);
@@ -260,6 +243,25 @@ export default function ProjectList() {
     setIsMultiDeleteModalOpen(false);
   }, []);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleCancelProject = useCallback(
+    async (project: Project) => {
+      try {
+        const response = await cancelProject(project.project_id);
+        if (response.success) {
+          toast.success("Project cancelled successfully");
+          await fetchProjects();
+        } else {
+          toast.error(response.error || "Failed to cancel project");
+        }
+      } catch (error) {
+        toast.error("An error occurred while cancelling the project");
+        console.error("Cancel project error:", error);
+      }
+    },
+    [fetchProjects]
+  );
+
   const handleEditProject = useCallback(
     (project: Project) => {
       setIsEditProjectOpen(true, project);
@@ -269,14 +271,12 @@ export default function ProjectList() {
 
   const handleProjectUpdated = useCallback(
     async (updatedProject: Project) => {
-      // Refetch projects to get updated data
       await fetchProjects();
     },
     [fetchProjects]
   );
 
   const handleProjectCreated = useCallback(async () => {
-    // Refetch projects to get updated data
     await fetchProjects();
   }, [fetchProjects]);
 
@@ -284,7 +284,6 @@ export default function ProjectList() {
     (totalPages: number, currentPage: number) => {
       const pages = [];
       const maxVisiblePages = 5;
-
       if (totalPages <= maxVisiblePages) {
         for (let i = 1; i <= totalPages; i++) pages.push(i);
       } else {
@@ -313,12 +312,12 @@ export default function ProjectList() {
   const clearFilters = useCallback(() => {
     setSearchQuery("");
     setDateFilter("any");
-    setStatusFilter("active"); // Reset to "active" when clearing filters
+    setStatusFilter("active");
     setCurrentPage(1);
   }, []);
 
   const hasActiveFilters = useMemo(
-    () => searchQuery || dateFilter !== "any" || statusFilter !== "active", // Changed from "all" to "active"
+    () => searchQuery || dateFilter !== "any" || statusFilter !== "active",
     [searchQuery, dateFilter, statusFilter]
   );
 
@@ -327,11 +326,9 @@ export default function ProjectList() {
   };
 
   const formatStatusDisplay = (status: string): string => {
-    if (status === "not-started") return "Not Started";
     return capitalizeFirstLetter(status);
   };
 
-  // Multi-select functions
   const toggleSelectMode = useCallback(() => {
     setIsSelectMode(!isSelectMode);
     if (isSelectMode) {
@@ -368,30 +365,40 @@ export default function ProjectList() {
   }, [selectedProjects.size]);
 
   return (
-    <div className="flex flex-col h-screen px-10 font-geist">
-      {/* Fixed Header Section - Matching CatalogList layout */}
-      <div className="flex-shrink-0 px-6 py-2 bg-white border-gray-200">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 font-geist">
-              Construction Projects
-            </h1>
-            <p className="text-gray-600 mt-1 text-sm font-geist">
-              {isLoading
-                ? "Loading..."
-                : `${totalCount.toLocaleString()} projects found${hasActiveFilters ? " (filtered)" : ""}`}
-            </p>
+    <div className="flex flex-col min-h-screen bg-zinc-50/30 font-geist">
+      {/* Sticky Modern Header */}
+      <div className="sticky top-0 z-30 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
+        <div className="flex flex-col gap-4 px-6 py-5 md:px-8">
+          {/* Top Row: Title & Primary Action */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              {/* Increased Text Size */}
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900 font-geist">
+                Projects
+              </h1>
+              {/* Replaced dynamic count with static description */}
+              <p className="text-zinc-500 mt-1 text-sm font-medium font-geist">
+                Manage and organize your construction projects.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <Button
+                onClick={() => setIsCreateProjectOpen(true)}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm transition-all duration-200 font-medium px-5 h-10 rounded-lg w-full md:w-auto font-geist"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Create Project
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {/* Search and Filters - Matching CatalogList layout */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          {/* Middle Row: Search, Filters & Selection Tools */}
+          <div className="flex flex-col md:flex-row items-center gap-3 w-full">
+            {/* Search Bar */}
+            <div className="relative w-full md:max-w-sm group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
               <Input
                 placeholder="Search projects..."
-                className="pl-10 w-full border-gray-300 rounded-lg focus:border-gray-500 focus:ring-gray-500 font-geist"
+                className="pl-10 h-10 bg-zinc-50/50 border-zinc-200 focus:bg-white focus:border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 rounded-lg transition-all font-geist"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -399,40 +406,47 @@ export default function ProjectList() {
                 }}
               />
               {searchQuery && (
-                <X
-                  className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500 cursor-pointer"
+                <button
                   onClick={() => setSearchQuery("")}
-                />
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-100 rounded-full transition-colors"
+                >
+                  <X className="h-3 w-3 text-zinc-500" />
+                </button>
               )}
             </div>
 
-            <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+            <div className="h-6 w-px bg-zinc-200 hidden md:block mx-1" />
+
+            {/* Filters Dropdown */}
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2 border-gray-300 rounded-lg hover:bg-gray-100 text-gray-700 font-geist"
+                  className={cn(
+                    "h-10 border-dashed border-zinc-300 bg-transparent hover:bg-zinc-50 text-zinc-600 font-geist w-full md:w-auto justify-between md:justify-center",
+                    hasActiveFilters &&
+                      "border-zinc-400 bg-zinc-50 text-zinc-900"
+                  )}
                 >
-                  <Filter className="h-5 w-5" />
-                  <span>Filters</span>
+                  <div className="flex items-center gap-2">
+                    <ListFilter className="h-4 w-4" />
+                    <span>Filter</span>
+                  </div>
                   {hasActiveFilters && (
-                    <Badge
-                      variant="secondary"
-                      className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center"
-                    >
+                    <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center bg-zinc-900 text-white hover:bg-zinc-800 rounded-full text-[10px]">
                       !
                     </Badge>
                   )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64 p-4 space-y-4 bg-white shadow-lg rounded-lg border border-gray-200 font-geist">
-                <div>
-                  <Label
-                    htmlFor="dropdown_status_filter"
-                    className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                  >
-                    Status
-                  </Label>
+              <DropdownMenuContent
+                align="start"
+                className="w-72 p-4 space-y-4 font-geist"
+              >
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-zinc-900 flex items-center gap-2">
+                    <Filter className="h-3 w-3" /> Status
+                  </h4>
                   <Select
                     onValueChange={(value: StatusFilter) => {
                       setStatusFilter(value);
@@ -440,39 +454,25 @@ export default function ProjectList() {
                     }}
                     value={statusFilter}
                   >
-                    <SelectTrigger
-                      id="dropdown_status_filter"
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    >
+                    <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
-                    <SelectContent className="font-geist">
-                      <SelectItem value="all" className="font-geist">
-                        All Projects
-                      </SelectItem>
-                      <SelectItem value="not-started" className="font-geist">
-                        Not Started
-                      </SelectItem>
-                      <SelectItem value="active" className="font-geist">
-                        Active
-                      </SelectItem>
-                      <SelectItem value="completed" className="font-geist">
-                        Completed
-                      </SelectItem>
-                      <SelectItem value="pending" className="font-geist">
-                        Pending
-                      </SelectItem>
+                    <SelectContent>
+                      <SelectItem value="all">All Projects</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div>
-                  <Label
-                    htmlFor="dropdown_date_filter"
-                    className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                  >
-                    Date Filter
-                  </Label>
+                <DropdownMenuSeparator />
+
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-zinc-900 flex items-center gap-2">
+                    <ArrowUpDown className="h-3 w-3" /> Date Range
+                  </h4>
                   <Select
                     onValueChange={(value: DateFilter) => {
                       setDateFilter(value);
@@ -480,170 +480,156 @@ export default function ProjectList() {
                     }}
                     value={dateFilter}
                   >
-                    <SelectTrigger
-                      id="dropdown_date_filter"
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    >
-                      <SelectValue placeholder="Select date filter" />
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select range" />
                     </SelectTrigger>
-                    <SelectContent className="font-geist">
-                      <SelectItem value="any" className="font-geist">
-                        Any Date
-                      </SelectItem>
-                      <SelectItem value="today" className="font-geist">
-                        Today
-                      </SelectItem>
-                      <SelectItem value="thisWeek" className="font-geist">
-                        This Week
-                      </SelectItem>
-                      <SelectItem value="thisMonth" className="font-geist">
-                        This Month
-                      </SelectItem>
-                      <SelectItem value="overdue" className="font-geist">
-                        Overdue
-                      </SelectItem>
+                    <SelectContent>
+                      <SelectItem value="any">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="thisWeek">This Week</SelectItem>
+                      <SelectItem value="thisMonth">This Month</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {hasActiveFilters && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200 font-geist"
-                    onClick={clearFilters}
-                  >
-                    Clear Filters
-                  </Button>
+                  <>
+                    <DropdownMenuSeparator />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full h-9 bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+                      onClick={clearFilters}
+                    >
+                      Reset Filters
+                    </Button>
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* New Project Button - Moved down to align with search input */}
-            <Button
-              onClick={() => setIsCreateProjectOpen(true)}
-              size="sm"
-              className="bg-gray-900 hover:bg-gray-800 text-white font-geist whitespace-nowrap"
-            >
-              <Plus className="mr-2 h-4 w-4" /> New Project
-            </Button>
-          </div>
+            <div className="flex-1" />
 
-          {/* Multi-select Actions - Moved to the right/end */}
-          <div className="flex items-center gap-2">
-            {isSelectMode ? (
-              <div className="flex gap-2 items-center">
-                {/* Select All / Deselect All */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleSelectAll}
-                  className="font-geist"
-                >
-                  {selectedProjects.size === projects.length
-                    ? "Deselect All"
-                    : "Select All"}
-                </Button>
-
-                {/* X icon for cancel */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleSelectMode}
-                  className="font-geist"
-                  title="Cancel selection"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-
-                {/* Trash icon for delete */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleMultiDeleteClick}
-                  disabled={selectedProjects.size === 0}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 font-geist"
-                  title={`Delete ${selectedProjects.size} selected project${selectedProjects.size > 1 ? "s" : ""}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-
-                {/* Selection count badge */}
-                {selectedProjects.size > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="bg-blue-100 text-blue-800 hover:bg-blue-200 text-sm"
+            {/* Selection Tools */}
+            <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+              {isSelectMode ? (
+                <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-lg border border-zinc-200 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleSelectAll}
+                    className="h-8 text-xs font-medium text-zinc-700 hover:text-zinc-900 font-geist"
                   >
-                    {selectedProjects.size} selected
-                  </Badge>
-                )}
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleSelectMode}
-                className="font-geist flex items-center gap-2"
-              >
-                <CheckSquare className="h-4 w-4" />
-                Select
-              </Button>
-            )}
-          </div>
-        </div>
+                    {selectedProjects.size === projects.length
+                      ? "Deselect All"
+                      : "Select All"}
+                  </Button>
 
-        {/* Status Tags - Always visible like CatalogList categories */}
-        <div className="flex flex-wrap gap-2 mt-4 border-t py-3">
-          {statuses.map((status) => (
-            <button
-              key={status}
-              onClick={() => {
-                setStatusFilter(status as StatusFilter);
-                setCurrentPage(1);
-              }}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 font-geist ${
-                statusFilter === status
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {status === "all" ? "All Projects" : formatStatusDisplay(status)}
-            </button>
-          ))}
+                  <div className="h-4 w-px bg-zinc-300" />
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleSelectMode}
+                    className="h-8 w-8 p-0 hover:bg-zinc-200 rounded-md"
+                  >
+                    <X className="h-4 w-4 text-zinc-600" />
+                  </Button>
+
+                  {selectedProjects.size > 0 && (
+                    <>
+                      <div className="h-4 w-px bg-zinc-300" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleMultiDeleteClick}
+                        className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 font-geist"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete ({selectedProjects.size})
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  onClick={toggleSelectMode}
+                  className="h-10 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 font-geist"
+                >
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Select
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-6 px-6 md:mx-0 md:px-0">
+            {statuses.map((status) => (
+              <button
+                key={status}
+                onClick={() => {
+                  setStatusFilter(status as StatusFilter);
+                  setCurrentPage(1);
+                }}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap font-geist border",
+                  statusFilter === status
+                    ? "bg-zinc-900 text-white border-zinc-900 shadow-sm"
+                    : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
+                )}
+              >
+                {status === "all"
+                  ? "All Projects"
+                  : formatStatusDisplay(status)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Scrollable Content Section with Cards and Pagination */}
+      {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          // Skeleton Loading State - Matching CatalogList
-          <div className="p-6">
+          <div className="p-6 md:p-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
               {Array.from({ length: cardsPerPage }).map((_, index) => (
-                <div key={index} className="animate-pulse font-geist">
-                  <div className="bg-gray-200 rounded-xl aspect-video mb-3"></div>
-                  <div className="bg-gray-200 rounded-lg p-3">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="bg-gray-300 rounded h-4 w-3/4 mb-2"></div>
-                        <div className="bg-gray-300 rounded h-3 w-1/2"></div>
-                      </div>
-                      <div className="bg-gray-300 rounded-full h-7 w-7"></div>
-                    </div>
+                <div
+                  key={index}
+                  className="rounded-xl border border-zinc-100 bg-white p-4 space-y-3 animate-pulse"
+                >
+                  <div className="bg-zinc-100 rounded-lg aspect-[4/3] w-full" />
+                  <div className="space-y-2">
+                    <div className="bg-zinc-100 h-4 w-3/4 rounded" />
+                    <div className="bg-zinc-100 h-3 w-1/2 rounded" />
+                  </div>
+                  <div className="pt-2 flex justify-between">
+                    <div className="bg-zinc-100 h-6 w-16 rounded-full" />
+                    <div className="bg-zinc-100 h-6 w-6 rounded-full" />
                   </div>
                 </div>
               ))}
             </div>
           </div>
         ) : projects.length === 0 ? (
-          <div className="p-6">
-            <div className="p-8 text-center mx-auto font-geist">
-              <NotFound description="Try adjusting the filters or start your new project" />
+          <div className="h-[60vh] flex flex-col items-center justify-center p-6">
+            <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mb-4 border border-zinc-100">
+              <LayoutGrid className="h-8 w-8 text-zinc-300" />
             </div>
+            <NotFound description="No projects found matching your criteria. Try adjusting the filters or start a new project." />
+            <Button
+              variant="outline"
+              onClick={clearFilters}
+              className="mt-4 font-geist border-zinc-200"
+            >
+              Clear Filters
+            </Button>
           </div>
         ) : (
-          <div className="px-10">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 mb-6">
+          <div className="px-10 overflow-y-auto mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
               {projects.map((project) => (
                 <ProjectCard
                   key={project.project_id}
@@ -662,7 +648,7 @@ export default function ProjectList() {
               ))}
             </div>
 
-            {/* Pagination Section - Always visible even with 1 page */}
+            {/* Original Pagination Section */}
             <div className="my-6 px-6 p-10 border-gray-200">
               <Pagination>
                 <PaginationContent className="font-geist">
@@ -690,8 +676,8 @@ export default function ProjectList() {
                             className={cn(
                               "font-geist text-sm",
                               currentPage === page
-                                ? "bg-gray-900 text-white hover:bg-gray-800"
-                                : "text-gray-700 hover:bg-gray-100"
+                                ? "bg-zinc-900 text-white hover:bg-zinc-800"
+                                : "text-zinc-700 hover:bg-zinc-100"
                             )}
                           >
                             {page}
@@ -717,7 +703,7 @@ export default function ProjectList() {
               </Pagination>
 
               {/* Page info */}
-              <div className="text-center mt-4 text-sm text-gray-600 font-geist">
+              <div className="text-center mt-4 text-sm text-zinc-600 font-geist">
                 Page {currentPage} of {totalPages} •{" "}
                 {totalCount.toLocaleString()} total projects
               </div>
@@ -726,7 +712,7 @@ export default function ProjectList() {
         )}
       </div>
 
-      {/* Modals - All functionality preserved */}
+      {/* Modals */}
       <CreateProjectModal
         isOpen={isCreateProjectOpen}
         onClose={() => setIsCreateProjectOpen(false)}

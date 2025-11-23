@@ -2,11 +2,12 @@ import mongoose, { Schema, Document } from "mongoose";
 import { z } from "zod";
 import { ProjectPreSaveZodSchema } from "@/types/project";
 
-// Interface for timeline entry
-interface ITimelineEntry {
-  date: Date;
-  photoUrls?: string[];
-  caption?: string;
+// Interface for project image
+interface IProjectImage {
+  url: string;
+  title: string;
+  description?: string;
+  uploadedAt: Date;
 }
 
 // Interface for location
@@ -23,6 +24,10 @@ interface IProjectDocument
   extends Document,
     Omit<z.infer<typeof ProjectPreSaveZodSchema>, "_id"> {
   location?: ILocation;
+  projectImages?: IProjectImage[];
+  // Add confirmation fields
+  confirmedAt?: Date;
+  confirmedBy?: string;
 }
 
 // Define the Mongoose schema
@@ -41,8 +46,8 @@ const projectSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["not-started", "pending", "active", "completed", "cancelled"],
-      default: "not-started",
+      enum: ["pending", "active", "completed", "cancelled"], // REMOVED "not-started"
+      default: "pending", // CHANGED from "not-started" to "pending"
     },
     startDate: {
       type: Date,
@@ -51,7 +56,7 @@ const projectSchema = new Schema(
     },
     endDate: {
       type: Date,
-      required: false, // Explicitly optional to match Zod schema
+      required: false,
     },
     userId: {
       type: String,
@@ -70,16 +75,25 @@ const projectSchema = new Schema(
         barangay: { type: String, required: false },
         fullAddress: { type: String, required: false },
       },
-      required: false, // Location is optional
+      required: false,
     },
-    timeline: [
+    projectImages: [
       {
-        date: { type: Date, required: true },
-        photoUrls: [{ type: String, required: false }],
-        caption: { type: String, required: false, trim: true },
-        photoUrl: { type: String, required: false }, // Legacy field
+        url: { type: String, required: true },
+        title: { type: String, required: true, trim: true },
+        description: { type: String, trim: true },
+        uploadedAt: { type: Date, default: Date.now },
       },
     ],
+    // Add confirmation fields
+    confirmedAt: {
+      type: Date,
+      required: false,
+    },
+    confirmedBy: {
+      type: String,
+      required: false,
+    },
   },
   {
     timestamps: true,
@@ -88,23 +102,16 @@ const projectSchema = new Schema(
         ret._id = ret._id.toString();
         ret.createdAt = ret.createdAt.toISOString();
         ret.updatedAt = ret.updatedAt.toISOString();
-        // Transform timeline to use photoUrls, supporting legacy photoUrl
-        if (ret.timeline) {
-          ret.timeline = ret.timeline.map((entry: any) => ({
-            date: entry.date,
-            photoUrls:
-              entry.photoUrls ||
-              (entry.photoUrl ? [entry.photoUrl] : undefined),
-            caption: entry.caption,
+        // Ensure projectImages is properly formatted
+        if (ret.projectImages) {
+          ret.projectImages = ret.projectImages.map((image: any) => ({
+            url: image.url,
+            title: image.title,
+            description: image.description,
+            uploadedAt: image.uploadedAt,
           }));
         }
         delete ret.__v;
-        // Remove legacy photoUrl from output
-        if (ret.timeline) {
-          ret.timeline.forEach((entry: any) => {
-            delete entry.photoUrl;
-          });
-        }
       },
     },
   }
@@ -135,12 +142,9 @@ projectSchema.pre("save", function (next) {
       userId: doc.userId,
       totalCost: doc.totalCost,
       location: doc.location,
-      timeline: doc.timeline?.map((entry: any) => ({
-        date: entry.date,
-        photoUrls:
-          entry.photoUrls || (entry.photoUrl ? [entry.photoUrl] : undefined),
-        caption: entry.caption,
-      })),
+      projectImages: doc.projectImages,
+      confirmedAt: doc.confirmedAt,
+      confirmedBy: doc.confirmedBy,
     };
 
     console.log("Validation data:", validationData);
@@ -181,12 +185,9 @@ projectSchema.pre("findOneAndUpdate", async function (next) {
       userId: updatedDoc.userId,
       totalCost: updatedDoc.totalCost,
       location: updatedDoc.location,
-      timeline: updatedDoc.timeline?.map((entry: any) => ({
-        date: entry.date,
-        photoUrls:
-          entry.photoUrls || (entry.photoUrl ? [entry.photoUrl] : undefined),
-        caption: entry.caption,
-      })),
+      projectImages: updatedDoc.projectImages,
+      confirmedAt: updatedDoc.confirmedAt,
+      confirmedBy: updatedDoc.confirmedBy,
     };
 
     console.log("Validation data:", validationData);
