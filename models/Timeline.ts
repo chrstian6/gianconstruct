@@ -7,14 +7,13 @@ export interface ITimelineEntry extends Document {
     | "project_confirmed"
     | "project_assigned"
     | "status_update"
-    | "photo_update"
+    | "photo_timeline_update" // CHANGED from photo_update to photo_timeline_update
     | "milestone";
   title: string;
   description?: string;
   photoUrls?: string[];
-  status?: "pending" | "active" | "completed" | "cancelled";
   assignedTo?: string;
-  progress?: number; // NEW: Progress field
+  progress?: number;
   date: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -35,7 +34,7 @@ const timelineEntrySchema = new Schema(
         "project_confirmed",
         "project_assigned",
         "status_update",
-        "photo_update",
+        "photo_timeline_update", // CHANGED from photo_update to photo_timeline_update
         "milestone",
       ],
     },
@@ -53,15 +52,10 @@ const timelineEntrySchema = new Schema(
         type: String,
       },
     ],
-    status: {
-      type: String,
-      enum: ["pending", "active", "completed", "cancelled"],
-    },
     assignedTo: {
       type: String,
     },
     progress: {
-      // NEW: Progress field
       type: Number,
       min: 0,
       max: 100,

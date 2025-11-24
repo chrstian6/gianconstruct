@@ -1,4 +1,4 @@
-// actions/appointments.ts - FIXED NOTIFICATION CREATION
+// actions/appointments.ts - UPDATED WITH DIRECT NOTIFICATION SERVICE
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -8,7 +8,7 @@ import { Timeslot } from "@/models/Timeslots";
 import User from "@/models/User";
 import { sendEmail } from "@/lib/nodemailer";
 import { generateEmailTemplate, EmailTemplates } from "@/lib/email-templates";
-import { appointmentNotifications } from "@/lib/notification-helpers";
+import { notificationService } from "@/lib/notification-services";
 import { InquiryActionResponse, InquiriesResponse } from "@/types/inquiry";
 import {
   TimeslotsResponse,
@@ -193,7 +193,7 @@ export async function sendNewInquiryNotification(inquiry: any) {
   }
 }
 
-// Complete inquiry - FIXED NOTIFICATION
+// Complete inquiry - UPDATED WITH DIRECT NOTIFICATION SERVICE
 export async function completeInquiry(
   inquiryId: string
 ): Promise<InquiryActionResponse> {
@@ -249,18 +249,37 @@ export async function completeInquiry(
       user_id: inquiry.user_id,
     };
 
-    // FIXED: Always create notification for completed appointments
+    // UPDATED: Use direct notification service
     await Promise.all([
       sendAppointmentEmail("completed", transformedInquiry),
-      // Create notification for both registered users and admin
+      // Create notification using direct service
       (async () => {
         try {
           console.log("📝 Creating completion notification...");
-          const result = await appointmentNotifications.completed(
-            transformedInquiry,
-            transformedInquiry.design,
-            "admin"
-          );
+          const result = await notificationService.createNotification({
+            userId: inquiry.user_id,
+            userEmail: inquiry.email,
+            feature: "appointments",
+            type: "appointment_completed",
+            title: "Consultation Completed",
+            message: `Your consultation for ${transformedInquiry.design.name} has been completed. Thank you for choosing GianConstruct!`,
+            createdByRole: "admin",
+            channels: ["in_app", "email"],
+            relatedId: inquiry._id?.toString(),
+            appointmentMetadata: {
+              inquiryId: inquiry._id?.toString(),
+              appointmentId: inquiry._id?.toString(),
+              originalDate: inquiry.preferredDate,
+              originalTime: inquiry.preferredTime,
+              meetingType: inquiry.meetingType,
+            },
+            pushData: {
+              title: "Consultation Completed",
+              body: `Your consultation for ${transformedInquiry.design.name} has been completed`,
+              icon: "/icons/calendar-completed.png",
+            },
+          });
+
           if (result && result._id) {
             console.log("✅ Completion notification created:", result._id);
           } else {
@@ -286,7 +305,7 @@ export async function completeInquiry(
   }
 }
 
-// Confirm inquiry and book timeslot - FIXED NOTIFICATION
+// Confirm inquiry and book timeslot - UPDATED WITH DIRECT NOTIFICATION SERVICE
 export async function confirmInquiry(
   inquiryId: string
 ): Promise<InquiryActionResponse> {
@@ -366,18 +385,39 @@ export async function confirmInquiry(
       user_id: inquiry.user_id,
     };
 
-    // FIXED: Always create notification for confirmed appointments
+    // UPDATED: Use direct notification service
     await Promise.all([
       sendAppointmentEmail("confirmed", transformedInquiry),
-      // Create notification for both registered users and admin
+      // Create notification using direct service
       (async () => {
         try {
           console.log("📝 Creating confirmation notification...");
-          const result = await appointmentNotifications.confirmed(
-            transformedInquiry,
-            transformedInquiry.design,
-            "admin"
-          );
+          const result = await notificationService.createNotification({
+            userId: inquiry.user_id,
+            userEmail: inquiry.email,
+            feature: "appointments",
+            type: "appointment_confirmed",
+            title: "Appointment Confirmed",
+            message: `Your appointment for ${transformedInquiry.design.name} has been confirmed for ${inquiry.preferredDate} at ${inquiry.preferredTime}`,
+            createdByRole: "admin",
+            channels: ["in_app", "email"],
+            relatedId: inquiry._id?.toString(),
+            appointmentMetadata: {
+              inquiryId: inquiry._id?.toString(),
+              appointmentId: inquiry._id?.toString(),
+              originalDate: inquiry.preferredDate,
+              originalTime: inquiry.preferredTime,
+              meetingType: inquiry.meetingType,
+            },
+            actionUrl: `/user/appointments`,
+            actionLabel: "View My Appointments",
+            pushData: {
+              title: "Appointment Confirmed",
+              body: `Your appointment for ${transformedInquiry.design.name} has been confirmed`,
+              icon: "/icons/calendar-check.png",
+            },
+          });
+
           if (result && result._id) {
             console.log("✅ Confirmation notification created:", result._id);
           } else {
@@ -403,7 +443,7 @@ export async function confirmInquiry(
   }
 }
 
-// Cancel inquiry and free up timeslot - FIXED NOTIFICATION
+// Cancel inquiry and free up timeslot - UPDATED WITH DIRECT NOTIFICATION SERVICE
 export async function cancelInquiry(
   inquiryId: string,
   reason: string
@@ -474,19 +514,38 @@ export async function cancelInquiry(
       user_id: inquiry.user_id,
     };
 
-    // FIXED: Always create notification for cancelled appointments
+    // UPDATED: Use direct notification service
     await Promise.all([
       sendAppointmentEmail("cancelled", transformedInquiry, { reason }),
-      // Create notification for both registered users and admin
+      // Create notification using direct service
       (async () => {
         try {
           console.log("📝 Creating cancellation notification...");
-          const result = await appointmentNotifications.cancelled(
-            transformedInquiry,
-            transformedInquiry.design,
-            reason,
-            "admin"
-          );
+          const result = await notificationService.createNotification({
+            userId: inquiry.user_id,
+            userEmail: inquiry.email,
+            feature: "appointments",
+            type: "appointment_cancelled",
+            title: "Appointment Cancelled",
+            message: `Your appointment for ${transformedInquiry.design.name} has been cancelled${reason ? `: ${reason}` : ""}`,
+            createdByRole: "admin",
+            channels: ["in_app", "email"],
+            relatedId: inquiry._id?.toString(),
+            appointmentMetadata: {
+              inquiryId: inquiry._id?.toString(),
+              appointmentId: inquiry._id?.toString(),
+              originalDate: inquiry.preferredDate,
+              originalTime: inquiry.preferredTime,
+              reason,
+              meetingType: inquiry.meetingType,
+            },
+            pushData: {
+              title: "Appointment Cancelled",
+              body: `Your appointment for ${transformedInquiry.design.name} has been cancelled`,
+              icon: "/icons/calendar-cancel.png",
+            },
+          });
+
           if (result && result._id) {
             console.log("✅ Cancellation notification created:", result._id);
           } else {
@@ -512,7 +571,7 @@ export async function cancelInquiry(
   }
 }
 
-// Reschedule inquiry and update timeslots - FIXED NOTIFICATION
+// Reschedule inquiry and update timeslots - UPDATED WITH DIRECT NOTIFICATION SERVICE
 export async function rescheduleInquiry(
   inquiryId: string,
   newDate: string,
@@ -616,25 +675,46 @@ export async function rescheduleInquiry(
       user_id: inquiry.user_id,
     };
 
-    // FIXED: Always create notification for rescheduled appointments
+    // UPDATED: Use direct notification service
     await Promise.all([
       sendAppointmentEmail("rescheduled", transformedInquiry, {
         newDate,
         newTime,
         notes,
       }),
-      // Create notification for both registered users and admin
+      // Create notification using direct service
       (async () => {
         try {
           console.log("📝 Creating reschedule notification...");
-          const result = await appointmentNotifications.rescheduled(
-            transformedInquiry,
-            transformedInquiry.design,
-            newDate,
-            newTime,
-            notes,
-            "admin"
-          );
+          const result = await notificationService.createNotification({
+            userId: inquiry.user_id,
+            userEmail: inquiry.email,
+            feature: "appointments",
+            type: "appointment_rescheduled",
+            title: "Appointment Rescheduled",
+            message: `Your appointment for ${transformedInquiry.design.name} has been rescheduled to ${newDate} at ${newTime}`,
+            createdByRole: "admin",
+            channels: ["in_app", "email"],
+            relatedId: inquiry._id?.toString(),
+            appointmentMetadata: {
+              inquiryId: inquiry._id?.toString(),
+              appointmentId: inquiry._id?.toString(),
+              originalDate: inquiry.preferredDate,
+              originalTime: inquiry.preferredTime,
+              newDate,
+              newTime,
+              notes,
+              meetingType: inquiry.meetingType,
+            },
+            actionUrl: `/user/appointments`,
+            actionLabel: "View Updated Appointment",
+            pushData: {
+              title: "Appointment Rescheduled",
+              body: `Your appointment for ${transformedInquiry.design.name} has been rescheduled`,
+              icon: "/icons/calendar-reschedule.png",
+            },
+          });
+
           if (result && result._id) {
             console.log("✅ Reschedule notification created:", result._id);
           } else {

@@ -1,4 +1,5 @@
-// lib/notification-services.ts - UPDATED WITH PROPER EMAIL TEMPLATE INTEGRATION
+// lib/notification-services.ts - WITH PROJECT NOTIFICATION HELPER
+
 import dbConnect from "@/lib/db";
 import NotificationModel from "@/models/Notification";
 import User from "@/models/User";
@@ -44,22 +45,187 @@ export interface NotificationQuery {
   currentUserId?: string;
 }
 
+/**
+ * Helper function to create project notifications
+ * Centralizes all project notification logic
+ */
+export async function createProjectNotification(
+  project: any,
+  userDetails: any,
+  notificationType: string,
+  title: string,
+  message: string,
+  additionalMetadata: any = {}
+): Promise<boolean> {
+  try {
+    console.log("════════════════════════════════════════");
+    console.log("📝 Creating PROJECT notification");
+    console.log("════════════════════════════════════════");
+
+    // Validate inputs
+    if (!project || !project.project_id) {
+      console.error("❌ VALIDATION ERROR: Invalid project object");
+      return false;
+    }
+
+    if (!userDetails || !userDetails.email) {
+      console.error(
+        "❌ VALIDATION ERROR: Invalid user details or missing email"
+      );
+      return false;
+    }
+
+    if (!title || !message) {
+      console.error("❌ VALIDATION ERROR: Missing title or message");
+      return false;
+    }
+
+    // Build comprehensive metadata
+    const baseMetadata = {
+      projectId: project.project_id,
+      projectName: project.name,
+      status: project.status,
+      startDate: project.startDate?.toISOString(),
+      endDate: project.endDate?.toISOString(),
+      totalCost: project.totalCost || 0,
+      location: project.location?.fullAddress || "Not specified",
+      clientName: userDetails?.fullName || "Client",
+      clientFirstName: userDetails?.firstName,
+      clientLastName: userDetails?.lastName,
+      clientEmail: userDetails?.email,
+    };
+
+    const combinedMetadata = {
+      ...baseMetadata,
+      ...additionalMetadata,
+    };
+
+    console.log("📋 Metadata being sent:", {
+      ...combinedMetadata,
+      clientEmail: combinedMetadata.clientEmail,
+    });
+
+    const notificationParams: CreateNotificationParams = {
+      userId: project.userId,
+      userEmail: userDetails?.email,
+      targetUserRoles: ["admin"],
+      feature: "projects",
+      type: notificationType,
+      title,
+      message,
+      channels: ["in_app", "email"],
+      projectMetadata: combinedMetadata,
+      metadata: combinedMetadata,
+      relatedId: project.project_id,
+      actionUrl: `/admin/admin-project?project=${project.project_id}`,
+      actionLabel: "View Project",
+    };
+
+    console.log("📧 Notification params summary:", {
+      userEmail: notificationParams.userEmail,
+      type: notificationParams.type,
+      feature: notificationParams.feature,
+      channels: notificationParams.channels,
+      title: notificationParams.title,
+    });
+
+    const notificationResult =
+      await notificationService.createNotification(notificationParams);
+
+    if (notificationResult && notificationResult._id) {
+      console.log(`✅ ${notificationType} notification created:`, {
+        notificationId: notificationResult._id,
+        userEmail: notificationParams.userEmail,
+        type: notificationParams.type,
+      });
+      return true;
+    } else {
+      console.error(
+        `❌ ${notificationType} notification failed - no ID returned`,
+        {
+          result: notificationResult,
+        }
+      );
+      return false;
+    }
+  } catch (notificationError) {
+    console.error(
+      `❌ Error creating ${notificationType} notification:`,
+      notificationError
+    );
+    if (notificationError instanceof Error) {
+      console.error("Error details:", {
+        message: notificationError.message,
+        stack: notificationError.stack,
+      });
+    }
+    return false;
+  }
+}
+
 class NotificationService {
   /**
-   * Create a new notification
+   * Create a new notification (saves to database AND sends email in one function)
    */
   async createNotification(params: CreateNotificationParams) {
     await dbConnect();
 
     try {
+      // Validate and normalize notification type
+      // In the createNotification method, update this array:
+      const validProjectTypes = [
+        "project_created",
+        "project_confirmed",
+        "project_updated",
+        "project_completed",
+        "project_cancelled",
+        "milestone_reached",
+        "project_timeline_update",
+        "photo_timeline_update", // ✅ Make sure this is included
+        // Remove "timeline_photo_upload" if it's a duplicate
+      ];
+      const validAppointmentTypes = [
+        "appointment_confirmed",
+        "appointment_cancelled",
+        "appointment_rescheduled",
+        "appointment_completed",
+        "inquiry_submitted",
+      ];
+
+      // Normalize the type to ensure it's valid
+      let normalizedType = params.type;
+
+      if (
+        params.feature === "projects" &&
+        !validProjectTypes.includes(params.type)
+      ) {
+        console.warn(
+          `Invalid project notification type: ${params.type}, defaulting to project_updated`
+        );
+        normalizedType = "project_updated";
+      }
+
+      if (
+        params.feature === "appointments" &&
+        !validAppointmentTypes.includes(params.type)
+      ) {
+        console.warn(
+          `Invalid appointment notification type: ${params.type}, defaulting to appointment_confirmed`
+        );
+        normalizedType = "appointment_confirmed";
+      }
+
+      // Set default channels to include both in_app and email
+      const channels = params.channels || ["in_app", "email"];
+
       const notificationData: any = {
         userEmail: params.userEmail,
         feature: params.feature,
-        type: params.type,
+        type: normalizedType,
         title: params.title,
         message: params.message,
         isRead: false,
-        channels: params.channels || ["in_app"],
+        channels: channels,
         metadata: params.metadata || {},
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -85,11 +251,22 @@ class NotificationService {
       if (params.expiresAt) notificationData.expiresAt = params.expiresAt;
       if (params.pushData) notificationData.pushData = params.pushData;
 
+      console.log("📝 Creating notification with data:", {
+        feature: notificationData.feature,
+        type: notificationData.type,
+        userId: notificationData.userId,
+        userEmail: notificationData.userEmail,
+        channels: notificationData.channels,
+      });
+
+      // Save notification to database
       const notification = new NotificationModel(notificationData);
       const savedNotification = await notification.save();
 
-      // Send email notifications if enabled and email template exists
-      if (params.channels?.includes("email") && params.userEmail) {
+      console.log("✅ Notification saved successfully:", savedNotification._id);
+
+      // Send email notification if email channel is enabled and user email exists
+      if (channels.includes("email") && params.userEmail) {
         await this.sendEmailNotification(savedNotification);
       }
 
@@ -98,7 +275,17 @@ class NotificationService {
 
       return savedNotification;
     } catch (error) {
-      console.error("Error creating notification:", error);
+      console.error("❌ Error creating notification:", error);
+
+      // More detailed error logging
+      if (error instanceof Error) {
+        console.error("Error details:", {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        });
+      }
+
       throw new Error("Failed to create notification");
     }
   }
@@ -108,52 +295,65 @@ class NotificationService {
    */
   private async sendEmailNotification(notification: any) {
     try {
+      console.log("📧 Attempting to send email notification:", {
+        notificationId: notification._id,
+        userEmail: notification.userEmail,
+        channels: notification.channels,
+        feature: notification.feature,
+        type: notification.type,
+      });
+
       if (!notification.userEmail) {
-        console.log("No user email found for notification, skipping email");
+        console.log("❌ No user email found for notification, skipping email");
         return;
       }
 
-      console.log("📧 Preparing to send email notification:", {
-        to: notification.userEmail,
-        feature: notification.feature,
-        type: notification.type,
-        subject: notification.title,
-      });
+      if (!notification.channels?.includes("email")) {
+        console.log("❌ Email channel not enabled for this notification");
+        return;
+      }
 
-      let emailSubject = notification.title;
-      let emailTemplateData: any;
+      let emailResult: any;
 
       // Use specific email templates based on feature and type
       switch (notification.feature) {
         case "appointments":
-          emailTemplateData =
-            await this.getAppointmentEmailTemplate(notification);
+          emailResult = await this.getAppointmentEmailTemplate(notification);
           break;
-
         case "projects":
-          emailTemplateData = await this.getProjectEmailTemplate(notification);
+          emailResult = await this.getProjectEmailTemplate(notification);
           break;
-
         default:
           // Use generic template for other notifications
-          emailTemplateData = this.getGenericEmailTemplate(notification);
+          emailResult = this.getGenericEmailTemplate(notification);
           break;
       }
 
-      if (!emailTemplateData) {
+      if (!emailResult) {
         console.log(
-          "No email template found for notification type, using generic template"
+          "❌ No email template found for notification type, using generic template"
         );
-        emailTemplateData = this.getGenericEmailTemplate(notification);
+        emailResult = this.getGenericEmailTemplate(notification);
       }
 
+      // Extract subject and data from the template result
+      const { subject, data } = emailResult;
+
+      console.log("📧 Generated email template:", {
+        subject,
+        title: data?.title,
+        hasMessage: !!data?.message,
+      });
+
       // Generate the email template
-      const emailHtml = generateEmailTemplate(emailTemplateData);
+      const emailHtml = generateEmailTemplate(data);
+
+      console.log("📧 Sending email to:", notification.userEmail);
 
       // Send the email
       await sendEmail({
         to: notification.userEmail,
-        subject: emailTemplateData.subject || emailSubject,
+        subject: subject || data?.title || notification.title,
         html: emailHtml,
       });
 
@@ -177,10 +377,6 @@ class NotificationService {
    */
   private async getAppointmentEmailTemplate(notification: any) {
     try {
-      // For appointment notifications, we need additional data
-      // Since we don't have direct access to inquiry data here,
-      // we'll create a template based on the notification metadata
-
       const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString("en-US", {
           year: "numeric",
@@ -215,7 +411,8 @@ class NotificationService {
         preferredTime:
           notification.appointmentMetadata?.originalTime || "10:00",
         meetingType: notification.appointmentMetadata?.meetingType || "virtual",
-        _id: notification.relatedId || notification._id,
+        userType: notification.appointmentMetadata?.userType || "guest",
+        _id: { toString: () => notification.relatedId || notification._id },
       };
 
       let template: any;
@@ -253,6 +450,7 @@ class NotificationService {
             formatTime
           );
           break;
+
         case "inquiry_submitted":
           template = EmailTemplates.internalNewInquiry(
             mockInquiry,
@@ -264,9 +462,15 @@ class NotificationService {
           return this.getGenericEmailTemplate(notification);
       }
 
+      console.log("✅ Appointment email template generated:", {
+        type: notification.type,
+        hasTemplate: !!template,
+        subject: template?.subject,
+      });
+
       return template;
     } catch (error) {
-      console.error("Error getting appointment email template:", error);
+      console.error("❌ Error getting appointment email template:", error);
       return this.getGenericEmailTemplate(notification);
     }
   }
@@ -276,32 +480,62 @@ class NotificationService {
    */
   private async getProjectEmailTemplate(notification: any) {
     try {
-      // Create mock project and user data from notification metadata
-      const mockProject = {
-        name: notification.projectMetadata?.projectName || "Your Project",
-        project_id:
-          notification.projectMetadata?.projectId || notification.relatedId,
-        status: notification.projectMetadata?.status || "active",
-        location: {
-          fullAddress:
-            notification.projectMetadata?.location || "Project Location",
-        },
-        startDate: notification.projectMetadata?.startDate || new Date(),
-        endDate: notification.projectMetadata?.endDate,
-        totalCost: notification.projectMetadata?.totalCost || 0,
+      console.log("📧 Getting project email template for notification:", {
+        type: notification.type,
+        projectMetadata: notification.projectMetadata,
+        metadata: notification.metadata,
+        userEmail: notification.userEmail,
+      });
+
+      // Use combined data from both projectMetadata and metadata with proper fallbacks
+      const combinedData = {
+        ...notification.projectMetadata,
+        ...notification.metadata,
       };
 
+      console.log("📧 Combined notification data:", combinedData);
+
+      // Build project data with comprehensive fallbacks
+      const mockProject = {
+        name: combinedData.projectName || combinedData.name || "Your Project",
+        project_id:
+          combinedData.projectId || notification.relatedId || "Unknown",
+        status: combinedData.status || combinedData.newStatus || "active",
+        location: {
+          fullAddress:
+            combinedData.location ||
+            combinedData.fullAddress ||
+            "Project Location",
+        },
+        startDate: combinedData.startDate || new Date(),
+        endDate: combinedData.endDate,
+        totalCost: combinedData.totalCost || 0,
+      };
+
+      // Build user data with comprehensive fallbacks
       const mockUser = {
-        name: notification.userEmail?.split("@")[0] || "Valued Client",
+        name:
+          combinedData.clientName ||
+          `${combinedData.clientFirstName || ""} ${combinedData.clientLastName || ""}`.trim() ||
+          notification.userEmail?.split("@")[0] ||
+          "Valued Client",
         email: notification.userEmail,
       };
 
+      console.log("📧 Final processed data for email template:", {
+        project: mockProject,
+        user: mockUser,
+        notificationType: notification.type, // Add this for debugging
+      });
+
       let template: any;
 
+      // ✅ FIXED: Add proper case for photo_timeline_update
       switch (notification.type) {
         case "project_created":
           template = EmailTemplates.projectCreated(mockProject, mockUser);
           break;
+
         case "project_confirmed":
           template = EmailTemplates.projectStatusUpdate(
             mockProject,
@@ -310,6 +544,7 @@ class NotificationService {
             "active"
           );
           break;
+
         case "project_completed":
           template = EmailTemplates.projectStatusUpdate(
             mockProject,
@@ -318,40 +553,109 @@ class NotificationService {
             "completed"
           );
           break;
+
         case "project_cancelled":
           template = EmailTemplates.projectStatusUpdate(
             mockProject,
             mockUser,
-            mockProject.status,
+            "active",
             "cancelled"
           );
           break;
+
+        case "photo_timeline_update":
+          console.log(
+            "📸 Using projectTimelinePhotoUpdate template for photo_timeline_update"
+          );
+          // Ensure all required parameters are passed
+          template = EmailTemplates.projectTimelinePhotoUpdate(
+            mockProject,
+            mockUser,
+            combinedData.updateTitle || combinedData.title || "Progress Update",
+            combinedData.updateDescription ||
+              combinedData.description ||
+              "New photos showing current construction progress",
+            combinedData.progress !== undefined
+              ? combinedData.progress
+              : undefined,
+            combinedData.photoCount || combinedData.photosCount || 1
+          );
+          break;
+
+        case "project_timeline_update":
+          template = EmailTemplates.projectTimelineUpdate(
+            mockProject,
+            mockUser,
+            combinedData.updateTitle || "Project Timeline Update",
+            combinedData.updateDescription ||
+              "Our team has been making progress on your project.",
+            combinedData.progress
+          );
+          break;
+
         case "milestone_reached":
           template = EmailTemplates.projectMilestoneReached(
             mockProject,
             mockUser,
-            notification.projectMetadata?.milestone || "Project Milestone",
-            notification.projectMetadata?.progress || 0
+            combinedData.milestone || "Project Milestone",
+            combinedData.progress || 50
           );
           break;
-        case "project_timeline_update":
-        case "timeline_photo_upload":
-          template = EmailTemplates.projectTimelineUpdate(
-            mockProject,
-            mockUser,
-            notification.projectMetadata?.updateTitle || notification.title,
-            notification.projectMetadata?.updateDescription ||
-              notification.message,
-            notification.projectMetadata?.progress
-          );
+
+        case "project_updated":
+          console.log("📝 Using projectUpdated template for project_updated");
+          const previousStatus = combinedData.previousStatus;
+          const newStatus = combinedData.newStatus || combinedData.status;
+          const updatedFields = combinedData.updatedFields || [];
+
+          // If status changed → use status update template
+          if (previousStatus && newStatus && previousStatus !== newStatus) {
+            console.log(
+              "🔄 Status changed, using projectStatusUpdate template"
+            );
+            template = EmailTemplates.projectStatusUpdate(
+              mockProject,
+              mockUser,
+              previousStatus,
+              newStatus
+            );
+          }
+          // If no status change, but other fields updated → use projectUpdated template
+          else if (updatedFields.length > 0) {
+            console.log("📋 Fields updated, using projectUpdated template");
+            template = EmailTemplates.projectUpdated(
+              mockProject,
+              mockUser,
+              updatedFields
+            );
+          }
+          // Fallback: use projectUpdated template with empty changes
+          else {
+            console.log("📝 Using projectUpdated template as fallback");
+            template = EmailTemplates.projectUpdated(
+              mockProject,
+              mockUser,
+              [] // Empty changes array
+            );
+          }
           break;
+
         default:
+          console.log(
+            "❌ No specific template found for type:",
+            notification.type
+          );
+          console.log("🔄 Falling back to generic template");
           return this.getGenericEmailTemplate(notification);
       }
 
+      console.log(
+        "✅ Project email template generated successfully for type:",
+        notification.type
+      );
       return template;
     } catch (error) {
-      console.error("Error getting project email template:", error);
+      console.error("❌ Error getting project email template:", error);
       return this.getGenericEmailTemplate(notification);
     }
   }
@@ -364,11 +668,11 @@ class NotificationService {
 <div class="details-container">
   <div class="detail-row">
     <div class="detail-label">Notification Type</div>
-    <div class="detail-value">${notification.feature} - ${notification.type.replace("_", " ").toUpperCase()}</div>
+    <div class="detail-value">${notification.feature} - ${notification.type.replace(/_/g, " ").toUpperCase()}</div>
   </div>
   <div class="detail-row">
     <div class="detail-label">Message</div>
-    <div class="detail-value">${notification.message}</div>
+    <div class="detail-value">${notification.message || "No additional details"}</div>
   </div>
   ${
     notification.relatedId
@@ -381,13 +685,13 @@ class NotificationService {
       : ""
   }
 </div>
-    `;
+  `;
 
     return {
-      subject: notification.title,
+      subject: notification.title || "Notification Update",
       data: {
-        title: notification.title,
-        message: `Dear Valued Client,<br><br>${notification.message}`,
+        title: notification.title || "Notification",
+        message: `Dear Valued Client,<br><br>${notification.message || "You have received a new notification."}`,
         details,
         nextSteps:
           "Please log in to your account for more details and to take any necessary actions.",
@@ -423,17 +727,11 @@ class NotificationService {
         limit = 50,
       } = query;
 
-      console.log("🔔 Fetching notifications for:", {
-        currentUserRole,
-        currentUserId,
-      });
-
       // SIMPLE ROLE-BASED CONDITIONS
       const conditions: any = {};
 
       if (currentUserRole === "admin") {
         // Admin sees ALL notifications - no filtering
-        // Empty conditions = fetch everything
       } else if (currentUserRole === "user") {
         // User sees only notifications where they are the target
         conditions.$or = [
@@ -456,8 +754,6 @@ class NotificationService {
       if (isRead !== undefined) conditions.isRead = isRead;
       if (relatedId) conditions.relatedId = relatedId;
 
-      console.log("🔔 Final query conditions:", conditions);
-
       // Pagination
       const skip = (page - 1) * limit;
 
@@ -466,8 +762,6 @@ class NotificationService {
         .skip(skip)
         .limit(limit)
         .lean();
-
-      console.log("🔔 Found notifications:", notifications.length);
 
       const total = await NotificationModel.countDocuments(conditions);
 

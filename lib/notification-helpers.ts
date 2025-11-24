@@ -603,6 +603,7 @@ export const projectNotifications = {
   },
 
   // NEW: Specific function for photo uploads to timeline
+  // In lib/notification-helpers.ts, update the timelinePhotoUpload function:
   async timelinePhotoUpload(
     project: any,
     user: any,
@@ -610,12 +611,15 @@ export const projectNotifications = {
     progress?: number,
     createdByRole: string = "admin"
   ) {
-    console.log("📝 Creating timeline photo upload notification for user:", {
+    console.log("🔍 NOTIFICATION HELPER: Starting timelinePhotoUpload...");
+    console.log("🔍 NOTIFICATION HELPER: Project data:", {
       projectId: project.project_id,
       projectName: project.name,
       userId: project.userId,
-      caption,
-      progress,
+    });
+    console.log("🔍 NOTIFICATION HELPER: User data:", {
+      user_id: user?.user_id,
+      email: user?.email,
     });
 
     const message = progress
@@ -629,8 +633,8 @@ export const projectNotifications = {
       type: "timeline_photo_upload",
       title: "New Project Photos",
       message: message,
-      createdByRole: createdByRole, // Admin created this notification
-      channels: ["in_app", "email"],
+      createdByRole: createdByRole,
+      channels: ["in_app", "email"], // Make sure in_app is included
       relatedId: project.project_id,
       projectMetadata: {
         projectId: project.project_id,
@@ -648,22 +652,27 @@ export const projectNotifications = {
       },
     };
 
-    // Send email notification to user
-    if (user?.email) {
-      try {
-        const emailTemplate = EmailTemplates.projectTimelineUpdate(
-          project,
-          user,
-          "New Photos Added",
-          caption,
-          progress
-        );
-        await sendProjectEmail(user.email, project, emailTemplate);
-      } catch (emailError) {
-        console.error("❌ Error sending photo upload email:", emailError);
-      }
-    }
+    console.log(
+      "🔍 NOTIFICATION HELPER: Calling notificationService.createNotification..."
+    );
 
-    return await notificationService.createNotification(notificationData);
+    try {
+      const result =
+        await notificationService.createNotification(notificationData);
+      console.log("✅ NOTIFICATION HELPER: Notification service returned:", {
+        success: !!result,
+        _id: result?._id,
+        type: result?.type,
+      });
+      return result;
+    } catch (error) {
+      console.error(
+        "❌ NOTIFICATION HELPER: Error in createNotification:",
+        error
+      );
+      // Don't throw the error - we don't want to break the main functionality
+      console.log("⚠️ NOTIFICATION HELPER: Continuing without notification...");
+      return null;
+    }
   },
 };

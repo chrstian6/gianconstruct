@@ -14,6 +14,7 @@ export type NotificationType =
   | "project_completed"
   | "payment_received"
   | "payment_failed"
+  | "photo_timeline_update"
   | "document_ready"
   | "milestone_reached"
   | "system_alert"
@@ -197,6 +198,7 @@ const NotificationSchema = new Schema<NotificationDocument>(
         "payment_received",
         "payment_failed",
         "document_ready",
+        "photo_timeline_update",
         "milestone_reached",
         "system_alert",
         "general_message",

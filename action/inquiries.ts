@@ -1,4 +1,4 @@
-// actions/inquiries.ts - COMPLETE FIXED VERSION
+// actions/inquiries.ts - UPDATED TO ALIGN WITH NOTIFICATION-SERVICES
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -8,7 +8,7 @@ import { Inquiry, InquiryDocument } from "@/models/Inquiry";
 import User from "@/models/User";
 import DesignModel from "@/models/Design";
 import { generateEmailTemplate, EmailTemplates } from "@/lib/email-templates";
-import { appointmentNotifications } from "@/lib/notification-helpers";
+import { notificationService } from "@/lib/notification-services";
 
 interface InquirySubmitResponse {
   success: boolean;
@@ -230,19 +230,44 @@ export async function submitInquiry(
       userRole: user?.role || "guest",
     };
 
-    // FIXED: CREATE NOTIFICATION FOR ALL INQUIRIES (both guest and registered users)
+    // CREATE NOTIFICATION USING CENTRALIZED NOTIFICATION SERVICE
     try {
-      console.log("📝 Starting notification creation process...");
+      console.log("📝 Creating notification using centralized service...");
 
-      const userRole = user?.role || "guest";
-      console.log("👤 Creating notification for user role:", userRole);
+      // Create notification for admin about new inquiry
+      const notificationParams = {
+        targetUserRoles: ["admin"],
+        feature: "appointments",
+        type: "inquiry_submitted",
+        title: "New Appointment Request Received",
+        message: `${name} has submitted a new appointment request for ${design.name}`,
+        channels: ["in_app", "email"],
+        appointmentMetadata: {
+          inquiryId: inquiry._id.toString(),
+          clientName: name,
+          clientEmail: email,
+          designName: design.name,
+          preferredDate: preferredDate,
+          preferredTime: preferredTime,
+          meetingType: meetingType,
+          originalDate: preferredDate,
+          originalTime: preferredTime,
+        },
+        relatedId: inquiry._id.toString(),
+        actionUrl: `/admin/appointments?inquiry=${inquiry._id.toString()}`,
+        actionLabel: "Review Appointment",
+        metadata: {
+          inquiryId: inquiry._id.toString(),
+          clientName: name,
+          clientEmail: email,
+          designName: design.name,
+          userType: isGuest ? "guest" : "registered",
+          userRole: user?.role || "guest",
+        },
+      };
 
-      // Always create notification for new inquiries - FIXED AWAIT
-      const notificationResult = await appointmentNotifications.newInquiry(
-        transformedInquiry,
-        design,
-        userRole
-      );
+      const notificationResult =
+        await notificationService.createNotification(notificationParams);
 
       if (notificationResult && notificationResult._id) {
         console.log("✅ Notification created successfully:", {
@@ -251,10 +276,7 @@ export async function submitInquiry(
           target: "admin",
         });
       } else {
-        console.error(
-          "❌ Notification creation failed - no ID returned:",
-          notificationResult
-        );
+        console.error("❌ Notification creation failed");
         // Don't fail the entire inquiry submission if notification fails
       }
     } catch (notificationError) {
@@ -352,16 +374,14 @@ export async function submitInquiry(
   }
 }
 
-// Get user-specific notifications using new centralized system
+// Get user-specific notifications using centralized notification service
 export async function getUserNotifications(user_id: string): Promise<{
   success: boolean;
   notifications?: any[];
   error?: string;
 }> {
   try {
-    const { getNotifications } = await import("@/action/notification");
-
-    const result = await getNotifications({
+    const result = await notificationService.getNotifications({
       currentUserRole: "user",
       currentUserId: user_id,
       page: 1,
@@ -390,16 +410,20 @@ export async function getUserNotifications(user_id: string): Promise<{
   }
 }
 
-// Update markNotificationAsRead to use new centralized system
-export async function markNotificationAsRead(notificationId: string): Promise<{
+// Update markNotificationAsRead to use centralized notification service
+export async function markNotificationAsRead(
+  notificationId: string,
+  currentUserId?: string
+): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
-    const { markNotificationAsRead: markAsRead } = await import(
-      "@/action/notification"
+    return await notificationService.markAsRead(
+      notificationId,
+      "user",
+      currentUserId
     );
-    return await markAsRead(notificationId, "user");
   } catch (error) {
     console.error("Error marking notification as read:", error);
     return {
@@ -409,16 +433,13 @@ export async function markNotificationAsRead(notificationId: string): Promise<{
   }
 }
 
-// Update markAllNotificationsAsRead to use new centralized system
+// Update markAllNotificationsAsRead to use centralized notification service
 export async function markAllNotificationsAsRead(user_id: string): Promise<{
   success: boolean;
   error?: string;
 }> {
   try {
-    const { markAllNotificationsAsRead: markAllAsRead } = await import(
-      "@/action/notification"
-    );
-    return await markAllAsRead(user_id, "user");
+    return await notificationService.markAllAsRead(user_id, "user");
   } catch (error) {
     console.error("Error marking all notifications as read:", error);
     return {
@@ -428,18 +449,14 @@ export async function markAllNotificationsAsRead(user_id: string): Promise<{
   }
 }
 
-// Keep other existing functions for backward compatibility
+// Get notifications using centralized notification service
 export async function getNotifications(): Promise<{
   success: boolean;
   notifications?: any[];
   error?: string;
 }> {
   try {
-    const { getNotifications: getNotificationsNew } = await import(
-      "@/action/notification"
-    );
-
-    const result = await getNotificationsNew({
+    const result = await notificationService.getNotifications({
       currentUserRole: "admin",
       page: 1,
       limit: 50,
@@ -467,12 +484,13 @@ export async function getNotifications(): Promise<{
   }
 }
 
+// Delete notification using centralized notification service
 export async function deleteNotification(notificationId: string) {
   try {
-    const { deleteNotification: deleteNotificationNew } = await import(
-      "@/action/notification"
+    return await notificationService.deleteNotification(
+      notificationId,
+      "admin"
     );
-    return await deleteNotificationNew(notificationId, "admin");
   } catch (error) {
     console.error("Delete notification error:", error);
     return {
@@ -485,11 +503,13 @@ export async function deleteNotification(notificationId: string) {
   }
 }
 
+// Clear all notifications using centralized notification service
 export async function clearAllNotifications() {
   try {
-    const { clearAllUserNotifications: clearAllUserNotificationsNew } =
-      await import("@/action/notification");
-    return await clearAllUserNotificationsNew("admin", "admin");
+    return await notificationService.clearAllUserNotifications(
+      "admin",
+      "admin"
+    );
   } catch (error) {
     console.error("Clear all notifications error:", error);
     return {
@@ -502,12 +522,42 @@ export async function clearAllNotifications() {
   }
 }
 
+// Alias for markNotificationAsRead for backward compatibility
 export async function markAsRead(
   notificationId: string
 ): Promise<{ success: boolean; error?: string }> {
   return await markNotificationAsRead(notificationId);
 }
 
+// Get notification statistics using centralized notification service
+export async function getNotificationStats(user_id: string) {
+  try {
+    return await notificationService.getNotificationStats(user_id, "user");
+  } catch (error) {
+    console.error("Error fetching notification stats:", error);
+    return {
+      success: false,
+      error: "Failed to fetch notification statistics",
+      stats: { total: 0, unread: 0, read: 0, byFeature: {} },
+    };
+  }
+}
+
+// Get admin notification statistics
+export async function getAdminNotificationStats() {
+  try {
+    return await notificationService.getNotificationStats("admin", "admin");
+  } catch (error) {
+    console.error("Error fetching admin notification stats:", error);
+    return {
+      success: false,
+      error: "Failed to fetch notification statistics",
+      stats: { total: 0, unread: 0, read: 0, byFeature: {} },
+    };
+  }
+}
+
+// Get inquiries (existing functionality)
 export async function getInquiries(): Promise<{
   success: boolean;
   inquiries?: any[];

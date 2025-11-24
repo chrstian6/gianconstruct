@@ -216,7 +216,7 @@ export default function ProjectTimeline({
           <div className="w-full h-full">
             <div
               ref={scrollContainerRef}
-              className="overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent"
+              className="overflow-x-auto pb-6 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent max-w-5xl"
               style={{ maxWidth: "100%", display: "block" }}
             >
               <div
@@ -224,6 +224,7 @@ export default function ProjectTimeline({
                   display: "inline-flex",
                   minWidth: "100%",
                 }}
+                className="max-w-md"
               >
                 <AnimatePresence>
                   {timeline.length > 0 ? (

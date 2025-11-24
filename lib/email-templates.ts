@@ -849,4 +849,160 @@ export const EmailTemplates = {
       },
     };
   },
+
+  projectUpdated: (project: any, user: any, changes: string[] = []) => {
+    const changeList =
+      changes.length > 0
+        ? changes
+            .map((field) => {
+              const labels: Record<string, string> = {
+                name: "Project Name",
+                startDate: "Start Date",
+                endDate: "Estimated Completion Date",
+                totalCost: "Total Project Cost",
+                location: "Project Location",
+                status: "Project Status",
+              };
+              return labels[field] || field;
+            })
+            .join(", ")
+        : "details";
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Updated Fields</div>
+    <div class="detail-value">${changeList.charAt(0).toUpperCase() + changeList.slice(1)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Current Status</div>
+    <div class="detail-value" style="text-transform: capitalize;">${project.status}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Not specified"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Total Cost</div>
+    <div class="detail-value">₱${project.totalCost?.toLocaleString() || "0"}</div>
+  </div>
+</div>
+    `;
+
+    return {
+      subject: `Project Updated: ${project.name}`,
+      data: {
+        title: "Your Project Has Been Updated",
+        message: `Dear ${user?.name || "Valued Client"},<br><br>This is to inform you that some details of your project <strong>${project.name}</strong> have been updated by our team.<br><br>The following information has been modified: <strong>${changeList}</strong>.`,
+        details,
+        nextSteps:
+          "You can now view the updated project information in your client portal. If you have any questions about these changes, please feel free to reach out to your project coordinator.",
+        showButton: true,
+        buttonText: "View Updated Project",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/user/projects/${project.project_id}`,
+      },
+    };
+  },
+
+  // UPDATE THIS TEMPLATE FOR TIMELINE PHOTO UPDATES
+  projectTimelinePhotoUpdate: (
+    project: any,
+    user: any,
+    updateTitle: string,
+    updateDescription?: string,
+    progress?: number,
+    photoCount?: number
+  ) => {
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Update Type</div>
+    <div class="detail-value">Timeline Photo Update</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Update Title</div>
+    <div class="detail-value">${updateTitle}</div>
+  </div>
+  ${
+    updateDescription
+      ? `
+  <div class="detail-row">
+    <div class="detail-label">Description</div>
+    <div class="detail-value">${updateDescription}</div>
+  </div>
+  `
+      : ""
+  }
+  ${
+    progress !== undefined && progress !== null
+      ? `
+  <div class="detail-row">
+    <div class="detail-label">Progress Update</div>
+    <div class="detail-value"><strong>${progress}% Complete</strong></div>
+  </div>
+  `
+      : ""
+  }
+  ${
+    photoCount && photoCount > 0
+      ? `
+  <div class="detail-row">
+    <div class="detail-label">Photos Added</div>
+    <div class="detail-value">${photoCount} new photo${photoCount > 1 ? "s" : ""} added to timeline</div>
+  </div>
+  `
+      : ""
+  }
+  <div class="detail-row">
+    <div class="detail-label">Project Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Not specified"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Update Date</div>
+    <div class="detail-value">${new Date().toLocaleDateString()}</div>
+  </div>
+</div>
+    `;
+
+    // Handle photoCount safely in the message
+    const photoMessage =
+      photoCount && photoCount > 0
+        ? `Our team has uploaded ${photoCount} photo${photoCount > 1 ? "s" : ""} showing the latest construction progress and developments.`
+        : "New progress updates have been added to your project timeline.";
+
+    const progressMessage =
+      progress && progress > 0
+        ? ` Your project is currently <strong>${progress}% complete</strong> and progressing according to schedule.`
+        : " The work is progressing steadily according to our construction timeline.";
+
+    return {
+      subject: `Timeline Update: ${project.name} - ${updateTitle}`,
+      data: {
+        title: "New Timeline Photos Added",
+        message: `Dear ${user?.name || "Valued Client"},<br><br>We're pleased to inform you that new progress photos have been added to your project timeline for <strong>${project.name}</strong>.<br><br>${photoMessage}${progressMessage}<br><br>These updates provide you with a transparent view of the ongoing work and the quality craftsmanship being applied to your project.`,
+        details,
+        nextSteps:
+          "You can view all the newly added photos and track your project's progress by accessing your client portal. We'll continue to update the timeline regularly as work advances.",
+        showButton: true,
+        buttonText: "View Timeline Photos",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/user/projects/${project.project_id}`,
+      },
+    };
+  },
 };

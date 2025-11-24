@@ -1,4 +1,4 @@
-// actions/projects.ts - COMPLETE UPDATED WITH NOTIFICATION INTEGRATION
+// actions/projects.ts - COMPLETE OPTIMIZED VERSION WITH NOTIFICATION INTEGRATION
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -18,9 +18,8 @@ import {
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
 import { verifySession } from "@/lib/redis";
-import { sendEmail } from "@/lib/nodemailer";
 import mongoose from "mongoose";
-import { projectNotifications } from "@/lib/notification-helpers";
+import { notificationService } from "@/lib/notification-services";
 import User from "@/models/User";
 
 interface ActionResponse {
@@ -49,12 +48,11 @@ const getCounterModel = () => {
   return mongoose.model<ICounterDocument>("Counter", counterSchema);
 };
 
-// Generate incremental project ID - simple approach
+// Generate incremental project ID
 async function generateProjectId(): Promise<string> {
   await dbConnect();
   const Counter = getCounterModel();
 
-  // Use any to bypass TypeScript issues
   const sequence = await (Counter as any).findOneAndUpdate(
     { _id: "project_id" },
     { $inc: { sequence_value: 1 } },
@@ -63,6 +61,29 @@ async function generateProjectId(): Promise<string> {
 
   const sequenceNumber = sequence.sequence_value.toString().padStart(4, "0");
   return `constr-${sequenceNumber}`;
+}
+
+// Helper function to get user details with proper error handling
+async function getUserDetails(userId: string) {
+  try {
+    const user = await User.findOne({ user_id: userId });
+    if (!user) {
+      console.warn(`User not found for userId: ${userId}`);
+      return null;
+    }
+
+    return {
+      email: user.email,
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      fullName:
+        `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+        "Valued Client",
+    };
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    return null;
+  }
 }
 
 // Upload image to Supabase
@@ -91,14 +112,13 @@ async function uploadImageToSupabase(
   return publicUrlData.publicUrl;
 }
 
-// Zod schema for project creation with all fields required (except endDate and timeline)
+// Zod schema for project creation
 const ProjectCreateZodSchema = z.object({
   project_id: z.string().min(1, "Project ID is required"),
   name: z.string().min(1, "Project name is required").trim(),
   startDate: z.date({ required_error: "Start date is required" }),
   userId: z.string().min(1, "User ID is required"),
   status: z.enum(["pending", "active", "completed", "cancelled"], {
-    // REMOVED "not-started"
     required_error: "Status is required",
   }),
   totalCost: z.number().min(0, "Total cost must be a positive number"),
@@ -174,6 +194,82 @@ function formatZodErrors(errors: z.ZodError["errors"]): string {
   return `Unable to process your request.\nPlease verify your project information and try again.\n\n${errorMessages.join("\n")}`;
 }
 
+// Create project notification helper
+async function createProjectNotification(
+  project: any,
+  userDetails: any,
+  notificationType: string,
+  title: string,
+  message: string,
+  additionalMetadata: any = {}
+) {
+  try {
+    console.log(`📝 Creating ${notificationType} notification...`);
+
+    const baseMetadata = {
+      projectId: project.project_id,
+      projectName: project.name,
+      status: project.status,
+      startDate: project.startDate?.toISOString(),
+      endDate: project.endDate?.toISOString(),
+      totalCost: project.totalCost || 0,
+      location: project.location?.fullAddress,
+      clientName: userDetails?.fullName,
+      clientEmail: userDetails?.email,
+    };
+
+    const notificationParams = {
+      userId: project.userId,
+      userEmail: userDetails?.email,
+      targetUserRoles: ["admin"],
+      feature: "projects",
+      type: notificationType,
+      title,
+      message,
+      channels: ["in_app", "email"],
+      projectMetadata: {
+        ...baseMetadata,
+        ...additionalMetadata,
+      },
+      relatedId: project.project_id,
+      actionUrl: `/admin/admin-project?project=${project.project_id}`,
+      actionLabel: "View Project",
+      metadata: {
+        ...baseMetadata,
+        ...additionalMetadata,
+      },
+    };
+
+    console.log("📧 Notification params:", {
+      userEmail: notificationParams.userEmail,
+      type: notificationParams.type,
+      channels: notificationParams.channels,
+    });
+
+    const notificationResult =
+      await notificationService.createNotification(notificationParams);
+
+    if (notificationResult && notificationResult._id) {
+      console.log(
+        `✅ ${notificationType} notification created:`,
+        notificationResult._id
+      );
+      return true;
+    } else {
+      console.log(
+        `❌ ${notificationType} notification failed - no ID returned`
+      );
+      return false;
+    }
+  } catch (notificationError) {
+    console.error(
+      `❌ Error creating ${notificationType} notification:`,
+      notificationError
+    );
+    return false;
+  }
+}
+
 // Fetch all projects
 export async function getProjects(): Promise<ActionResponse> {
   await dbConnect();
@@ -237,7 +333,7 @@ export async function createProject(
       ? parseFloat(formData.get("totalCost") as string)
       : undefined;
     const status = formData.get("status") as
-      | "pending" // CHANGED from "not-started" to "pending"
+      | "pending"
       | "active"
       | "completed"
       | "cancelled";
@@ -245,7 +341,7 @@ export async function createProject(
     // Generate incremental project ID
     const project_id = await generateProjectId();
 
-    // Extract location data (all fields required)
+    // Extract location data
     const locationRegion = formData.get("location[region]") as string;
     const locationProvince = formData.get("location[province]") as string;
     const locationMunicipality = formData.get(
@@ -264,8 +360,6 @@ export async function createProject(
 
     // Extract and upload project images
     let projectImages: ProjectImage[] = [];
-
-    // Get all image files and their metadata
     const imageFiles: File[] = [];
     const imageTitles: string[] = [];
     const imageDescriptions: string[] = [];
@@ -317,48 +411,32 @@ export async function createProject(
       endDate,
       userId,
       totalCost,
-      status: status || "pending", // CHANGED from "not-started" to "pending"
+      status: status || "pending",
       location,
       projectImages: projectImages.length > 0 ? projectImages : undefined,
     };
 
-    // Validate data before saving using ProjectCreateZodSchema
+    // Validate data before saving
     ProjectCreateZodSchema.parse(validationData);
     console.log("Validated data for creation:", validationData);
 
     const project = await Project.create(validationData);
 
     // Get user details for notification
-    const user = await User.findOne({ user_id: userId });
+    const userDetails = await getUserDetails(userId);
 
-    // Create notification for new project using the helper
-    try {
-      console.log("📝 Starting project notification creation...");
-
-      const notificationResult = await projectNotifications.created(
-        project,
-        user,
-        "admin"
-      );
-
-      if (notificationResult && notificationResult._id) {
-        console.log("✅ Project notification created successfully:", {
-          notificationId: notificationResult._id,
-          type: "project_created",
-          target: "admin",
-        });
-      } else {
-        console.error(
-          "❌ Project notification creation failed:",
-          notificationResult
-        );
+    // Create project creation notification
+    await createProjectNotification(
+      project,
+      userDetails,
+      "project_created",
+      "New Project Created",
+      `New project "${name}" has been created and is awaiting confirmation`,
+      {
+        previousStatus: null,
+        newStatus: "pending",
       }
-    } catch (notificationError) {
-      console.error(
-        "❌ Error creating project notification:",
-        notificationError
-      );
-    }
+    );
 
     // Create automatic timeline entry for project creation
     await Timeline.create({
@@ -416,7 +494,7 @@ export async function updateProject(
     // Extract form data
     const name = formData.get("name") as string;
     const status = formData.get("status") as
-      | "pending" // CHANGED from "not-started" to "pending"
+      | "pending"
       | "active"
       | "completed"
       | "cancelled";
@@ -426,7 +504,7 @@ export async function updateProject(
       ? parseFloat(formData.get("totalCost") as string)
       : 0;
 
-    // Extract location data (optional)
+    // Extract location data
     const locationRegion = formData.get("location[region]") as string;
     const locationProvince = formData.get("location[province]") as string;
     const locationMunicipality = formData.get(
@@ -447,7 +525,6 @@ export async function updateProject(
     if (endDate) {
       updateData.endDate = new Date(endDate);
     } else {
-      // If endDate is empty, set it to null/undefined
       updateData.endDate = undefined;
     }
 
@@ -467,7 +544,6 @@ export async function updateProject(
         fullAddress: locationFullAddress || undefined,
       };
     } else {
-      // If no location data provided, remove location field
       updateData.location = undefined;
     }
 
@@ -490,7 +566,7 @@ export async function updateProject(
       projectImages: existingProject.projectImages || [],
     };
 
-    // Validate data before updating using ProjectPreSaveZodSchema
+    // Validate data before updating
     ProjectPreSaveZodSchema.parse(validationData);
     console.log("Validated data for update:", validationData);
 
@@ -506,28 +582,21 @@ export async function updateProject(
     }
 
     // Get user details for notification
-    const user = await User.findOne({ user_id: existingProject.userId });
+    const userDetails = await getUserDetails(existingProject.userId);
 
-    // Create notification for project update
-    try {
-      const notificationResult = await projectNotifications.updated(
-        updatedProject,
-        user,
-        "admin"
-      );
-
-      if (notificationResult && notificationResult._id) {
-        console.log(
-          "✅ Project update notification sent:",
-          notificationResult._id
-        );
+    // Create project update notification
+    await createProjectNotification(
+      updatedProject,
+      userDetails,
+      "project_updated",
+      "Project Updated",
+      `Project "${name}" has been updated from ${existingProject.status} to ${status}`,
+      {
+        previousStatus: existingProject.status,
+        newStatus: status,
+        updatedFields: Object.keys(updateData),
       }
-    } catch (notificationError) {
-      console.error(
-        "❌ Error sending project update notification:",
-        notificationError
-      );
-    }
+    );
 
     const plainProject: ProjectType = ProjectZodSchema.parse({
       _id: updatedProject._id.toString(),
@@ -585,8 +654,8 @@ export async function uploadProjectPhoto(
 
     const photos = formData.getAll("photos") as File[];
     const caption = formData.get("caption")?.toString();
-    const dateString = formData.get("date")?.toString(); // Get the date from form data
-    const progress = formData.get("progress")?.toString(); // Get progress for milestone notification
+    const dateString = formData.get("date")?.toString();
+    const progress = formData.get("progress")?.toString();
 
     if (photos.length === 0 && !caption?.trim()) {
       return {
@@ -675,7 +744,7 @@ export async function uploadProjectPhoto(
         $push: {
           timeline: {
             $each: [timelineEntry],
-            $position: 0, // Insert at the beginning to show latest first
+            $position: 0,
           },
         },
       },
@@ -688,53 +757,39 @@ export async function uploadProjectPhoto(
     }
 
     // Get user details for notification
-    const user = await User.findOne({ user_id: project.userId });
+    const userDetails = await getUserDetails(project.userId);
 
-    // Create milestone notification if progress is provided
-    if (progress) {
-      try {
-        const notificationResult = await projectNotifications.milestoneReached(
-          updateTimeline,
-          user,
-          caption || "Progress update",
-          parseInt(progress),
-          "admin"
-        );
-
-        if (notificationResult && notificationResult._id) {
-          console.log(
-            "✅ Milestone notification sent:",
-            notificationResult._id
-          );
+    if (userDetails) {
+      // Timeline photo upload notification
+      await createProjectNotification(
+        project,
+        userDetails,
+        "timeline_photo_upload",
+        "Project Timeline Updated",
+        caption || "New photos added to project timeline",
+        {
+          updateTitle: "Timeline Photo Update",
+          updateDescription: caption,
+          progress: progress ? parseInt(progress) : undefined,
+          photoCount: photos.length,
         }
-      } catch (notificationError) {
-        console.error(
-          "❌ Error sending milestone notification:",
-          notificationError
-        );
-      }
-    }
-
-    // Also create timeline update notification
-    try {
-      const notificationResult = await projectNotifications.timelineUpdate(
-        updateTimeline,
-        user,
-        caption || "Photo update added",
-        "admin"
       );
 
-      if (notificationResult && notificationResult._id) {
-        console.log(
-          "✅ Timeline update notification sent:",
-          notificationResult._id
+      // Also create milestone notification if progress is provided
+      if (progress) {
+        await createProjectNotification(
+          project,
+          userDetails,
+          "milestone_reached",
+          "Project Milestone Reached",
+          `Project "${project.name}" has reached ${progress}% completion`,
+          {
+            milestone: caption || "Progress Update",
+            progress: parseInt(progress),
+            previousProgress: project.progress || 0,
+          }
         );
       }
-    } catch (notificationError) {
-      console.error(
-        "❌ Error sending timeline update notification:",
-        notificationError
-      );
     }
 
     const plainProject: ProjectType = ProjectZodSchema.parse({
@@ -759,20 +814,6 @@ export async function uploadProjectPhoto(
       __v: updateTimeline.__v,
       createdAt: updateTimeline.createdAt.toISOString(),
       updatedAt: updateTimeline.updatedAt.toISOString(),
-    });
-
-    // Send email notification to company/admin
-    const companyEmail = process.env.COMPANY_EMAIL || "admin@gianconstruct.com";
-    const emailHtml = `
-        <p>Hi Team,</p>
-        <h2>${updateTimeline.name}</h2>
-        <p>A new update is now live for your project as of ${entryDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}. Please check it out and stay updated!</p>
-        <p>Head over to the <a href="http://yourdomain.com/admin/admin-project">admin panel</a> for the latest details.</p>
-      `;
-    await sendEmail({
-      to: companyEmail,
-      subject: `New Timeline Update for Project ${projectId}`,
-      html: emailHtml,
     });
 
     revalidatePath("/admin/admin-project");
@@ -807,7 +848,7 @@ export async function editTimelineEntry(
     const date = new Date(entryDate);
     const photos = formData.getAll("photos") as File[];
     const caption = formData.get("caption")?.toString() ?? "";
-    const newDateString = formData.get("newDate")?.toString(); // Get the new date from form data
+    const newDateString = formData.get("newDate")?.toString();
 
     if (photos.length === 0 && !caption.trim()) {
       return {
@@ -881,6 +922,23 @@ export async function editTimelineEntry(
       project.timeline[entryIndex].date = new Date(newDateString);
     }
     await project.save();
+
+    // Get user details for notification
+    const userDetails = await getUserDetails(project.userId);
+
+    if (userDetails) {
+      await createProjectNotification(
+        project,
+        userDetails,
+        "project_timeline_update",
+        "Timeline Entry Updated",
+        `Timeline entry has been updated for project "${project.name}"`,
+        {
+          updateDescription: caption,
+          photoCount: photos.length,
+        }
+      );
+    }
 
     const plainProject: ProjectType = ProjectZodSchema.parse({
       _id: project._id.toString(),
@@ -1080,7 +1138,6 @@ export async function getProjectsCount(): Promise<{
   }
 }
 
-// -------------------------------
 // Delete a project (only if completed or past end date)
 export async function deleteProject(
   projectId: string
@@ -1166,10 +1223,9 @@ export async function deleteMultipleProjects(
 
     // Check if any projects cannot be deleted
     const undeletableProjects = projects.filter((project) => {
-      if (project.status === "completed") return false; // Completed projects can be deleted
+      if (project.status === "completed") return false;
 
       const projectEndDate = project.endDate ? new Date(project.endDate) : null;
-      // If project is not completed and end date hasn't passed, it cannot be deleted
       return !projectEndDate || projectEndDate > currentDate;
     });
 
@@ -1265,7 +1321,6 @@ async function deleteProjectImagesFromSupabase(project: any): Promise<void> {
   // Extract file paths from URLs
   const filePaths = allPhotoUrls
     .map((url: string) => {
-      // Handle both gianprojectimage and project-images buckets
       const timelineMatch = url.match(/gianprojectimage\/(.*)$/);
       const projectImageMatch = url.match(/project-images\/(.*)$/);
       return timelineMatch
@@ -1292,7 +1347,6 @@ async function deleteProjectImagesFromSupabase(project: any): Promise<void> {
         "Error deleting timeline photos from storage:",
         timelineDeleteError
       );
-      // Don't throw error, continue with deletion
     } else {
       console.log(
         `Deleted ${timelinePaths.length} timeline photos from Supabase`
@@ -1314,7 +1368,6 @@ async function deleteProjectImagesFromSupabase(project: any): Promise<void> {
         "Error deleting project images from storage:",
         projectImageDeleteError
       );
-      // Don't throw error, continue with deletion
     } else {
       console.log(
         `Deleted ${projectImagePaths.length} project images from Supabase`
@@ -1359,7 +1412,6 @@ async function deleteProjectImagesFromSupabase(project: any): Promise<void> {
     }
   } catch (folderError) {
     console.error("Error deleting project folders from Supabase:", folderError);
-    // Continue with deletion even if folder cleanup fails
   }
 }
 
@@ -1487,7 +1539,6 @@ export async function getProjectsByUserId(
 
     console.log(`📊 Raw MongoDB results count:`, projects.length);
 
-    // Debug: Log the actual userId values from found projects
     if (projects.length > 0) {
       console.log(
         `👥 User IDs in found projects:`,
@@ -1498,12 +1549,6 @@ export async function getProjectsByUserId(
       );
     } else {
       console.log(`❌ No projects found for user: ${userId}`);
-      // Debug: Check if any projects exist at all
-      const allProjects = await Project.find().select("userId name").lean();
-      console.log(
-        `📋 All projects in database:`,
-        allProjects.map((p) => ({ userId: p.userId, name: p.name }))
-      );
     }
 
     const convertedProjects = projects
@@ -1559,7 +1604,7 @@ export async function getUserProjectCounts(userId: string): Promise<{
     active: number;
     pending: number;
     completed: number;
-    cancelled: number; // REMOVED "not-started"
+    cancelled: number;
   };
   error?: string;
 }> {
@@ -1600,21 +1645,33 @@ export async function getUserProjectCounts(userId: string): Promise<{
   }
 }
 
-// Confirm project start - User confirms "pending" project (UPDATED WITH TIMELINE)
+// Confirm project start - User confirms "pending" project
 export async function confirmProjectStart(
   projectId: string
 ): Promise<UpdateProjectResponse> {
   await dbConnect();
   try {
+    console.log("🔍 Starting project confirmation for:", projectId);
+
     // Find the project
     const project = await Project.findOne({ project_id: projectId });
     if (!project) {
+      console.log("❌ Project not found:", projectId);
       return { success: false, error: "Project not found" };
     }
 
+    console.log("📋 Project found:", {
+      name: project.name,
+      status: project.status,
+      userId: project.userId,
+    });
+
     // Check if project is in "pending" status
     if (project.status !== "pending") {
-      // CHANGED from "not-started" to "pending"
+      console.log(
+        "❌ Project cannot be confirmed - wrong status:",
+        project.status
+      );
       return {
         success: false,
         error:
@@ -1635,41 +1692,91 @@ export async function confirmProjectStart(
     );
 
     if (!updatedProject) {
+      console.log("❌ Failed to update project");
       return { success: false, error: "Failed to confirm project" };
     }
 
-    // Get user details for notification
-    const user = await User.findOne({ user_id: project.userId });
+    console.log("✅ Project updated successfully:", updatedProject.status);
 
-    // Create project confirmed notification
-    try {
-      const notificationResult = await projectNotifications.confirmed(
+    // Get user details for client notification
+    const userDetails = await getUserDetails(project.userId);
+    console.log("👤 User lookup:", {
+      userId: project.userId,
+      userFound: !!userDetails,
+      email: userDetails?.email,
+      name: userDetails?.fullName,
+    });
+
+    // ✅ CREATE NOTIFICATION FOR ADMIN (Target: Admin users)
+    console.log("📢 Creating admin notification for project confirmation...");
+
+    // Create notification for admin users
+    const adminNotificationResult =
+      await notificationService.createNotification({
+        targetUserRoles: ["admin"], // Target all admin users
+        feature: "projects",
+        type: "project_confirmed",
+        title: "Project Confirmed by Client",
+        message: `Project "${project.name}" has been confirmed by ${userDetails?.fullName || "the client"} and is now active.`,
+        channels: ["in_app", "email"], // Both in-app and email notifications
+        projectMetadata: {
+          projectId: project.project_id,
+          projectName: project.name,
+          status: "active",
+          previousStatus: "pending",
+          startDate: currentDate.toISOString(),
+          confirmedAt: currentDate.toISOString(),
+          location: project.location?.fullAddress,
+          totalCost: project.totalCost,
+          clientName: userDetails?.fullName,
+          clientEmail: userDetails?.email,
+          clientId: project.userId,
+        },
+        actionUrl: `/admin/admin-project?project=${project.project_id}`,
+        actionLabel: "View Project",
+      });
+
+    if (adminNotificationResult) {
+      console.log(
+        "✅ Admin notification created successfully:",
+        adminNotificationResult._id
+      );
+    } else {
+      console.error("❌ Failed to create admin notification");
+    }
+
+    // ✅ CREATE NOTIFICATION FOR CLIENT (Target: Specific user)
+    if (userDetails) {
+      console.log(
+        "📢 Creating client notification for project confirmation..."
+      );
+
+      await createProjectNotification(
         updatedProject,
-        user,
-        "admin"
+        userDetails,
+        "project_confirmed",
+        "Project Confirmed Successfully",
+        `Your project "${project.name}" has been confirmed and is now active. Our team will begin work shortly.`,
+        {
+          previousStatus: "pending",
+          newStatus: "active",
+          confirmedAt: currentDate.toISOString(),
+        }
       );
-
-      if (notificationResult && notificationResult._id) {
-        console.log(
-          "✅ Project confirmation notification sent:",
-          notificationResult._id
-        );
-      }
-    } catch (notificationError) {
-      console.error(
-        "❌ Error sending project confirmation notification:",
-        notificationError
-      );
+    } else {
+      console.log("❌ User not found for client notification");
     }
 
     // Create project confirmed timeline entry
     await Timeline.create({
       project_id: projectId,
       type: "project_confirmed",
-      title: "Project Confirmed",
-      description: `Project "${project.name}" has been confirmed and is now active. Work will begin shortly.`,
+      title: "Project Confirmed by Client",
+      description: `Project "${project.name}" has been confirmed by the client and is now active. Work will begin shortly.`,
       date: currentDate,
     });
+
+    console.log("✅ Timeline entry created");
 
     const plainProject: ProjectType = ProjectZodSchema.parse({
       _id: updatedProject._id.toString(),
@@ -1697,9 +1804,12 @@ export async function confirmProjectStart(
 
     revalidatePath("/user/projects");
     revalidatePath("/admin/admin-project");
+    revalidatePath("/admin/notifications"); // Revalidate admin notifications page
+
+    console.log("✅ Project confirmation completed successfully");
     return { success: true, project: plainProject };
   } catch (error) {
-    console.error("Error confirming project start:", error);
+    console.error("❌ Error confirming project start:", error);
     return { success: false, error: "Failed to confirm project" };
   }
 }
@@ -1725,7 +1835,6 @@ export async function cancelProject(
 
     // Check if project can be cancelled (only pending or active projects can be cancelled)
     if (project.status !== "pending" && project.status !== "active") {
-      // CHANGED: "pending" replaces "not-started"
       return {
         success: false,
         error: `Cannot cancel project: Project is already ${project.status}. Only pending or active projects can be cancelled.`,
@@ -1737,8 +1846,6 @@ export async function cancelProject(
       { project_id: projectId },
       {
         status: "cancelled",
-        // Optionally, you can set an end date when cancelling
-        // endDate: new Date()
       },
       { new: true, runValidators: true }
     );
@@ -1748,26 +1855,21 @@ export async function cancelProject(
     }
 
     // Get user details for notification
-    const user = await User.findOne({ user_id: project.userId });
+    const userDetails = await getUserDetails(project.userId);
 
-    // Create project cancelled notification
-    try {
-      const notificationResult = await projectNotifications.cancelled(
+    // Create project cancellation notification
+    if (userDetails) {
+      await createProjectNotification(
         updatedProject,
-        user,
-        "admin"
-      );
-
-      if (notificationResult && notificationResult._id) {
-        console.log(
-          "✅ Project cancellation notification sent:",
-          notificationResult._id
-        );
-      }
-    } catch (notificationError) {
-      console.error(
-        "❌ Error sending project cancellation notification:",
-        notificationError
+        userDetails,
+        "project_cancelled",
+        "Project Cancelled",
+        `Project "${project.name}" has been cancelled`,
+        {
+          previousStatus: project.status,
+          newStatus: "cancelled",
+          cancelledAt: new Date().toISOString(),
+        }
       );
     }
 
@@ -1842,26 +1944,21 @@ export async function completeProject(
     }
 
     // Get user details for notification
-    const user = await User.findOne({ user_id: project.userId });
+    const userDetails = await getUserDetails(project.userId);
 
-    // Create project completed notification
-    try {
-      const notificationResult = await projectNotifications.completed(
+    // Create project completion notification
+    if (userDetails) {
+      await createProjectNotification(
         updatedProject,
-        user,
-        "admin"
-      );
-
-      if (notificationResult && notificationResult._id) {
-        console.log(
-          "✅ Project completion notification sent:",
-          notificationResult._id
-        );
-      }
-    } catch (notificationError) {
-      console.error(
-        "❌ Error sending project completion notification:",
-        notificationError
+        userDetails,
+        "project_completed",
+        "Project Completed",
+        `Project "${project.name}" has been completed successfully`,
+        {
+          previousStatus: project.status,
+          newStatus: "completed",
+          completedAt: new Date().toISOString(),
+        }
       );
     }
 
@@ -1971,8 +2068,7 @@ export async function createProjectTimelineEntry(
     };
   }
 }
-
-// Add photo update to timeline - UPDATED with progress
+// Add photo update to project timeline
 export async function addTimelinePhotoUpdate(
   projectId: string,
   formData: FormData
@@ -1988,7 +2084,7 @@ export async function addTimelinePhotoUpdate(
     const photos = formData.getAll("photos") as File[];
     const title = formData.get("title") as string;
     const description = formData.get("description") as string;
-    const progress = formData.get("progress")?.toString(); // NEW: Get progress
+    const progress = formData.get("progress")?.toString();
 
     if (photos.length === 0) {
       return { success: false, error: "At least one photo is required" };
@@ -2014,8 +2110,7 @@ export async function addTimelinePhotoUpdate(
             "Invalid file type. Please upload an image (JPEG, PNG, GIF, WEBP, SVG).",
         };
       }
-
-      const maxSize = 50 * 1024 * 1024; // 50MB
+      const maxSize = 50 * 1024 * 1024;
       if (photo.size > maxSize) {
         return {
           success: false,
@@ -2025,20 +2120,17 @@ export async function addTimelinePhotoUpdate(
       }
     }
 
-    // Upload photos to Supabase - FIXED: Using the correct bucket
+    // Upload photos to Supabase
     const photoUrls: string[] = [];
     for (const photo of photos) {
       const fileName = `timeline-${Date.now()}-${photo.name}`;
-
       const bytes = await photo.arrayBuffer();
       const buffer = Buffer.from(bytes);
-
       const { data, error } = await supabase.storage
-        .from("gianprojectimage") // Using your existing bucket
+        .from("gianprojectimage")
         .upload(`${projectId}/${fileName}`, buffer, {
           contentType: photo.type,
         });
-
       if (error) {
         console.error("Supabase upload error:", error);
         return {
@@ -2046,24 +2138,88 @@ export async function addTimelinePhotoUpdate(
           error: `Failed to upload image: ${error.message}`,
         };
       }
-
       const { data: publicUrlData } = supabase.storage
         .from("gianprojectimage")
         .getPublicUrl(data.path);
-
       photoUrls.push(publicUrlData.publicUrl);
     }
 
-    // Create timeline entry with progress
+    // Create timeline entry with progress - using photo_timeline_update type
     const timelineEntry = await Timeline.create({
       project_id: projectId,
-      type: "photo_update",
+      type: "photo_timeline_update",
       title: title.trim(),
       description: description?.trim(),
       photoUrls,
-      progress: progress ? parseInt(progress) : undefined, // NEW: Include progress
+      progress: progress ? parseInt(progress) : undefined,
       date: new Date(),
     });
+
+    console.log("✅ Timeline entry created:", timelineEntry._id);
+
+    // Get project and user details for notification
+    const project = await Project.findOne({ project_id: projectId });
+
+    if (!project) {
+      console.error("❌ Project not found for notifications");
+      return {
+        success: false,
+        error: "Project found but user notification failed",
+      };
+    }
+
+    const userDetails = await getUserDetails(project.userId);
+
+    if (!userDetails) {
+      console.error("❌ User details not found for project:", project.userId);
+    } else {
+      console.log("👤 User details found:", {
+        name: userDetails.fullName,
+        email: userDetails.email,
+      });
+
+      try {
+        // ✅ SINGLE NOTIFICATION: photo_timeline_update handles both photos and progress
+        const notificationResult = await createProjectNotification(
+          project,
+          userDetails,
+          "photo_timeline_update",
+          `Progress Update: ${title}`,
+          `New construction progress photos have been uploaded for your project "${project.name}". ${description || ""}`,
+          {
+            updateTitle: title,
+            updateDescription: description || "",
+            progress: progress ? parseInt(progress) : undefined,
+            photoCount: photos.length,
+            projectName: project.name,
+            projectId: project.project_id,
+            status: project.status,
+            startDate: project.startDate?.toISOString(),
+            endDate: project.endDate?.toISOString(),
+            totalCost: project.totalCost,
+            location: project.location?.fullAddress,
+            clientName: userDetails.fullName,
+            clientEmail: userDetails.email,
+          }
+        );
+
+        if (notificationResult) {
+          console.log(
+            "✅ Photo timeline update notification created successfully"
+          );
+        } else {
+          console.error(
+            "❌ Photo timeline update notification creation failed"
+          );
+        }
+
+        // ✅ REMOVED: No separate milestone notification needed
+        // The photo_timeline_update template already shows progress information
+      } catch (notificationError) {
+        console.error("❌ Error creating notifications:", notificationError);
+        // Continue anyway - don't fail the entire operation
+      }
+    }
 
     const plainEntry: TimelineEntry = {
       _id: timelineEntry._id.toString(),
@@ -2072,19 +2228,22 @@ export async function addTimelinePhotoUpdate(
       title: timelineEntry.title,
       description: timelineEntry.description,
       photoUrls: timelineEntry.photoUrls,
-      progress: timelineEntry.progress, // NEW: Include progress in response
+      progress: timelineEntry.progress,
       date: new Date(timelineEntry.date),
       createdAt: timelineEntry.createdAt.toISOString(),
       updatedAt: timelineEntry.updatedAt.toISOString(),
     };
 
     revalidatePath("/admin/admin-project");
+    revalidatePath("/user/projects");
     return { success: true, entry: plainEntry };
   } catch (error) {
     console.error("Error adding timeline photo update:", error);
     return {
       success: false,
-      error: "Failed to add photo update to timeline",
+      error:
+        "Failed to add photo update to timeline: " +
+        (error instanceof Error ? error.message : String(error)),
     };
   }
 }
@@ -2121,7 +2280,7 @@ export async function getProjectTimeline(
       photoUrls: entry.photoUrls || [],
       status: entry.status,
       assignedTo: entry.assignedTo,
-      progress: entry.progress, // THIS IS THE CRITICAL LINE - ADD PROGRESS FIELD
+      progress: entry.progress,
       date: new Date(entry.date),
       createdAt: entry.createdAt?.toISOString() || "",
       updatedAt: entry.updatedAt?.toISOString() || "",
@@ -2233,7 +2392,7 @@ export async function getProjectGalleryImages(
 // Add status update to timeline
 export async function addTimelineStatusUpdate(
   projectId: string,
-  status: "pending" | "active" | "completed" | "cancelled", // CHANGED: removed "not-started"
+  status: "pending" | "active" | "completed" | "cancelled",
   title: string,
   description?: string
 ): Promise<TimelineResponse> {
@@ -2247,6 +2406,29 @@ export async function addTimelineStatusUpdate(
       status,
       date: new Date(),
     });
+
+    // Get project and user details for notification
+    const project = await Project.findOne({ project_id: projectId });
+    if (project) {
+      const userDetails = await getUserDetails(project.userId);
+
+      if (userDetails) {
+        await createProjectNotification(
+          project,
+          userDetails,
+          "project_timeline_update",
+          "Project Status Update",
+          `Status update: ${title}`,
+          {
+            updateTitle: title,
+            updateDescription: description,
+            status: status,
+            previousStatus: project.status,
+            newStatus: status,
+          }
+        );
+      }
+    }
 
     const plainEntry: TimelineEntry = {
       _id: timelineEntry._id.toString(),
