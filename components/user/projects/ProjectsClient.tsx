@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ProjectCard from "./ProjectCard";
-import ConfirmProjectModal from "./ConfirmProjectModal";
+import ConfirmProjectDrawer from "./ConfirmProjectDrawer";
 import { confirmProjectStart } from "@/action/project";
 import {
   Pagination,
@@ -80,7 +80,7 @@ export default function ProjectsClient({
   const [confirmingProjectId, setConfirmingProjectId] = useState<string | null>(
     null
   );
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmDrawerOpen, setConfirmDrawerOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const cardsPerPage = 12;
@@ -102,25 +102,29 @@ export default function ProjectsClient({
     router.push(newUrl, { scroll: false });
   }, [status, searchTerm, router]);
 
-  // Handle opening confirmation modal
+  // Handle opening confirmation drawer
   const handleOpenConfirmModal = (project: Project) => {
     setSelectedProject(project);
-    setConfirmModalOpen(true);
+    setConfirmDrawerOpen(true);
   };
 
-  // Handle closing confirmation modal
-  const handleCloseConfirmModal = () => {
-    setConfirmModalOpen(false);
+  // Handle closing confirmation drawer
+  const handleCloseConfirmDrawer = () => {
+    setConfirmDrawerOpen(false);
     setSelectedProject(null);
   };
 
   // Handle project confirmation with proper error handling and timeline creation
-  const handleConfirmProject = async (projectId: string) => {
+  const handleConfirmProject = async (
+    projectId: string,
+    downpaymentAmount: number
+  ) => {
     setConfirmingProjectId(projectId);
     try {
       console.log(`🔄 Starting confirmation for project: ${projectId}`);
+      console.log(`💰 Downpayment amount: ${downpaymentAmount}`);
 
-      const result = await confirmProjectStart(projectId);
+      const result = await confirmProjectStart(projectId, downpaymentAmount);
 
       if (result.success && result.project) {
         // Update project status locally
@@ -132,8 +136,8 @@ export default function ProjectsClient({
           )
         );
 
-        // Close the modal
-        handleCloseConfirmModal();
+        // Close the drawer
+        handleCloseConfirmDrawer();
 
         // Show success toast
         toast.success(
@@ -557,10 +561,10 @@ export default function ProjectsClient({
         )}
       </div>
 
-      {/* Confirmation Modal */}
-      <ConfirmProjectModal
-        isOpen={confirmModalOpen}
-        onClose={handleCloseConfirmModal}
+      {/* Confirmation Drawer */}
+      <ConfirmProjectDrawer
+        isOpen={confirmDrawerOpen}
+        onClose={handleCloseConfirmDrawer}
         project={selectedProject}
         onConfirm={handleConfirmProject}
         isConfirming={confirmingProjectId === selectedProject?.project_id}

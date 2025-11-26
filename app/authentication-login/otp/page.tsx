@@ -9,8 +9,36 @@ import { verifyOTP, resendOTP, getOTPExpiration } from "@/action/otp-signup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Mail, CheckCircle, RotateCcw, Clock } from "lucide-react";
 import { motion } from "framer-motion";
+import { Suspense } from "react";
 
+// Main component wrapped with Suspense
 export default function OTPPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-svh flex items-center justify-center p-4 relative">
+          <div className="w-full max-w-md">
+            <div className="animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-1/2 mx-auto mb-6"></div>
+              <div className="flex justify-center space-x-2 mb-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="w-12 h-12 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+              <div className="h-10 bg-gray-200 rounded mb-3"></div>
+              <div className="h-10 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <OTPContent />
+    </Suspense>
+  );
+}
+
+// Inner component that uses useSearchParams
+function OTPContent() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);

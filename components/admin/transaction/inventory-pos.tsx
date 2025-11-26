@@ -152,7 +152,7 @@ class WebBluetoothPrinter {
     try {
       // Convert text to bytes (UTF-8)
       const encoder = new TextEncoder();
-      let data = encoder.encode(text);
+      const data = encoder.encode(text);
 
       // Add ESC/POS initialization and formatting
       const escPosCommands = new Uint8Array([

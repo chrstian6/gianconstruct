@@ -58,7 +58,7 @@ const numberToWords = (num: number): string => {
 
   if (num === 0) return "ZERO";
 
-  let parts = [];
+  const parts = [];
   let groupIndex = 0;
 
   while (num > 0) {

@@ -1,5 +1,5 @@
-// app/admin/main-inventory/page.tsx
 "use client";
+
 import { useEffect, useState, useCallback } from "react";
 import { IInventory } from "@/types/Inventory";
 import { ISupplier } from "@/types/supplier";
@@ -76,6 +76,7 @@ import { PDCDetailsModal } from "@/components/admin/inventory/PDCDetailsModal";
 import { PDCTab } from "@/components/admin/inventory/tabs/PDCTab";
 import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
 type SupplierStatusFilter = "all" | "active" | "inactive" | "pending";
@@ -93,7 +94,42 @@ interface CategoryData {
   }[];
 }
 
+// Main component wrapped with Suspense
 export default function MainInventory() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col min-h-screen font-geist">
+          <div className="flex-shrink-0 bg-white border-gray-200">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4 px-5 pt-5">
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-48"></div>
+              </div>
+            </div>
+            <div className="flex border-b border-gray-200 mt-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="px-4 py-3">
+                  <div className="h-4 bg-gray-200 rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="animate-pulse">
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <MainInventoryContent />
+    </Suspense>
+  );
+}
+
+// Inner component that uses useSearchParams
+function MainInventoryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<IInventory[]>([]);

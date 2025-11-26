@@ -8,8 +8,35 @@ import { toast } from "sonner";
 import { completeUserProfile } from "@/action/otp-signup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Suspense } from "react";
 
+// Main component wrapped with Suspense
 export default function SignupFlowPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-svh flex items-center justify-center bg-white p-4">
+          <div className="w-full max-w-sm space-y-4">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-200 rounded mb-6"></div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+              <div className="h-10 bg-gray-200 rounded mb-4"></div>
+              <div className="h-10 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <SignupFlowContent />
+    </Suspense>
+  );
+}
+
+// Inner component that uses useSearchParams
+function SignupFlowContent() {
   const [profileData, setProfileData] = useState({
     firstName: "",
     lastName: "",

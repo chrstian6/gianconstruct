@@ -120,7 +120,7 @@ export function BookingForm({
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    let nextWorkingDay = new Date(tomorrow);
+    const nextWorkingDay = new Date(tomorrow);
     while (!isWorkingDay(nextWorkingDay)) {
       nextWorkingDay.setDate(nextWorkingDay.getDate() + 1);
     }

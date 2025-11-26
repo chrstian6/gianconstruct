@@ -4,9 +4,10 @@ import { motion } from "framer-motion";
 import LoginForm from "@/components/auth/LoginForm";
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Suspense } from "react";
 
 // Define the AuthPage component
-export default function AuthPage() {
+function AuthPageContent() {
   // Router for navigation
   const router = useRouter();
 
@@ -62,5 +63,32 @@ export default function AuthPage() {
         />
       </div>
     </div>
+  );
+}
+
+// Wrap the main component with Suspense
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="grid min-h-svh lg:grid-cols-2 bg-white">
+          <div className="flex flex-1 items-center justify-center">
+            <div className="w-full max-w-xs">
+              <div className="animate-pulse">
+                <div className="h-8 bg-gray-200 rounded mb-4"></div>
+                <div className="h-10 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 bg-gray-200 rounded mb-2"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-muted relative hidden lg:block">
+            <div className="absolute inset-0 h-full w-full bg-gray-200"></div>
+          </div>
+        </div>
+      }
+    >
+      <AuthPageContent />
+    </Suspense>
   );
 }

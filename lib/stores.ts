@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { IInventory } from "@/types/Inventory";
 import { ISupplier } from "@/types/supplier";
+import { Project } from "@/types/project"; // Import your actual Project type
 
 // Define User type for user management
 interface User {
@@ -39,7 +40,7 @@ interface ModalStore {
   // Project modals
   isCreateProjectOpen: boolean;
   isEditProjectOpen: boolean;
-  editingProject: any | null;
+  editingProject: Project | null;
 
   // Inventory modals
   isEditInventoryOpen: boolean;
@@ -56,7 +57,7 @@ interface ModalStore {
 
   // Timeline modals
   isAddTimelineUpdateOpen: boolean;
-  timelineProject: any | null;
+  timelineProject: Project | null;
 
   // Create account from notification
   createAccountData: CreateAccountData | null;
@@ -66,7 +67,7 @@ interface ModalStore {
   setIsCreateAccountOpen: (open: boolean) => void;
   setIsDeleteDesignOpen: (open: boolean, designId?: string) => void;
   setIsCreateProjectOpen: (open: boolean) => void;
-  setIsEditProjectOpen: (open: boolean, project?: any) => void;
+  setIsEditProjectOpen: (open: boolean, project?: Project | null) => void;
   setIsEditInventoryOpen: (
     open: boolean,
     inventory?: IInventory | null
@@ -74,7 +75,7 @@ interface ModalStore {
   setIsCreateSupplierOpen: (open: boolean) => void;
   setIsViewSupplierOpen: (open: boolean, supplier?: ISupplier | null) => void;
   setIsEditUserOpen: (open: boolean, user?: User | null) => void;
-  setIsAddTimelineUpdateOpen: (open: boolean, project?: any) => void;
+  setIsAddTimelineUpdateOpen: (open: boolean, project?: Project | null) => void;
   setCreateAccountData: (data: CreateAccountData | null) => void;
 }
 
@@ -150,7 +151,7 @@ export const useModalStore = create<ModalStore>((set) => ({
     set({ isCreateProjectOpen: open });
   },
 
-  setIsEditProjectOpen: (open: boolean, project?: any) => {
+  setIsEditProjectOpen: (open: boolean, project?: Project | null) => {
     set({
       isEditProjectOpen: open,
       editingProject: open ? project : null,
@@ -182,7 +183,7 @@ export const useModalStore = create<ModalStore>((set) => ({
     });
   },
 
-  setIsAddTimelineUpdateOpen: (open: boolean, project?: any) => {
+  setIsAddTimelineUpdateOpen: (open: boolean, project?: Project | null) => {
     set({
       isAddTimelineUpdateOpen: open,
       timelineProject: open ? project : null,

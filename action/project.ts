@@ -1,6 +1,5 @@
 // actions/projects.ts - COMPLETE OPTIMIZED VERSION WITH NOTIFICATION INTEGRATION
 "use server";
-
 import { revalidatePath } from "next/cache";
 import dbConnect from "@/lib/db";
 import Project from "@/models/Project";
@@ -21,6 +20,8 @@ import { verifySession } from "@/lib/redis";
 import mongoose from "mongoose";
 import { notificationService } from "@/lib/notification-services";
 import User from "@/models/User";
+import Transaction from "@/models/Transactions";
+import { getProjectPaymentSummary } from "@/lib/paymentUtils";
 
 interface ActionResponse {
   success: boolean;
@@ -359,7 +360,7 @@ export async function createProject(
     };
 
     // Extract and upload project images
-    let projectImages: ProjectImage[] = [];
+    const projectImages: ProjectImage[] = [];
     const imageFiles: File[] = [];
     const imageTitles: string[] = [];
     const imageDescriptions: string[] = [];
@@ -1644,14 +1645,26 @@ export async function getUserProjectCounts(userId: string): Promise<{
     return { success: false, error: "Failed to fetch project counts" };
   }
 }
-
-// Confirm project start - User confirms "pending" project
 export async function confirmProjectStart(
-  projectId: string
-): Promise<UpdateProjectResponse> {
+  projectId: string,
+  downpaymentAmount: number
+): Promise<{
+  success: boolean;
+  project?: ProjectType;
+  transaction?: {
+    transaction_id: string;
+    amount: number;
+    total_amount: number;
+    type: string;
+    payment_deadline: Date;
+    remaining_balance: number;
+  };
+  error?: string;
+}> {
   await dbConnect();
   try {
     console.log("🔍 Starting project confirmation for:", projectId);
+    console.log("💰 Downpayment amount:", downpaymentAmount);
 
     // Find the project
     const project = await Project.findOne({ project_id: projectId });
@@ -1664,7 +1677,22 @@ export async function confirmProjectStart(
       name: project.name,
       status: project.status,
       userId: project.userId,
+      totalCost: project.totalCost,
     });
+
+    // Validate downpayment amount - more strict validation
+    if (
+      !downpaymentAmount ||
+      downpaymentAmount <= 0 ||
+      downpaymentAmount > project.totalCost
+    ) {
+      console.log("❌ Invalid downpayment amount:", downpaymentAmount);
+      return {
+        success: false,
+        error:
+          "Invalid downpayment amount. Must be greater than 0 and less than or equal to total project cost.",
+      };
+    }
 
     // Check if project is in "pending" status
     if (project.status !== "pending") {
@@ -1698,6 +1726,73 @@ export async function confirmProjectStart(
 
     console.log("✅ Project updated successfully:", updatedProject.status);
 
+    // ✅ CREATE DOWNPAYMENT TRANSACTION ONLY
+    console.log("💰 Creating downpayment transaction...");
+
+    const paymentDeadline = new Date(currentDate);
+    paymentDeadline.setHours(paymentDeadline.getHours() + 48); // 48 hours from now
+
+    // Use the Transaction model with proper typing for static method
+    const TransactionModel = Transaction as any;
+
+    // Generate transaction ID first to ensure it works
+    let transactionId;
+    try {
+      transactionId = await TransactionModel.generateTransactionId();
+      console.log("✅ Generated transaction ID:", transactionId);
+    } catch (error) {
+      console.error("❌ Failed to generate transaction ID:", error);
+      return { success: false, error: "Failed to generate transaction ID" };
+    }
+
+    // Create transaction data with proper validation
+    const transactionData = {
+      transaction_id: transactionId,
+      project_id: projectId,
+      user_id: project.userId,
+      amount: Number(downpaymentAmount), // Ensure it's a number
+      total_amount: Number(project.totalCost), // Ensure it's a number
+      type: "downpayment",
+      status: "pending",
+      due_date: currentDate,
+      payment_deadline: paymentDeadline,
+      notes: `Initial downpayment for project ${project.name}. Total project cost: ₱${project.totalCost.toLocaleString("en-PH")}`,
+    };
+
+    console.log("📋 Transaction data to create:", transactionData);
+
+    // Validate transaction data before creating
+    if (!transactionData.amount || transactionData.amount <= 0) {
+      console.log("❌ Invalid transaction amount:", transactionData.amount);
+      return { success: false, error: "Invalid transaction amount" };
+    }
+
+    let downpaymentTransaction;
+    try {
+      downpaymentTransaction = await TransactionModel.create(transactionData);
+      console.log(
+        "✅ Transaction created successfully:",
+        downpaymentTransaction
+      );
+    } catch (transactionError) {
+      console.error("❌ Failed to create transaction:", transactionError);
+      return {
+        success: false,
+        error:
+          "Failed to create transaction: " +
+          (transactionError as Error).message,
+      };
+    }
+
+    const remainingBalance = project.totalCost - downpaymentAmount;
+
+    console.log("✅ Downpayment transaction created:", {
+      transaction_id: downpaymentTransaction.transaction_id,
+      amount: downpaymentTransaction.amount,
+      remaining_balance: remainingBalance,
+      deadline: downpaymentTransaction.payment_deadline,
+    });
+
     // Get user details for client notification
     const userDetails = await getUserDetails(project.userId);
     console.log("👤 User lookup:", {
@@ -1707,76 +1802,106 @@ export async function confirmProjectStart(
       name: userDetails?.fullName,
     });
 
-    // ✅ CREATE NOTIFICATION FOR ADMIN (Target: Admin users)
+    // ✅ CREATE NOTIFICATION FOR ADMIN
     console.log("📢 Creating admin notification for project confirmation...");
 
-    // Create notification for admin users
-    const adminNotificationResult =
-      await notificationService.createNotification({
-        targetUserRoles: ["admin"], // Target all admin users
-        feature: "projects",
-        type: "project_confirmed",
-        title: "Project Confirmed by Client",
-        message: `Project "${project.name}" has been confirmed by ${userDetails?.fullName || "the client"} and is now active.`,
-        channels: ["in_app", "email"], // Both in-app and email notifications
-        projectMetadata: {
-          projectId: project.project_id,
-          projectName: project.name,
-          status: "active",
-          previousStatus: "pending",
-          startDate: currentDate.toISOString(),
-          confirmedAt: currentDate.toISOString(),
-          location: project.location?.fullAddress,
-          totalCost: project.totalCost,
-          clientName: userDetails?.fullName,
-          clientEmail: userDetails?.email,
-          clientId: project.userId,
-        },
-        actionUrl: `/admin/admin-project?project=${project.project_id}`,
-        actionLabel: "View Project",
-      });
+    try {
+      const adminNotificationResult =
+        await notificationService.createNotification({
+          targetUserRoles: ["admin"],
+          feature: "projects",
+          type: "project_confirmed",
+          title: "Project Confirmed by Client",
+          message: `Project "${project.name}" has been confirmed by ${userDetails?.fullName || "the client"} and is now active. Downpayment: ₱${downpaymentAmount.toLocaleString("en-PH")} (Remaining: ₱${remainingBalance.toLocaleString("en-PH")})`,
+          channels: ["in_app", "email"],
+          projectMetadata: {
+            projectId: project.project_id,
+            projectName: project.name,
+            status: "active",
+            previousStatus: "pending",
+            startDate: currentDate.toISOString(),
+            confirmedAt: currentDate.toISOString(),
+            location: project.location?.fullAddress,
+            totalCost: project.totalCost,
+            downpaymentAmount: downpaymentAmount,
+            remainingBalance: remainingBalance,
+            clientName: userDetails?.fullName,
+            clientEmail: userDetails?.email,
+            clientId: project.userId,
+            transactionId: downpaymentTransaction.transaction_id,
+            paymentDeadline: paymentDeadline.toISOString(),
+          },
+          actionUrl: `/admin/admin-project?project=${project.project_id}`,
+          actionLabel: "View Project",
+        });
 
-    if (adminNotificationResult) {
-      console.log(
-        "✅ Admin notification created successfully:",
-        adminNotificationResult._id
-      );
-    } else {
-      console.error("❌ Failed to create admin notification");
+      if (adminNotificationResult) {
+        console.log(
+          "✅ Admin notification created successfully:",
+          adminNotificationResult._id
+        );
+      } else {
+        console.error("❌ Failed to create admin notification");
+      }
+    } catch (notificationError) {
+      console.error("❌ Error creating admin notification:", notificationError);
+      // Don't fail the whole process if notification fails
     }
 
-    // ✅ CREATE NOTIFICATION FOR CLIENT (Target: Specific user)
+    // ✅ CREATE NOTIFICATION FOR CLIENT
     if (userDetails) {
       console.log(
         "📢 Creating client notification for project confirmation..."
       );
 
-      await createProjectNotification(
-        updatedProject,
-        userDetails,
-        "project_confirmed",
-        "Project Confirmed Successfully",
-        `Your project "${project.name}" has been confirmed and is now active. Our team will begin work shortly.`,
-        {
-          previousStatus: "pending",
-          newStatus: "active",
-          confirmedAt: currentDate.toISOString(),
-        }
-      );
+      try {
+        await createProjectNotification(
+          updatedProject.toObject(), // Convert to plain object
+          userDetails,
+          "project_confirmed",
+          "Project Confirmed Successfully",
+          `Your project "${project.name}" has been confirmed and is now active. Please pay the downpayment of ₱${downpaymentAmount.toLocaleString("en-PH")} within 48 hours (by ${paymentDeadline.toLocaleString()}). Remaining balance: ₱${remainingBalance.toLocaleString("en-PH")}`,
+          {
+            previousStatus: "pending",
+            newStatus: "active",
+            confirmedAt: currentDate.toISOString(),
+            downpaymentAmount: downpaymentAmount,
+            remainingBalance: remainingBalance,
+            transactionId: downpaymentTransaction.transaction_id,
+            paymentDeadline: paymentDeadline.toLocaleString(),
+          }
+        );
+      } catch (clientNotificationError) {
+        console.error(
+          "❌ Error creating client notification:",
+          clientNotificationError
+        );
+        // Don't fail the whole process if notification fails
+      }
     } else {
       console.log("❌ User not found for client notification");
     }
 
     // Create project confirmed timeline entry
-    await Timeline.create({
-      project_id: projectId,
-      type: "project_confirmed",
-      title: "Project Confirmed by Client",
-      description: `Project "${project.name}" has been confirmed by the client and is now active. Work will begin shortly.`,
-      date: currentDate,
-    });
-
-    console.log("✅ Timeline entry created");
+    try {
+      await Timeline.create({
+        project_id: projectId,
+        type: "project_confirmed",
+        title: "Project Confirmed by Client",
+        description: `Project "${project.name}" has been confirmed by the client and is now active. Downpayment of ₱${downpaymentAmount.toLocaleString("en-PH")} due within 48 hours. Remaining balance: ₱${remainingBalance.toLocaleString("en-PH")}`,
+        date: currentDate,
+        metadata: {
+          downpaymentAmount: downpaymentAmount,
+          remainingBalance: remainingBalance,
+          transactionId: downpaymentTransaction.transaction_id,
+          paymentDeadline: paymentDeadline.toISOString(),
+        },
+      });
+      console.log("✅ Timeline entry created");
+    } catch (timelineError) {
+      console.error("❌ Error creating timeline entry:", timelineError);
+      // Don't fail the whole process if timeline creation fails
+    }
 
     const plainProject: ProjectType = ProjectZodSchema.parse({
       _id: updatedProject._id.toString(),
@@ -1804,13 +1929,30 @@ export async function confirmProjectStart(
 
     revalidatePath("/user/projects");
     revalidatePath("/admin/admin-project");
-    revalidatePath("/admin/notifications"); // Revalidate admin notifications page
+    revalidatePath("/admin/notifications");
+    revalidatePath("/admin/transactions");
 
     console.log("✅ Project confirmation completed successfully");
-    return { success: true, project: plainProject };
+
+    // ✅ RETURN BOTH PROJECT AND TRANSACTION DATA
+    return {
+      success: true,
+      project: plainProject,
+      transaction: {
+        transaction_id: downpaymentTransaction.transaction_id,
+        amount: downpaymentTransaction.amount,
+        total_amount: downpaymentTransaction.total_amount,
+        type: downpaymentTransaction.type,
+        payment_deadline: downpaymentTransaction.payment_deadline,
+        remaining_balance: remainingBalance,
+      },
+    };
   } catch (error) {
     console.error("❌ Error confirming project start:", error);
-    return { success: false, error: "Failed to confirm project" };
+    return {
+      success: false,
+      error: "Failed to confirm project: " + (error as Error).message,
+    };
   }
 }
 

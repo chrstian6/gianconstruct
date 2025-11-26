@@ -72,13 +72,42 @@ export const TaskZodSchema = z.object({
   project_id: z.string().min(1, "Project ID is required").optional(),
 });
 
+// Transaction Zod Schema
+export const TransactionZodSchema = z.object({
+  transaction_id: z.string().min(1, "Transaction ID is required"),
+  project_id: z.string().min(1, "Project ID is required"),
+  user_id: z.string().min(1, "User ID is required"),
+  amount: z.number().min(0, "Amount must be positive"),
+  total_amount: z.number().min(0, "Total amount must be positive"),
+  type: z.enum(["downpayment", "partial_payment", "balance", "full"]),
+  status: z.enum(["pending", "paid", "expired", "cancelled"]),
+  due_date: z.date(),
+  payment_deadline: z.date(),
+  created_at: z.date(),
+  updated_at: z.date(),
+  paid_at: z.date().optional(),
+  payment_method: z.string().optional(),
+  reference_number: z.string().optional(),
+  notes: z.string().optional(),
+});
+
 export type ProjectImage = z.infer<typeof ProjectImageZodSchema>;
 export type Project = z.infer<typeof ProjectZodSchema>;
 export type Task = z.infer<typeof TaskZodSchema>;
+export type Transaction = z.infer<typeof TransactionZodSchema>;
 
+// Update the UpdateProjectResponse to include transaction
 export interface UpdateProjectResponse {
   success: boolean;
   project?: Project;
+  transaction?: {
+    transaction_id: string;
+    amount: number;
+    total_amount: number;
+    type: string;
+    payment_deadline: Date;
+    remaining_balance: number;
+  };
   error?: string;
 }
 
@@ -139,4 +168,40 @@ export interface GalleryResponse {
     uploadedAt: Date;
   }>;
   error?: string;
+}
+
+// Transaction Response Types
+export interface TransactionResponse {
+  success: boolean;
+  transaction?: Transaction;
+  transactions?: Transaction[];
+  error?: string;
+}
+
+export interface CreatePartialPaymentResponse {
+  success: boolean;
+  error?: string;
+  transaction?: {
+    transaction_id: string;
+    amount: number;
+    type: string;
+    payment_deadline: Date;
+  };
+  remaining_balance?: number;
+  payment_summary?: {
+    total_cost: number;
+    total_paid: number;
+    total_pending: number;
+    remaining_balance: number;
+  };
+}
+
+export interface PaymentSummary {
+  total_cost: number;
+  total_paid: number;
+  total_pending: number;
+  remaining_balance: number;
+  paid_transactions: Transaction[];
+  pending_transactions: Transaction[];
+  all_transactions: Transaction[];
 }

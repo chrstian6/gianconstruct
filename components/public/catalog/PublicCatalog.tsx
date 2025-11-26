@@ -234,53 +234,6 @@ export default function PublicCatalog({ searchTerm = "" }: PublicCatalogProps) {
           />
         )}
 
-        {/* --- Header Section --- */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
-          <div>
-            <h1 className="text-4xl font-extrabold tracking-tight text-orange-500 flex items-center gap-3">
-              Design Catalog
-            </h1>
-            <p className="mt-2 text-lg text-gray-500">
-              Explore our curated collection of architectural masterpieces.
-            </p>
-          </div>
-
-          {/* Result Count Badge */}
-          {!fetching && (
-            <div className="bg-white px-4 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-600 shadow-sm">
-              Showing{" "}
-              <span className="text-orange-600 font-bold">
-                {filteredDesigns.length}
-              </span>{" "}
-              results
-            </div>
-          )}
-        </div>
-
-        {/* --- MODERN SEARCH BAR --- */}
-        <div className="relative max-w-2xl mx-auto mb-10 group">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
-          </div>
-          <input
-            type="text"
-            className="block w-full pl-11 pr-12 py-4 bg-white border border-gray-200 rounded-full text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-300 ease-in-out hover:shadow-md"
-            placeholder="Search by name, category, or keyword..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute inset-y-0 right-0 pr-4 flex items-center"
-            >
-              <div className="bg-gray-100 hover:bg-gray-200 rounded-full p-1 transition-colors">
-                <X className="h-4 w-4 text-gray-500" />
-              </div>
-            </button>
-          )}
-        </div>
-
         {/* --- Category Filters --- */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 border-b border-gray-200 pb-6">
           <div className="flex flex-wrap items-center gap-2">

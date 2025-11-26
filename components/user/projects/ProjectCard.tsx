@@ -12,9 +12,7 @@ import {
   Calendar,
   Hash,
   ArrowRight,
-  User,
   MapPin,
-  MoreVertical,
   Clock,
   CheckCircle,
   Play,
@@ -22,11 +20,6 @@ import {
   CheckSquare,
 } from "lucide-react";
 import { Project } from "@/types/project";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -38,6 +31,7 @@ interface ProjectCardProps {
   isSelectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  // Remove drawer props from here - they belong in the parent
 }
 
 export default function ProjectCard({

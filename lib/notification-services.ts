@@ -2,7 +2,6 @@
 
 import dbConnect from "@/lib/db";
 import NotificationModel from "@/models/Notification";
-import User from "@/models/User";
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/nodemailer";
 import { EmailTemplates, generateEmailTemplate } from "./email-templates";
@@ -19,11 +18,11 @@ export interface CreateNotificationParams {
   title: string;
   message: string;
   channels?: string[];
-  pushData?: any;
+  pushData?: Record<string, unknown>;
   relatedId?: string;
-  appointmentMetadata?: any;
-  projectMetadata?: any;
-  metadata?: Record<string, any>;
+  appointmentMetadata?: Record<string, unknown>;
+  projectMetadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   actionUrl?: string;
   actionLabel?: string;
   expiresAt?: Date;
@@ -45,17 +44,37 @@ export interface NotificationQuery {
   currentUserId?: string;
 }
 
+interface ProjectData {
+  project_id: string;
+  name?: string;
+  status?: string;
+  startDate?: Date;
+  endDate?: Date;
+  totalCost?: number;
+  location?: {
+    fullAddress?: string;
+  };
+  userId?: string;
+}
+
+interface UserDetails {
+  email: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
 /**
  * Helper function to create project notifications
  * Centralizes all project notification logic
  */
 export async function createProjectNotification(
-  project: any,
-  userDetails: any,
+  project: ProjectData,
+  userDetails: UserDetails,
   notificationType: string,
   title: string,
   message: string,
-  additionalMetadata: any = {}
+  additionalMetadata: Record<string, unknown> = {}
 ): Promise<boolean> {
   try {
     console.log("════════════════════════════════════════");
@@ -81,7 +100,7 @@ export async function createProjectNotification(
     }
 
     // Build comprehensive metadata
-    const baseMetadata = {
+    const baseMetadata: Record<string, unknown> = {
       projectId: project.project_id,
       projectName: project.name,
       status: project.status,
@@ -132,9 +151,9 @@ export async function createProjectNotification(
     const notificationResult =
       await notificationService.createNotification(notificationParams);
 
-    if (notificationResult && notificationResult._id) {
+    if (notificationResult && (notificationResult as { _id: string })._id) {
       console.log(`✅ ${notificationType} notification created:`, {
-        notificationId: notificationResult._id,
+        notificationId: (notificationResult as { _id: string })._id,
         userEmail: notificationParams.userEmail,
         type: notificationParams.type,
       });
@@ -163,6 +182,79 @@ export async function createProjectNotification(
   }
 }
 
+interface NotificationDocument {
+  _id: unknown;
+  userEmail?: string;
+  channels?: string[];
+  feature: string;
+  type: string;
+  title: string;
+  message: string;
+  relatedId?: string;
+  appointmentMetadata?: Record<string, unknown>;
+  projectMetadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  actionUrl?: string;
+  actionLabel?: string;
+  createdAt: Date;
+  updatedAt?: Date;
+  isRead?: boolean;
+  emailSent?: boolean;
+  emailSentAt?: Date;
+  userId?: string;
+  targetUserIds?: string[];
+  targetUserRoles?: string[];
+  allowedRoles?: string[];
+  createdByRole?: string;
+  pushData?: Record<string, unknown>;
+  expiresAt?: Date;
+}
+
+interface EmailTemplateResult {
+  subject: string;
+  data: {
+    title: string;
+    message: string;
+    details?: string;
+    nextSteps?: string;
+    showButton?: boolean;
+    buttonText?: string;
+    buttonUrl?: string;
+  };
+}
+
+interface InquiryData {
+  name: string;
+  email: string;
+  design: {
+    name: string;
+  };
+  preferredDate: string;
+  preferredTime: string;
+  meetingType: string;
+  userType: string;
+  _id: {
+    toString: () => string;
+  };
+}
+
+interface ProjectTemplateData {
+  name: string;
+  project_id: string;
+  status: string;
+  location: {
+    fullAddress: string;
+  };
+  startDate: Date | string;
+  endDate?: Date | string;
+  totalCost?: number;
+}
+
+interface UserTemplateData {
+  name: string;
+  email: string;
+}
+
 class NotificationService {
   /**
    * Create a new notification (saves to database AND sends email in one function)
@@ -172,7 +264,6 @@ class NotificationService {
 
     try {
       // Validate and normalize notification type
-      // In the createNotification method, update this array:
       const validProjectTypes = [
         "project_created",
         "project_confirmed",
@@ -181,8 +272,7 @@ class NotificationService {
         "project_cancelled",
         "milestone_reached",
         "project_timeline_update",
-        "photo_timeline_update", // ✅ Make sure this is included
-        // Remove "timeline_photo_upload" if it's a duplicate
+        "photo_timeline_update",
       ];
       const validAppointmentTypes = [
         "appointment_confirmed",
@@ -218,7 +308,7 @@ class NotificationService {
       // Set default channels to include both in_app and email
       const channels = params.channels || ["in_app", "email"];
 
-      const notificationData: any = {
+      const notificationData: Partial<NotificationDocument> = {
         userEmail: params.userEmail,
         feature: params.feature,
         type: normalizedType,
@@ -293,7 +383,7 @@ class NotificationService {
   /**
    * Send email notification using proper email templates
    */
-  private async sendEmailNotification(notification: any) {
+  private async sendEmailNotification(notification: NotificationDocument) {
     try {
       console.log("📧 Attempting to send email notification:", {
         notificationId: notification._id,
@@ -313,7 +403,7 @@ class NotificationService {
         return;
       }
 
-      let emailResult: any;
+      let emailResult: EmailTemplateResult | null = null;
 
       // Use specific email templates based on feature and type
       switch (notification.feature) {
@@ -375,7 +465,9 @@ class NotificationService {
   /**
    * Get email template for appointment notifications
    */
-  private async getAppointmentEmailTemplate(notification: any) {
+  private async getAppointmentEmailTemplate(
+    notification: NotificationDocument
+  ): Promise<EmailTemplateResult> {
     try {
       const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString("en-US", {
@@ -397,25 +489,30 @@ class NotificationService {
       };
 
       // Create mock inquiry data from notification metadata
-      const mockInquiry = {
+      const mockInquiry: InquiryData = {
         name: notification.userEmail?.split("@")[0] || "Client",
-        email: notification.userEmail,
+        email: notification.userEmail || "",
         design: {
           name:
-            notification.appointmentMetadata?.designName ||
+            (notification.appointmentMetadata?.designName as string) ||
             "Construction Consultation",
         },
         preferredDate:
-          notification.appointmentMetadata?.originalDate ||
+          (notification.appointmentMetadata?.originalDate as string) ||
           new Date().toISOString(),
         preferredTime:
-          notification.appointmentMetadata?.originalTime || "10:00",
-        meetingType: notification.appointmentMetadata?.meetingType || "virtual",
-        userType: notification.appointmentMetadata?.userType || "guest",
-        _id: { toString: () => notification.relatedId || notification._id },
+          (notification.appointmentMetadata?.originalTime as string) || "10:00",
+        meetingType:
+          (notification.appointmentMetadata?.meetingType as string) ||
+          "virtual",
+        userType:
+          (notification.appointmentMetadata?.userType as string) || "guest",
+        _id: {
+          toString: () => notification.relatedId || String(notification._id),
+        },
       };
 
-      let template: any;
+      let template: EmailTemplateResult | null = null;
 
       switch (notification.type) {
         case "appointment_confirmed":
@@ -430,7 +527,7 @@ class NotificationService {
             mockInquiry,
             formatDate,
             formatTime,
-            notification.appointmentMetadata?.reason
+            notification.appointmentMetadata?.reason as string
           );
           break;
         case "appointment_rescheduled":
@@ -438,9 +535,9 @@ class NotificationService {
             mockInquiry,
             formatDate,
             formatTime,
-            notification.appointmentMetadata?.newDate,
-            notification.appointmentMetadata?.newTime,
-            notification.appointmentMetadata?.notes
+            notification.appointmentMetadata?.newDate as string,
+            notification.appointmentMetadata?.newTime as string,
+            notification.appointmentMetadata?.notes as string
           );
           break;
         case "appointment_completed":
@@ -468,7 +565,7 @@ class NotificationService {
         subject: template?.subject,
       });
 
-      return template;
+      return template || this.getGenericEmailTemplate(notification);
     } catch (error) {
       console.error("❌ Error getting appointment email template:", error);
       return this.getGenericEmailTemplate(notification);
@@ -478,7 +575,9 @@ class NotificationService {
   /**
    * Get email template for project notifications
    */
-  private async getProjectEmailTemplate(notification: any) {
+  private async getProjectEmailTemplate(
+    notification: NotificationDocument
+  ): Promise<EmailTemplateResult> {
     try {
       console.log("📧 Getting project email template for notification:", {
         type: notification.type,
@@ -488,7 +587,7 @@ class NotificationService {
       });
 
       // Use combined data from both projectMetadata and metadata with proper fallbacks
-      const combinedData = {
+      const combinedData: Record<string, unknown> = {
         ...notification.projectMetadata,
         ...notification.metadata,
       };
@@ -496,41 +595,44 @@ class NotificationService {
       console.log("📧 Combined notification data:", combinedData);
 
       // Build project data with comprehensive fallbacks
-      const mockProject = {
-        name: combinedData.projectName || combinedData.name || "Your Project",
-        project_id:
-          combinedData.projectId || notification.relatedId || "Unknown",
-        status: combinedData.status || combinedData.newStatus || "active",
+      const mockProject: ProjectTemplateData = {
+        name: (combinedData.projectName ||
+          combinedData.name ||
+          "Your Project") as string,
+        project_id: (combinedData.projectId ||
+          notification.relatedId ||
+          "Unknown") as string,
+        status: (combinedData.status ||
+          combinedData.newStatus ||
+          "active") as string,
         location: {
-          fullAddress:
-            combinedData.location ||
+          fullAddress: (combinedData.location ||
             combinedData.fullAddress ||
-            "Project Location",
+            "Project Location") as string,
         },
-        startDate: combinedData.startDate || new Date(),
-        endDate: combinedData.endDate,
-        totalCost: combinedData.totalCost || 0,
+        startDate: (combinedData.startDate as Date) || new Date(),
+        endDate: combinedData.endDate as Date,
+        totalCost: (combinedData.totalCost as number) || 0,
       };
 
       // Build user data with comprehensive fallbacks
-      const mockUser = {
+      const mockUser: UserTemplateData = {
         name:
-          combinedData.clientName ||
+          (combinedData.clientName as string) ||
           `${combinedData.clientFirstName || ""} ${combinedData.clientLastName || ""}`.trim() ||
           notification.userEmail?.split("@")[0] ||
           "Valued Client",
-        email: notification.userEmail,
+        email: notification.userEmail || "",
       };
 
       console.log("📧 Final processed data for email template:", {
         project: mockProject,
         user: mockUser,
-        notificationType: notification.type, // Add this for debugging
+        notificationType: notification.type,
       });
 
-      let template: any;
+      let template: EmailTemplateResult | null = null;
 
-      // ✅ FIXED: Add proper case for photo_timeline_update
       switch (notification.type) {
         case "project_created":
           template = EmailTemplates.projectCreated(mockProject, mockUser);
@@ -567,18 +669,19 @@ class NotificationService {
           console.log(
             "📸 Using projectTimelinePhotoUpdate template for photo_timeline_update"
           );
-          // Ensure all required parameters are passed
           template = EmailTemplates.projectTimelinePhotoUpdate(
             mockProject,
             mockUser,
-            combinedData.updateTitle || combinedData.title || "Progress Update",
-            combinedData.updateDescription ||
+            (combinedData.updateTitle ||
+              combinedData.title ||
+              "Progress Update") as string,
+            (combinedData.updateDescription ||
               combinedData.description ||
-              "New photos showing current construction progress",
+              "New photos showing current construction progress") as string,
             combinedData.progress !== undefined
-              ? combinedData.progress
+              ? (combinedData.progress as number)
               : undefined,
-            combinedData.photoCount || combinedData.photosCount || 1
+            (combinedData.photoCount || combinedData.photosCount || 1) as number
           );
           break;
 
@@ -586,10 +689,10 @@ class NotificationService {
           template = EmailTemplates.projectTimelineUpdate(
             mockProject,
             mockUser,
-            combinedData.updateTitle || "Project Timeline Update",
-            combinedData.updateDescription ||
-              "Our team has been making progress on your project.",
-            combinedData.progress
+            (combinedData.updateTitle || "Project Timeline Update") as string,
+            (combinedData.updateDescription ||
+              "Our team has been making progress on your project.") as string,
+            combinedData.progress as number
           );
           break;
 
@@ -597,16 +700,17 @@ class NotificationService {
           template = EmailTemplates.projectMilestoneReached(
             mockProject,
             mockUser,
-            combinedData.milestone || "Project Milestone",
-            combinedData.progress || 50
+            (combinedData.milestone || "Project Milestone") as string,
+            (combinedData.progress as number) || 50
           );
           break;
 
         case "project_updated":
           console.log("📝 Using projectUpdated template for project_updated");
-          const previousStatus = combinedData.previousStatus;
-          const newStatus = combinedData.newStatus || combinedData.status;
-          const updatedFields = combinedData.updatedFields || [];
+          const previousStatus = combinedData.previousStatus as string;
+          const newStatus = (combinedData.newStatus ||
+            combinedData.status) as string;
+          const updatedFields = (combinedData.updatedFields as string[]) || [];
 
           // If status changed → use status update template
           if (previousStatus && newStatus && previousStatus !== newStatus) {
@@ -653,7 +757,7 @@ class NotificationService {
         "✅ Project email template generated successfully for type:",
         notification.type
       );
-      return template;
+      return template || this.getGenericEmailTemplate(notification);
     } catch (error) {
       console.error("❌ Error getting project email template:", error);
       return this.getGenericEmailTemplate(notification);
@@ -663,7 +767,9 @@ class NotificationService {
   /**
    * Get generic email template for notifications without specific templates
    */
-  private getGenericEmailTemplate(notification: any) {
+  private getGenericEmailTemplate(
+    notification: NotificationDocument
+  ): EmailTemplateResult {
     const details = `
 <div class="details-container">
   <div class="detail-row">
@@ -712,11 +818,7 @@ class NotificationService {
 
     try {
       const {
-        userId,
         userEmail,
-        targetUserIds,
-        targetUserRoles,
-        allowedRoles,
         feature,
         type,
         isRead,
@@ -728,7 +830,7 @@ class NotificationService {
       } = query;
 
       // SIMPLE ROLE-BASED CONDITIONS
-      const conditions: any = {};
+      const conditions: Record<string, unknown> = {};
 
       if (currentUserRole === "admin") {
         // Admin sees ALL notifications - no filtering
@@ -878,7 +980,7 @@ class NotificationService {
     await dbConnect();
 
     try {
-      const conditions: any = { isRead: false };
+      const conditions: Record<string, unknown> = { isRead: false };
 
       if (userRole === "admin") {
         // Admin marks ALL notifications as read
@@ -999,7 +1101,7 @@ class NotificationService {
     await dbConnect();
 
     try {
-      let conditions: any = {};
+      let conditions: Record<string, unknown> = {};
 
       if (userRole === "admin") {
         // Admin gets stats for ALL notifications
