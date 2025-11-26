@@ -19,7 +19,6 @@ import {
   Trash2,
   Clock,
   CheckCircle,
-  XCircle,
   Play,
   HardHat,
   CheckSquare,
@@ -123,13 +122,8 @@ export default function ProjectCard({
     return "bg-green-500";
   };
 
-  // Status configuration with icons and colors
+  // Status configuration with icons and colors - REMOVED "not-started"
   const statusConfig = {
-    "not-started": {
-      label: "Not Started",
-      icon: Clock,
-      color: "bg-gray-100 text-gray-700 border-gray-200",
-    },
     pending: {
       label: "Pending",
       icon: Clock,
@@ -147,7 +141,7 @@ export default function ProjectCard({
     },
     cancelled: {
       label: "Cancelled",
-      icon: XCircle,
+      icon: Clock,
       color: "bg-red-100 text-red-700 border-red-200",
     },
   };
@@ -188,7 +182,7 @@ export default function ProjectCard({
   return (
     <Card
       className={cn(
-        "w-full max-w-md transition-all shadow-md rounded-sm cursor-pointer border-none  flex flex-col relative",
+        "w-full max-w-md transition-all shadow-md rounded-sm cursor-pointer border-none flex flex-col relative",
         project.status === "completed" ? "bg-gray-50" : "bg-white",
         isSelectMode && "border-gray-300",
         isSelected && "border-blue-500 ring-2 ring-blue-200"
@@ -240,7 +234,7 @@ export default function ProjectCard({
                     <MoreVertical className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
@@ -251,6 +245,7 @@ export default function ProjectCard({
                     <Edit className="h-3.5 w-3.5 mr-2" />
                     Edit Project
                   </DropdownMenuItem>
+
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
@@ -381,10 +376,45 @@ export default function ProjectCard({
                 </div>
               </div>
             )}
+
+          {/* Special message for pending projects - REMOVED "not-started" condition */}
+          {project.status === "pending" && (
+            <div className="border border-amber-200 rounded p-2 mt-1 bg-amber-50">
+              <div className="flex items-center">
+                <Clock className="h-3 w-3 text-amber-600 mr-2 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[0.6rem] font-medium text-amber-800">
+                    Awaiting Client Confirmation
+                  </div>
+                  <div className="text-[0.55rem] text-amber-700">
+                    Project is pending client confirmation to begin construction
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Special message for cancelled projects */}
+          {project.status === "cancelled" && (
+            <div className="border border-red-200 rounded p-2 mt-1 bg-red-50">
+              <div className="flex items-center">
+                <Clock className="h-3 w-3 text-red-600 mr-2 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[0.6rem] font-medium text-red-800">
+                    Project Cancelled
+                  </div>
+                  <div className="text-[0.55rem] text-red-700">
+                    This project has been cancelled
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
 
-      <CardFooter className="pt-0 px-3 pb-1">
+      <CardFooter className="pt-0 px-3 pb-3 flex flex-col gap-2">
+        {/* Main Action Button */}
         <Button
           variant="default"
           size="sm"

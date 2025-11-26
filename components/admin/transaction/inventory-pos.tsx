@@ -10,7 +10,6 @@ import {
   Loader2,
   Printer,
   Bluetooth,
-  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,7 +152,7 @@ class WebBluetoothPrinter {
     try {
       // Convert text to bytes (UTF-8)
       const encoder = new TextEncoder();
-      let data = encoder.encode(text);
+      const data = encoder.encode(text);
 
       // Add ESC/POS initialization and formatting
       const escPosCommands = new Uint8Array([
@@ -271,7 +270,7 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [cart, setCart] = useState<POSCartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [discountPercentage, setDiscountPercentage] = useState(0);
   const [clientName, setClientName] = useState("");
@@ -291,11 +290,9 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
   const [printMethod, setPrintMethod] = useState<"browser" | "bluetooth">(
     "browser"
   );
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const printWindowRef = useRef<Window | null>(null);
-  const initialLoadAttempted = useRef(false);
 
   // Initialize Bluetooth printer
   useEffect(() => {
@@ -319,37 +316,24 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
 
   // Load initial inventory items on component mount
   useEffect(() => {
-    if (!initialLoadAttempted.current) {
-      initialLoadAttempted.current = true;
-      loadInitialItems();
-    }
+    loadInitialItems();
   }, []);
 
   const loadInitialItems = async () => {
     setIsLoading(true);
-    setLoadError(null);
     try {
-      console.log("Loading initial inventory items...");
       const result = await getInventoryItems();
-      console.log("Inventory items result:", result);
-
-      if (result.success && result.items) {
+      if (result.success) {
         const randomItems = result.items
           .sort(() => 0.5 - Math.random())
           .slice(0, 10);
         setInventoryItems(randomItems);
-        console.log("Successfully loaded", randomItems.length, "items");
       } else {
-        const errorMessage = result.error || "Failed to load inventory";
-        setLoadError(errorMessage);
-        toast.error(errorMessage);
-        console.error("Inventory load failed:", errorMessage);
+        toast.error(result.error || "Failed to load inventory");
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error loading initial items:", error);
-      const errorMessage = error.message || "Error loading inventory items";
-      setLoadError(errorMessage);
-      toast.error(errorMessage);
+      toast.error("Error loading inventory items");
     } finally {
       setIsLoading(false);
     }
@@ -357,23 +341,18 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
 
   const loadRandomItems = async () => {
     setIsLoading(true);
-    setLoadError(null);
     try {
       const result = await getInventoryItems();
-      if (result.success && result.items) {
+      if (result.success) {
         const randomItems = result.items
           .sort(() => 0.5 - Math.random())
           .slice(0, 10);
         setInventoryItems(randomItems);
       } else {
-        const errorMessage = result.error || "Failed to load inventory";
-        setLoadError(errorMessage);
-        toast.error(errorMessage);
+        toast.error(result.error || "Failed to load inventory");
       }
-    } catch (error: any) {
-      const errorMessage = error.message || "Error loading inventory items";
-      setLoadError(errorMessage);
-      toast.error(errorMessage);
+    } catch (error) {
+      toast.error("Error loading inventory items");
     } finally {
       setIsLoading(false);
     }
@@ -996,91 +975,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
     </div>
   );
 
-  const renderInventoryItems = () => {
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
-          <span className="text-sm text-muted-foreground">
-            Loading items...
-          </span>
-        </div>
-      );
-    }
-
-    if (loadError) {
-      return (
-        <div className="text-center py-8">
-          <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
-          <p className="text-sm text-destructive mb-2">Failed to load items</p>
-          <p className="text-xs text-muted-foreground mb-3">{loadError}</p>
-          <Button
-            onClick={loadInitialItems}
-            variant="outline"
-            size="sm"
-            className="text-xs"
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Retry
-          </Button>
-        </div>
-      );
-    }
-
-    if (inventoryItems.length > 0) {
-      return (
-        <div className="space-y-1">
-          {inventoryItems.map((item) => (
-            <div
-              key={item.product_id}
-              className="flex items-center justify-between p-2 border border-border rounded text-xs cursor-pointer hover:bg-muted/50 transition-colors"
-              onClick={() => addToCart(item)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 mb-0.5">
-                  <h3 className="font-medium text-foreground truncate">
-                    {item.name}
-                  </h3>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <span>₱{(item.salePrice || item.unitCost).toFixed(2)}</span>
-                  <span
-                    className={
-                      item.quantity > 10
-                        ? "text-green-600"
-                        : item.quantity > 0
-                          ? "text-orange-600"
-                          : "text-destructive"
-                    }
-                  >
-                    {item.quantity} {item.unit}
-                  </span>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                className="h-6 w-6 p-0 ml-1 flex-shrink-0"
-                disabled={item.quantity < 1}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <div className="text-center py-8">
-        <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-        <p className="text-sm text-muted-foreground mb-1">No items found</p>
-        <p className="text-xs text-muted-foreground">
-          Try refreshing or check your connection
-        </p>
-      </div>
-    );
-  };
-
   return (
     <div className="h-screen flex bg-background gap-0">
       {/* Left Sidebar - Inventory Items */}
@@ -1101,26 +995,60 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
             )}
           </div>
 
-          {/* Refresh Button */}
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-medium text-muted-foreground">
-              Inventory Items
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={loadInitialItems}
-              disabled={isLoading}
-              className="h-6 w-6 p-0"
-            >
-              <RefreshCw
-                className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`}
-              />
-            </Button>
-          </div>
-
           {/* Inventory Items */}
-          <div className="flex-1 overflow-y-auto">{renderInventoryItems()}</div>
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : inventoryItems.length > 0 ? (
+              <div className="space-y-1">
+                {inventoryItems.map((item) => (
+                  <div
+                    key={item.product_id}
+                    className="flex items-center justify-between p-2 border border-border rounded text-xs cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => addToCart(item)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <h3 className="font-medium text-foreground truncate">
+                          {item.name}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span>
+                          ₱{(item.salePrice || item.unitCost).toFixed(2)}
+                        </span>
+                        <span
+                          className={
+                            item.quantity > 10
+                              ? "text-green-600"
+                              : item.quantity > 0
+                                ? "text-orange-600"
+                                : "text-destructive"
+                          }
+                        >
+                          {item.quantity} {item.unit}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-6 w-6 p-0 ml-1 flex-shrink-0"
+                      disabled={item.quantity < 1}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <AlertCircle className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">No items found</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-// components/admin/Header.tsx - Add the imports and functionality
+// components/admin/Header.tsx - FOCUSED ON INQUIRY NOTIFICATIONS ONLY
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import {
   Check,
   Trash2,
   UserPlus,
+  Calendar,
+  MessageSquare,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useModalStore } from "@/lib/stores";
@@ -31,9 +33,10 @@ import {
 import {
   getNotifications,
   deleteNotification,
-  clearAllNotifications,
+  clearAllUserNotifications,
   markNotificationAsRead,
-} from "@/action/inquiries";
+  markAllNotificationsAsRead,
+} from "@/action/notification";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -48,27 +51,30 @@ import {
 
 interface Notification {
   _id: string;
-  userEmail: string;
-  design: {
-    id: string;
-    name: string;
-    price?: number;
-    square_meters?: number;
-    images?: string[];
-    isLoanOffer?: boolean;
-    maxLoanYears?: number;
-    interestRate?: number;
-  };
-  designImage?: string;
-  inquiryDetails: {
-    name: string;
-    email: string;
-    phone: string;
-    message: string;
-  };
-  isGuest: boolean;
+  userId?: string;
+  userEmail?: string;
+  feature: "appointments";
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
   createdAt: string;
-  isRead?: boolean;
+  timeAgo: string;
+  actionUrl?: string;
+  actionLabel?: string;
+
+  // Appointment metadata for inquiries
+  appointmentMetadata?: {
+    inquiryId?: string;
+    appointmentId?: string;
+    originalDate?: string;
+    originalTime?: string;
+    reason?: string;
+    notes?: string;
+    newDate?: string;
+    newTime?: string;
+    meetingType?: string;
+  };
 }
 
 // Map path segments to readable labels
@@ -85,6 +91,15 @@ const pathLabels: Record<string, string> = {
   settings: "Settings",
 };
 
+// Map notification types to readable labels
+const notificationTypeLabels: Record<string, string> = {
+  appointment_confirmed: "Appointment Confirmed",
+  appointment_cancelled: "Appointment Cancelled",
+  appointment_rescheduled: "Appointment Rescheduled",
+  appointment_completed: "Appointment Completed",
+  inquiry_submitted: "New Inquiry",
+};
+
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
@@ -94,11 +109,10 @@ export function Header() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
-  const [missingDesignId, setMissingDesignId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isClearAllConfirmOpen, setIsClearAllConfirmOpen] = useState(false);
-  const [isDesignNotFoundOpen, setIsDesignNotFoundOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -116,20 +130,36 @@ export function Header() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch notifications
+  // Fetch inquiry notifications for admin
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const result = await getNotifications();
+        setLoading(true);
+        const result = await getNotifications({
+          currentUserRole: "admin",
+          feature: "appointments", // Only fetch appointment notifications
+          page: 1,
+          limit: 50,
+        });
+
         if (result.success) {
-          setNotifications(result.notifications);
-          const unread = result.notifications.filter(
-            (n: Notification) => !n.isRead
-          ).length;
+          const fetched = result.notifications || [];
+          const typedNotifications = fetched as Notification[];
+          setNotifications(typedNotifications);
+          const unread =
+            typedNotifications.filter((n) => !n.isRead).length || 0;
           setUnreadCount(unread);
+        } else {
+          console.error("Failed to fetch notifications:", result.error);
+          setNotifications([]);
+          setUnreadCount(0);
         }
       } catch (error) {
         console.error("Error fetching notifications:", error);
+        setNotifications([]);
+        setUnreadCount(0);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -142,10 +172,7 @@ export function Header() {
   const generateBreadcrumbs = () => {
     if (!pathname) return [];
 
-    // Remove leading slash and split path into segments
     const segments = pathname.split("/").filter((segment) => segment !== "");
-
-    // Create breadcrumb items
     const breadcrumbs = segments.map((segment, index) => {
       const href = "/" + segments.slice(0, index + 1).join("/");
       const label =
@@ -165,38 +192,33 @@ export function Header() {
 
   const breadcrumbs = generateBreadcrumbs();
 
-  const formatNotificationDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
-    );
-
-    if (diffInHours < 1) {
-      const diffInMinutes = Math.floor(
-        (now.getTime() - date.getTime()) / (1000 * 60)
-      );
-      return diffInMinutes < 1 ? "Just now" : `${diffInMinutes}m ago`;
-    } else if (diffInHours < 24) {
-      return `${diffInHours}h ago`;
-    } else {
-      return date.toLocaleDateString();
+  // Get notification icon based on type
+  const getNotificationIcon = (notification: Notification) => {
+    switch (notification.type) {
+      case "appointment_confirmed":
+        return <Calendar className="h-4 w-4 text-green-600" />;
+      case "appointment_cancelled":
+        return <Calendar className="h-4 w-4 text-red-600" />;
+      case "appointment_rescheduled":
+        return <Calendar className="h-4 w-4 text-amber-600" />;
+      case "appointment_completed":
+        return <Calendar className="h-4 w-4 text-blue-600" />;
+      case "inquiry_submitted":
+        return <MessageSquare className="h-4 w-4 text-purple-600" />;
+      default:
+        return <Calendar className="h-4 w-4 text-gray-600" />;
     }
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+  // Get readable type label
+  const getTypeLabel = (type: string | undefined) => {
+    if (!type) return "Unknown Type";
+    return notificationTypeLabels[type] || type;
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
     try {
-      const result = await markNotificationAsRead(notificationId);
+      const result = await markNotificationAsRead(notificationId, "admin");
       if (result.success) {
         setNotifications((prev) =>
           prev.map((n) =>
@@ -212,12 +234,11 @@ export function Header() {
 
   const handleMarkAllAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter((n) => !n.isRead);
-      for (const notification of unreadNotifications) {
-        await markNotificationAsRead(notification._id);
+      const result = await markAllNotificationsAsRead("admin", "admin");
+      if (result.success) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setUnreadCount(0);
       }
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
     }
@@ -225,7 +246,7 @@ export function Header() {
 
   const handleDeleteNotification = async (notificationId: string) => {
     try {
-      const result = await deleteNotification(notificationId);
+      const result = await deleteNotification(notificationId, "admin");
       if (result.success) {
         const notificationToDelete = notifications.find(
           (n) => n._id === notificationId
@@ -248,7 +269,7 @@ export function Header() {
 
   const handleClearAll = async () => {
     try {
-      const result = await clearAllNotifications();
+      const result = await clearAllUserNotifications("admin", "admin");
       if (result.success) {
         setNotifications([]);
         setSelectedNotification(null);
@@ -260,56 +281,51 @@ export function Header() {
     setIsClearAllConfirmOpen(false);
   };
 
-  const handleViewDesign = async (designId: string) => {
-    try {
-      router.push(`/admin/catalog?designId=${designId}`);
+  const handleNotificationAction = (notification: Notification) => {
+    if (notification.actionUrl) {
+      router.push(notification.actionUrl);
       setIsNotificationOpen(false);
       setSelectedNotification(null);
-    } catch (error) {
-      setMissingDesignId(designId);
-      setIsDesignNotFoundOpen(true);
     }
-  };
-
-  const handleDesignNotFoundClose = () => {
-    setIsDesignNotFoundOpen(false);
-    setMissingDesignId(null);
   };
 
   const toggleNotificationDropdown = () => {
     setIsNotificationOpen(!isNotificationOpen);
   };
 
-  const getInitials = (name: string) => {
-    return name.charAt(0).toUpperCase();
+  // Handle creating account from notification (for guest inquiries)
+  const handleCreateAccount = (notification: Notification) => {
+    if (notification.appointmentMetadata?.inquiryId) {
+      // Extract name from notification title or message
+      const nameMatch =
+        notification.title.match(/from (.+?) for/) ||
+        notification.message.match(/from (.+?) for/);
+      const name = nameMatch ? nameMatch[1] : "Guest User";
+      const nameParts = name.split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      setCreateAccountData({
+        firstName,
+        lastName,
+        email: notification.userEmail || "",
+        phone: "",
+      });
+
+      setIsNotificationOpen(false);
+      setSelectedNotification(null);
+
+      router.push("/admin/usermanagement");
+
+      setTimeout(() => {
+        setIsCreateAccountOpen(true);
+      }, 100);
+    }
   };
 
-  // Handle creating account from notification
-  const handleCreateAccount = (notification: Notification) => {
-    // Extract name parts from the notification
-    const nameParts = notification.inquiryDetails.name.split(" ");
-    const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || "";
-
-    // Set the data for the create account form
-    setCreateAccountData({
-      firstName,
-      lastName,
-      email: notification.userEmail,
-      phone: notification.inquiryDetails.phone || "",
-    });
-
-    // Close notification dropdown and detail dialog
-    setIsNotificationOpen(false);
-    setSelectedNotification(null);
-
-    // Redirect to user management page
-    router.push("/admin/usermanagement");
-
-    // Open the create account modal
-    setTimeout(() => {
-      setIsCreateAccountOpen(true);
-    }, 100);
+  // Check if notification is from a guest user
+  const isGuestNotification = (notification: Notification) => {
+    return notification.type === "inquiry_submitted" && !notification.userId;
   };
 
   return (
@@ -323,26 +339,24 @@ export function Header() {
             {/* Breadcrumbs */}
             <Breadcrumb>
               <BreadcrumbList>
-                {/* Always show Admin as first breadcrumb */}
                 <BreadcrumbItem>
-                  <BreadcrumbLink href="/admin" className="text-black-200">
+                  <BreadcrumbLink href="/admin" className="text-foreground">
                     Admin
                   </BreadcrumbLink>
                 </BreadcrumbItem>
 
-                {/* Dynamic breadcrumbs based on current path */}
                 {breadcrumbs.slice(1).map((breadcrumb, index) => (
                   <React.Fragment key={index}>
                     <BreadcrumbSeparator />
                     <BreadcrumbItem>
                       {breadcrumb.isLast ? (
-                        <BreadcrumbPage className="text-black-200">
+                        <BreadcrumbPage className="text-foreground">
                           {breadcrumb.label}
                         </BreadcrumbPage>
                       ) : (
                         <BreadcrumbLink
                           href={breadcrumb.href}
-                          className="text-black-200 hover:text-black-400"
+                          className="text-foreground hover:text-foreground/80"
                         >
                           {breadcrumb.label}
                         </BreadcrumbLink>
@@ -353,15 +367,15 @@ export function Header() {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
+
           {/* Notification */}
           <div className="flex items-center gap-4">
-            {/* Notification Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "relative text-text-secondary hover:bg-text-secondary hover:text-text-secondary-foreground transition-all duration-200",
+                  "relative text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200",
                   isNotificationOpen && "bg-accent text-accent-foreground"
                 )}
                 onClick={toggleNotificationDropdown}
@@ -372,7 +386,7 @@ export function Header() {
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </Badge>
                 )}
-                <span className="sr-only">Notifications</span>
+                <span className="sr-only">Inquiry Notifications</span>
               </Button>
 
               {/* Dropdown Menu */}
@@ -389,11 +403,11 @@ export function Header() {
                     <div className="flex items-center justify-between p-4 border-b border-border">
                       <div>
                         <h3 className="font-semibold text-popover-foreground">
-                          Notifications
+                          Inquiry Notifications
                         </h3>
                         <p className="text-sm text-muted-foreground">
                           {unreadCount} unread{" "}
-                          {unreadCount === 1 ? "notification" : "notifications"}
+                          {unreadCount === 1 ? "inquiry" : "inquiries"}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -424,120 +438,117 @@ export function Header() {
 
                     {/* Notifications List */}
                     <div className="max-h-96 overflow-y-auto">
-                      {notifications.length === 0 ? (
+                      {loading ? (
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            Loading inquiries...
+                          </p>
+                        </div>
+                      ) : notifications.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                           <Bell className="h-8 w-8 mb-2 text-muted" />
-                          <p className="text-sm">No notifications</p>
+                          <p className="text-sm">No inquiry notifications</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             You're all caught up!
                           </p>
                         </div>
                       ) : (
                         <div className="divide-y divide-border">
-                          {notifications.map((notification) => (
-                            <motion.div
-                              key={notification._id}
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              className={cn(
-                                "p-3 transition-colors hover:bg-accent/50 group cursor-pointer",
-                                !notification.isRead &&
-                                  "bg-accent hover:bg-accent"
-                              )}
-                              onClick={() =>
-                                setSelectedNotification(notification)
-                              }
-                            >
-                              <div className="flex gap-3">
-                                {/* Avatar */}
-                                <div
-                                  className={cn(
-                                    "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium",
-                                    notification.isGuest
-                                      ? "bg-red-100 text-red-600"
-                                      : "bg-blue-100 text-blue-600"
-                                  )}
-                                >
-                                  {getInitials(
-                                    notification.inquiryDetails.name
-                                  )}
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between">
-                                    <h4
-                                      className={cn(
-                                        "text-sm font-medium line-clamp-1",
-                                        !notification.isRead
-                                          ? "text-popover-foreground"
-                                          : "text-muted-foreground"
-                                      )}
-                                    >
-                                      New inquiry for {notification.design.name}
-                                    </h4>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeleteConfirmId(notification._id);
-                                        setIsDeleteConfirmOpen(true);
-                                      }}
-                                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
+                          {notifications.map((notification) => {
+                            return (
+                              <motion.div
+                                key={notification._id}
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className={cn(
+                                  "p-3 transition-colors hover:bg-accent/50 group cursor-pointer",
+                                  !notification.isRead &&
+                                    "bg-accent hover:bg-accent"
+                                )}
+                                onClick={() =>
+                                  setSelectedNotification(notification)
+                                }
+                              >
+                                <div className="flex gap-3">
+                                  {/* Icon */}
+                                  <div className="flex-shrink-0 mt-0.5">
+                                    {getNotificationIcon(notification)}
                                   </div>
-                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                                    From: {notification.inquiryDetails.name}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                    {notification.inquiryDetails.message}
-                                  </p>
-                                  <div className="flex items-center justify-between mt-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-muted-foreground">
-                                        {formatNotificationDate(
-                                          notification.createdAt
-                                        )}
-                                      </span>
-                                      <span
+
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between">
+                                      <h4
                                         className={cn(
-                                          "text-xs px-2 py-0.5 rounded-full",
-                                          notification.isGuest
-                                            ? "bg-red-100 text-red-800"
-                                            : "bg-blue-100 text-blue-800"
+                                          "text-sm font-medium line-clamp-1 text-popover-foreground",
+                                          !notification.isRead &&
+                                            "font-semibold"
                                         )}
                                       >
-                                        {notification.isGuest
-                                          ? "Guest"
-                                          : "User"}
-                                      </span>
-                                      {!notification.isRead && (
-                                        <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                                          New
-                                        </span>
-                                      )}
-                                    </div>
-                                    {!notification.isRead && (
+                                        {notification.title || "No Title"}
+                                      </h4>
                                       <Button
                                         variant="ghost"
-                                        size="sm"
+                                        size="icon"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleMarkAsRead(notification._id);
+                                          setDeleteConfirmId(notification._id);
+                                          setIsDeleteConfirmOpen(true);
                                         }}
-                                        className="text-xs text-primary hover:text-primary hover:bg-accent h-6 px-2"
+                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                                       >
-                                        Mark read
+                                        <Trash2 className="h-3 w-3" />
                                       </Button>
-                                    )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                      {notification.message || "No message"}
+                                    </p>
+                                    <div className="flex items-center justify-between mt-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <Badge
+                                          variant="outline"
+                                          className={cn(
+                                            "text-xs",
+                                            notification.type ===
+                                              "inquiry_submitted"
+                                              ? "bg-purple-100 text-purple-800 border-purple-200"
+                                              : "bg-blue-100 text-blue-800 border-blue-200"
+                                          )}
+                                        >
+                                          {getTypeLabel(notification.type)}
+                                        </Badge>
+                                        <span className="text-xs text-muted-foreground">
+                                          {notification.timeAgo || "Recently"}
+                                        </span>
+                                        {isGuestNotification(notification) && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-xs bg-red-100 text-red-800 border-red-200"
+                                          >
+                                            Guest
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {!notification.isRead && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMarkAsRead(notification._id);
+                                          }}
+                                          className="text-xs text-primary hover:text-primary hover:bg-accent h-6 px-2"
+                                        >
+                                          Mark read
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </motion.div>
-                          ))}
+                              </motion.div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -554,172 +565,154 @@ export function Header() {
         open={!!selectedNotification}
         onOpenChange={(open) => !open && setSelectedNotification(null)}
       >
-        <DialogContent className="sm:max-w-2xl bg-white rounded-lg shadow-xl">
+        <DialogContent className="sm:max-w-2xl bg-background border-border">
           {selectedNotification && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-[var(--orange)]">
-                  Inquiry for {selectedNotification.design.name}
+                <DialogTitle className="flex items-center gap-2 text-foreground">
+                  {getNotificationIcon(selectedNotification)}
+                  {selectedNotification.title || "No Title"}
                 </DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  {selectedNotification.message || "No message"}
+                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-6 py-4">
+                {/* Notification Metadata */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-medium text-gray-500">
-                        From
+                      <h4 className="text-sm font-medium text-muted-foreground">
+                        Type
                       </h4>
-                      <p className="text-sm mt-1 text-[var(--orange)]">
-                        {selectedNotification.inquiryDetails.name}
-                      </p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-sm",
+                          selectedNotification.type === "inquiry_submitted"
+                            ? "bg-purple-100 text-purple-800 border-purple-200"
+                            : "bg-blue-100 text-blue-800 border-blue-200"
+                        )}
+                      >
+                        {getTypeLabel(selectedNotification.type)}
+                      </Badge>
                     </div>
                     <div>
-                      <h4 className="text-sm font-medium text-gray-500">
-                        Email
-                      </h4>
-                      <p className="text-sm mt-1 text-[var(--orange)]">
-                        {selectedNotification.userEmail}
-                      </p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">
-                        Phone
-                      </h4>
-                      <p className="text-sm mt-1 text-[var(--orange)]">
-                        {selectedNotification.inquiryDetails.phone || "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">
+                      <h4 className="text-sm font-medium text-muted-foreground">
                         Date
                       </h4>
-                      <p className="text-sm mt-1 text-[var(--orange)]">
-                        {formatDate(selectedNotification.createdAt)} at{" "}
-                        {formatTime(selectedNotification.createdAt)}
-                      </p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">
-                        Status
-                      </h4>
-                      <p className="text-sm mt-1">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            selectedNotification.isGuest
-                              ? "bg-red-100 text-red-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {selectedNotification.isGuest ? "Guest" : "User"}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">
-                        Design
-                      </h4>
-                      <div
-                        className="cursor-pointer"
-                        onClick={() =>
-                          handleViewDesign(selectedNotification.design.id)
-                        }
-                      >
-                        {selectedNotification.design.images &&
-                        selectedNotification.design.images.length > 0 ? (
-                          <div className="mt-2">
-                            <img
-                              src={selectedNotification.design.images[0]}
-                              alt={selectedNotification.design.name}
-                              className="rounded-md border border-gray-200 w-full h-auto max-h-48 object-contain hover:opacity-90 transition-opacity"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                              Design ID: {selectedNotification.design.id}
-                            </p>
-                          </div>
-                        ) : selectedNotification.designImage ? (
-                          <img
-                            src={selectedNotification.designImage}
-                            alt={selectedNotification.design.name}
-                            className="mt-2 rounded-md border border-gray-200 w-full h-auto max-h-48 object-contain hover:opacity-90 transition-opacity"
-                          />
+                      <p className="text-sm mt-1 text-foreground">
+                        {selectedNotification.createdAt ? (
+                          <>
+                            {new Date(
+                              selectedNotification.createdAt
+                            ).toLocaleDateString()}{" "}
+                            at{" "}
+                            {new Date(
+                              selectedNotification.createdAt
+                            ).toLocaleTimeString()}
+                          </>
                         ) : (
-                          <div className="mt-2 h-48 flex items-center justify-center bg-gray-100 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-200 transition-colors">
-                            No image available
-                          </div>
+                          "Unknown date"
                         )}
-                      </div>
+                      </p>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500">
-                        Design Details
-                      </h4>
-                      <div className="text-sm mt-1 space-y-1">
-                        <p
-                          className="text-[var(--orange)] hover:underline cursor-pointer"
-                          onClick={() =>
-                            handleViewDesign(selectedNotification.design.id)
-                          }
-                        >
-                          {selectedNotification.design.name}
-                        </p>
-                        {selectedNotification.design.price && (
-                          <p>
-                            <span className="font-medium">Price:</span> ₱
-                            {selectedNotification.design.price.toLocaleString()}
-                          </p>
-                        )}
-                        {selectedNotification.design.square_meters && (
-                          <p>
-                            <span className="font-medium">Area:</span>{" "}
-                            {selectedNotification.design.square_meters} sqm
-                          </p>
-                        )}
-                        <p
-                          className="text-[var(--orange)] hover:underline cursor-pointer"
-                          onClick={() =>
-                            handleViewDesign(selectedNotification.design.id)
-                          }
-                        >
-                          <span className="font-medium">ID:</span>{" "}
-                          {selectedNotification.design.id}
+                    {selectedNotification.userEmail && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          User Email
+                        </h4>
+                        <p className="text-sm mt-1 text-foreground">
+                          {selectedNotification.userEmail}
                         </p>
                       </div>
-                      {selectedNotification.design.isLoanOffer && (
-                        <div className="mt-2">
-                          <h4 className="text-sm font-medium text-gray-500">
-                            Loan Breakdown
-                          </h4>
-                          <p className="text-sm mt-1">
-                            Loan available with{" "}
-                            {selectedNotification.design.interestRate}% interest
-                            rate over {selectedNotification.design.maxLoanYears}{" "}
-                            years.
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    )}
+                    {isGuestNotification(selectedNotification) && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          User Type
+                        </h4>
+                        <Badge
+                          variant="outline"
+                          className="text-sm bg-red-100 text-red-800 border-red-200"
+                        >
+                          Guest User
+                        </Badge>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-gray-500">Message</h4>
-                  <p className="text-sm mt-1 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">
-                    {selectedNotification.inquiryDetails.message}
-                  </p>
+
+                  {/* Appointment details */}
+                  <div className="space-y-4">
+                    {selectedNotification.appointmentMetadata && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground">
+                          Appointment Details
+                        </h4>
+                        <div className="text-sm mt-1 space-y-1 text-foreground">
+                          {selectedNotification.appointmentMetadata
+                            .meetingType && (
+                            <p>
+                              <span className="font-medium">Meeting Type:</span>{" "}
+                              {
+                                selectedNotification.appointmentMetadata
+                                  .meetingType
+                              }
+                            </p>
+                          )}
+                          {selectedNotification.appointmentMetadata
+                            .originalDate && (
+                            <p>
+                              <span className="font-medium">Date:</span>{" "}
+                              {
+                                selectedNotification.appointmentMetadata
+                                  .originalDate
+                              }
+                            </p>
+                          )}
+                          {selectedNotification.appointmentMetadata
+                            .originalTime && (
+                            <p>
+                              <span className="font-medium">Time:</span>{" "}
+                              {
+                                selectedNotification.appointmentMetadata
+                                  .originalTime
+                              }
+                            </p>
+                          )}
+                          {selectedNotification.appointmentMetadata.reason && (
+                            <p>
+                              <span className="font-medium">Reason:</span>{" "}
+                              {selectedNotification.appointmentMetadata.reason}
+                            </p>
+                          )}
+                          {selectedNotification.appointmentMetadata
+                            .inquiryId && (
+                            <p>
+                              <span className="font-medium">Inquiry ID:</span>{" "}
+                              {
+                                selectedNotification.appointmentMetadata
+                                  .inquiryId
+                              }
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setSelectedNotification(null)}
-                  className="hover:bg-gray-100"
+                  className="hover:bg-accent"
                 >
                   Close
                 </Button>
 
-                {/* Show Create Account button only for guest users */}
-                {selectedNotification.isGuest && (
+                {/* Show Create Account button for guest inquiries */}
+                {isGuestNotification(selectedNotification) && (
                   <Button
                     variant="default"
                     onClick={() => handleCreateAccount(selectedNotification)}
@@ -730,27 +723,31 @@ export function Header() {
                   </Button>
                 )}
 
-                <Button
-                  variant="default"
-                  onClick={async () => {
-                    if (selectedNotification) {
+                {selectedNotification.actionUrl &&
+                  selectedNotification.actionLabel && (
+                    <Button
+                      variant="default"
+                      onClick={() =>
+                        handleNotificationAction(selectedNotification)
+                      }
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      {selectedNotification.actionLabel}
+                    </Button>
+                  )}
+
+                {!selectedNotification.isRead && (
+                  <Button
+                    variant="default"
+                    onClick={async () => {
                       await handleMarkAsRead(selectedNotification._id);
                       setSelectedNotification(null);
-                    }
-                  }}
-                  className="bg-[var(--orange)] hover:bg-[var(--orange)]/90 text-white"
-                >
-                  Mark as Read
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() =>
-                    handleViewDesign(selectedNotification.design.id)
-                  }
-                  className="bg-[var(--orange)] hover:bg-[var(--orange)]/90 text-white"
-                >
-                  View Design
-                </Button>
+                    }}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    Mark as Read
+                  </Button>
+                )}
               </div>
             </>
           )}
@@ -764,16 +761,18 @@ export function Header() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this notification? This action
-              cannot be undone.
+            <AlertDialogTitle className="text-foreground">
+              Confirm Deletion
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to delete this inquiry notification? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction
               onClick={() => setIsDeleteConfirmOpen(false)}
-              className="hover:bg-gray-100"
+              className="hover:bg-accent"
             >
               Cancel
             </AlertDialogAction>
@@ -783,7 +782,7 @@ export function Header() {
                   handleDeleteNotification(deleteConfirmId);
                 }
               }}
-              className="bg-[var(--orange)] hover:bg-[var(--orange)]/90 text-white"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
               Delete
             </AlertDialogAction>
@@ -798,45 +797,26 @@ export function Header() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Clear All</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to clear all notifications? This action
-              cannot be undone.
+            <AlertDialogTitle className="text-foreground">
+              Confirm Clear All
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to clear all inquiry notifications? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction
               onClick={() => setIsClearAllConfirmOpen(false)}
-              className="hover:bg-gray-100"
+              className="hover:bg-accent"
             >
               Cancel
             </AlertDialogAction>
             <AlertDialogAction
               onClick={handleClearAll}
-              className="bg-[var(--orange)] hover:bg-[var(--orange)]/90 text-white"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
               Clear All
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Design Not Found Alert Dialog */}
-      <AlertDialog
-        open={isDesignNotFoundOpen}
-        onOpenChange={setIsDesignNotFoundOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Design Not Found</AlertDialogTitle>
-            <AlertDialogDescription>
-              The design with ID "{missingDesignId}" is no longer available. It
-              may have been deleted or the ID might be incorrect.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleDesignNotFoundClose}>
-              OK
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

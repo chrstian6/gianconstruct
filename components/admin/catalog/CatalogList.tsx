@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,21 +13,20 @@ import {
 } from "@/components/ui/select";
 import {
   Filter,
-  MoreHorizontal,
-  Pencil,
-  Search,
-  Trash2,
-  Home,
-  Square,
   Plus,
+  Search,
   X,
+  Trash2,
   CheckSquare,
+  ListFilter,
+  ArrowUpDown,
+  LayoutGrid,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Pagination,
@@ -38,12 +37,12 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { toast } from "sonner";
 import {
   deleteDesign,
   getDesignsPaginated,
   deleteMultipleDesigns,
 } from "@/action/designs";
-import { toast } from "sonner";
 import { Design, PaginatedDesignsResponse } from "@/types/design";
 import DesignDetails from "./DesignDetails";
 import { useModalStore } from "@/lib/stores";
@@ -61,16 +60,25 @@ import {
 } from "@/components/ui/dialog";
 import AdminCatalogCard from "@/components/admin/catalog/AdminCatalogCard";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+type CategoryFilter =
+  | "all"
+  | "industrial"
+  | "residential"
+  | "commercial"
+  | "office"
+  | "custom";
 
 export default function CatalogList() {
   const [designs, setDesigns] = useState<Design[]>([]);
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [editingDesign, setEditingDesign] = useState<Design | null>(null);
-  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<CategoryFilter>("all");
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
-  const [minDownpayment, setMinDownpayment] = useState<string>(""); // UPDATED: Replaced minRooms
-  const [maxDownpayment, setMaxDownpayment] = useState<string>(""); // UPDATED: Replaced maxRooms
+  const [minDownpayment, setMinDownpayment] = useState<string>("");
+  const [maxDownpayment, setMaxDownpayment] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -91,7 +99,17 @@ export default function CatalogList() {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
 
-  // Available categories for tags - Always visible regardless of data
+  // State for category counts
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({
+    all: 0,
+    industrial: 0,
+    residential: 0,
+    commercial: 0,
+    office: 0,
+    custom: 0,
+  });
+
+  // Available categories for tags
   const categories = [
     "all",
     "industrial",
@@ -102,7 +120,7 @@ export default function CatalogList() {
   ];
 
   // Fetch designs with pagination
-  const fetchDesigns = async () => {
+  const fetchDesigns = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -115,10 +133,10 @@ export default function CatalogList() {
         maxPrice: maxPrice ? parseFloat(maxPrice.replace(/,/g, "")) : undefined,
         minDownpayment: minDownpayment
           ? parseFloat(minDownpayment.replace(/,/g, ""))
-          : undefined, // UPDATED
+          : undefined,
         maxDownpayment: maxDownpayment
           ? parseFloat(maxDownpayment.replace(/,/g, ""))
-          : undefined, // UPDATED
+          : undefined,
       });
 
       if (!result) {
@@ -149,19 +167,78 @@ export default function CatalogList() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDesigns();
   }, [
     currentPage,
     filterCategory,
     searchQuery,
     minPrice,
     maxPrice,
-    minDownpayment, // UPDATED
-    maxDownpayment, // UPDATED
+    minDownpayment,
+    maxDownpayment,
   ]);
+
+  // Fetch category counts for all categories
+  const fetchCategoryCounts = useCallback(async () => {
+    try {
+      const counts: Record<string, number> = {};
+
+      // Fetch count for "all" category (no filter)
+      const allResult = await getDesignsPaginated({
+        page: 1,
+        limit: 1,
+        search: searchQuery || undefined,
+        minPrice: minPrice ? parseFloat(minPrice.replace(/,/g, "")) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice.replace(/,/g, "")) : undefined,
+        minDownpayment: minDownpayment
+          ? parseFloat(minDownpayment.replace(/,/g, ""))
+          : undefined,
+        maxDownpayment: maxDownpayment
+          ? parseFloat(maxDownpayment.replace(/,/g, ""))
+          : undefined,
+      });
+
+      counts.all =
+        allResult.success && allResult.data
+          ? allResult.data.totalCount || 0
+          : 0;
+
+      // Fetch counts for each specific category
+      for (const category of categories.filter((cat) => cat !== "all")) {
+        const categoryResult = await getDesignsPaginated({
+          page: 1,
+          limit: 1,
+          category: category,
+          search: searchQuery || undefined,
+          minPrice: minPrice
+            ? parseFloat(minPrice.replace(/,/g, ""))
+            : undefined,
+          maxPrice: maxPrice
+            ? parseFloat(maxPrice.replace(/,/g, ""))
+            : undefined,
+          minDownpayment: minDownpayment
+            ? parseFloat(minDownpayment.replace(/,/g, ""))
+            : undefined,
+          maxDownpayment: maxDownpayment
+            ? parseFloat(maxDownpayment.replace(/,/g, ""))
+            : undefined,
+        });
+
+        counts[category] =
+          categoryResult.success && categoryResult.data
+            ? categoryResult.data.totalCount || 0
+            : 0;
+      }
+
+      setCategoryCounts(counts);
+    } catch (error) {
+      console.error("Error fetching category counts:", error);
+    }
+  }, [searchQuery, minPrice, maxPrice, minDownpayment, maxDownpayment]);
+
+  useEffect(() => {
+    fetchDesigns();
+    fetchCategoryCounts();
+  }, [fetchDesigns, fetchCategoryCounts]);
 
   // Reset selection when designs change
   useEffect(() => {
@@ -174,8 +251,8 @@ export default function CatalogList() {
     searchQuery,
     minPrice,
     maxPrice,
-    minDownpayment, // UPDATED
-    maxDownpayment, // UPDATED
+    minDownpayment,
+    maxDownpayment,
   ]);
 
   // Handle design selection from URL parameter
@@ -189,48 +266,59 @@ export default function CatalogList() {
     }
   }, [searchParams, designs]);
 
-  const capitalizeFirstLetter = (str: string): string => {
+  const capitalizeFirstLetter = useCallback((str: string): string => {
     return str.charAt(0).toUpperCase() + str.slice(1);
-  };
+  }, []);
 
-  const formatPrice = (price: number): string => {
+  const formatPrice = useCallback((price: number): string => {
     return `₱${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  }, []);
 
-  const formatSquareMeters = (square_meters: number): string => {
+  const formatSquareMeters = useCallback((square_meters: number): string => {
     return `${square_meters.toLocaleString("en-US")} sqm`;
-  };
+  }, []);
 
-  const handleDelete = (id: string) => {
-    setDesigns((prevDesigns) =>
-      prevDesigns.filter((design: Design) => design.design_id !== id)
-    );
-    // Reset to page 1 if we're on the last page and it becomes empty
-    if (designs.length === 1 && currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
+  const handleDelete = useCallback(
+    (id: string) => {
+      setDesigns((prevDesigns) =>
+        prevDesigns.filter((design: Design) => design.design_id !== id)
+      );
+      // Reset to page 1 if we're on the last page and it becomes empty
+      if (designs.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      }
+    },
+    [designs.length, currentPage]
+  );
 
-  const handleUpdate = (updatedDesign: Design) => {
+  const handleUpdate = useCallback((updatedDesign: Design) => {
     setDesigns((prevDesigns) =>
       prevDesigns.map((design) =>
         design.design_id === updatedDesign.design_id ? updatedDesign : design
       )
     );
-  };
+  }, []);
 
-  const handleAddDesign = (design: Design) => {
-    setDesigns((prevDesigns) => [design, ...prevDesigns]);
-    setIsModalOpen(false);
-    setCurrentPage(1);
-    toast.success("Design added successfully!");
-  };
+  const handleAddDesign = useCallback(
+    (design: Design) => {
+      setDesigns((prevDesigns) => [design, ...prevDesigns]);
+      setIsModalOpen(false);
+      setCurrentPage(1);
+      toast.success("Design added successfully!");
+      // Refresh counts after adding new design
+      fetchCategoryCounts();
+    },
+    [fetchCategoryCounts]
+  );
 
-  const handleDeleteClick = (id: string) => {
-    setIsDeleteDesignOpen(true, id);
-  };
+  const handleDeleteClick = useCallback(
+    (id: string) => {
+      setIsDeleteDesignOpen(true, id);
+    },
+    [setIsDeleteDesignOpen]
+  );
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (!designIdToDelete) return;
 
     try {
@@ -241,6 +329,7 @@ export default function CatalogList() {
 
         // Also refetch to ensure consistency
         await fetchDesigns();
+        await fetchCategoryCounts();
 
         if (selectedDesign?.design_id === designIdToDelete) {
           setSelectedDesign(null);
@@ -255,9 +344,16 @@ export default function CatalogList() {
     } finally {
       setIsDeleteDesignOpen(false);
     }
-  };
+  }, [
+    designIdToDelete,
+    handleDelete,
+    fetchDesigns,
+    fetchCategoryCounts,
+    selectedDesign,
+    setIsDeleteDesignOpen,
+  ]);
 
-  const handleMultiDeleteConfirm = async () => {
+  const handleMultiDeleteConfirm = useCallback(async () => {
     if (selectedDesigns.size === 0) return;
 
     try {
@@ -276,6 +372,7 @@ export default function CatalogList() {
 
         // Also refetch to ensure consistency
         await fetchDesigns();
+        await fetchCategoryCounts();
 
         setSelectedDesigns(new Set());
         setIsSelectMode(false);
@@ -288,84 +385,118 @@ export default function CatalogList() {
     } finally {
       setIsMultiDeleteModalOpen(false);
     }
-  };
+  }, [selectedDesigns, fetchDesigns, fetchCategoryCounts]);
 
-  const handleMultiDeleteCancel = () => {
+  const handleMultiDeleteCancel = useCallback(() => {
     setIsMultiDeleteModalOpen(false);
-  };
+  }, []);
 
-  const formatNumberWithCommas = (value: string): string => {
+  const formatNumberWithCommas = useCallback((value: string): string => {
     const numeric = value.replace(/[^0-9]/g, "");
     return numeric.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  };
+  }, []);
 
   // Multi-select functions
-  const toggleSelectMode = () => {
+  const toggleSelectMode = useCallback(() => {
     setIsSelectMode(!isSelectMode);
     if (isSelectMode) {
       setSelectedDesigns(new Set());
     }
-  };
+  }, [isSelectMode]);
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     if (selectedDesigns.size === designs.length) {
       setSelectedDesigns(new Set());
     } else {
       const allDesignIds = designs.map((design) => design.design_id);
       setSelectedDesigns(new Set(allDesignIds));
     }
-  };
+  }, [designs, selectedDesigns.size]);
 
-  const toggleDesignSelection = (designId: string) => {
-    const newSelected = new Set(selectedDesigns);
-    if (newSelected.has(designId)) {
-      newSelected.delete(designId);
-    } else {
-      newSelected.add(designId);
-    }
-    setSelectedDesigns(newSelected);
-  };
+  const toggleDesignSelection = useCallback(
+    (designId: string) => {
+      const newSelected = new Set(selectedDesigns);
+      if (newSelected.has(designId)) {
+        newSelected.delete(designId);
+      } else {
+        newSelected.add(designId);
+      }
+      setSelectedDesigns(newSelected);
+    },
+    [selectedDesigns]
+  );
 
-  const handleMultiDeleteClick = () => {
+  const handleMultiDeleteClick = useCallback(() => {
     if (selectedDesigns.size > 0) {
       setIsMultiDeleteModalOpen(true);
     }
-  };
+  }, [selectedDesigns.size]);
 
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = 5;
+  const clearFilters = useCallback(() => {
+    setSearchQuery("");
+    setFilterCategory("all");
+    setMinPrice("");
+    setMaxPrice("");
+    setMinDownpayment("");
+    setMaxDownpayment("");
+    setCurrentPage(1);
+  }, []);
 
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) {
-          pages.push(i);
-        }
-        pages.push("ellipsis");
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1);
-        pages.push("ellipsis");
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pages.push(i);
-        }
+  const hasActiveFilters = useMemo(
+    () =>
+      searchQuery ||
+      filterCategory !== "all" ||
+      minPrice ||
+      maxPrice ||
+      minDownpayment ||
+      maxDownpayment,
+    [
+      searchQuery,
+      filterCategory,
+      minPrice,
+      maxPrice,
+      minDownpayment,
+      maxDownpayment,
+    ]
+  );
+
+  const formatCategoryDisplay = useCallback(
+    (category: string): string => {
+      return category === "all"
+        ? "All Categories"
+        : capitalizeFirstLetter(category);
+    },
+    [capitalizeFirstLetter]
+  );
+
+  const getPageNumbers = useCallback(
+    (totalPages: number, currentPage: number) => {
+      const pages = [];
+      const maxVisiblePages = 5;
+      if (totalPages <= maxVisiblePages) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
       } else {
-        pages.push(1);
-        pages.push("ellipsis");
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pages.push(i);
+        if (currentPage <= 3) {
+          for (let i = 1; i <= 4; i++) pages.push(i);
+          pages.push("ellipsis");
+          pages.push(totalPages);
+        } else if (currentPage >= totalPages - 2) {
+          pages.push(1);
+          pages.push("ellipsis");
+          for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+        } else {
+          pages.push(1);
+          pages.push("ellipsis");
+          for (let i = currentPage - 1; i <= currentPage + 1; i++)
+            pages.push(i);
+          pages.push("ellipsis");
+          pages.push(totalPages);
         }
-        pages.push("ellipsis");
-        pages.push(totalPages);
       }
-    }
-
-    return pages;
-  };
+      return pages;
+    },
+    []
+  );
 
   if (editingDesign) {
     return (
@@ -381,319 +512,353 @@ export default function CatalogList() {
   }
 
   return (
-    <div className="flex flex-col font-geist">
-      {/* Fixed Header Section */}
-      <div className="flex-shrink-0 bg-white border-gray-200">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1 mb-4 px-5 pt-5">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground font-geist">
-              Designs Catalog
-            </h1>
-            <p className="text-gray-600 mt-1 text-sm font-geist">
-              {isLoading
-                ? "Loading..."
-                : `${totalCount.toLocaleString()} designs available`}
-            </p>
+    <div className="flex flex-col min-h-screen bg-zinc-50/30 font-geist">
+      {/* Sticky Modern Header - Matching ProjectList */}
+      <div className="sticky top-0 z-30 w-full border-b border-zinc-200 bg-white/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80">
+        <div className="flex flex-col gap-4 px-6 py-5 md:px-8">
+          {/* Top Row: Title & Primary Action */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              {/* Increased Text Size */}
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900 font-geist">
+                Designs Catalog
+              </h1>
+              {/* Replaced dynamic count with static description */}
+              <p className="text-zinc-500 mt-1 text-sm font-medium font-geist">
+                Manage and organize your design catalog.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <Button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm transition-all duration-200 font-medium px-5 h-10 rounded-lg w-full md:w-auto font-geist"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Publish Design
+              </Button>
+            </div>
           </div>
-        </div>
-        {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-5 pb-5">
-          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+
+          {/* Middle Row: Search, Filters & Selection Tools */}
+          <div className="flex flex-col md:flex-row items-center gap-3 w-full">
+            {/* Search Bar */}
+            <div className="relative w-full md:max-w-sm group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
               <Input
                 placeholder="Search designs..."
-                className="pl-10 w-full border-gray-300 rounded-lg focus:border-gray-500 focus:ring-gray-500 font-geist"
+                className="pl-10 h-10 bg-zinc-50/50 border-zinc-200 focus:bg-white focus:border-zinc-300 focus:ring-2 focus:ring-zinc-900/10 rounded-lg transition-all font-geist"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-100 rounded-full transition-colors"
+                >
+                  <X className="h-3 w-3 text-zinc-500" />
+                </button>
+              )}
             </div>
 
+            <div className="h-6 w-px bg-zinc-200 hidden md:block mx-1" />
+
+            {/* Filters Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2 border-gray-300 rounded-lg hover:bg-gray-100 text-gray-700 font-geist"
+                  className={cn(
+                    "h-10 border-dashed border-zinc-300 bg-transparent hover:bg-zinc-50 text-zinc-600 font-geist w-full md:w-auto justify-between md:justify-center",
+                    hasActiveFilters &&
+                      "border-zinc-400 bg-zinc-50 text-zinc-900"
+                  )}
                 >
-                  <Filter className="h-5 w-5" />
-                  <span>Filters</span>
+                  <div className="flex items-center gap-2">
+                    <ListFilter className="h-4 w-4" />
+                    <span>Filter</span>
+                  </div>
+                  {hasActiveFilters && (
+                    <Badge className="ml-2 h-5 w-5 p-0 flex items-center justify-center bg-zinc-900 text-white hover:bg-zinc-800 rounded-full text-[10px]">
+                      !
+                    </Badge>
+                  )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64 p-4 space-y-4 bg-white shadow-lg rounded-lg border border-gray-200 font-geist">
-                <div>
-                  <Label
-                    htmlFor="dropdown_category_filter"
-                    className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                  >
-                    Category
-                  </Label>
+              <DropdownMenuContent
+                align="start"
+                className="w-72 p-4 space-y-4 font-geist"
+              >
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-zinc-900 flex items-center gap-2">
+                    <Filter className="h-3 w-3" /> Category
+                  </h4>
                   <Select
-                    onValueChange={(value) => {
+                    onValueChange={(value: CategoryFilter) => {
                       setFilterCategory(value);
                       setCurrentPage(1);
                     }}
                     value={filterCategory}
                   >
-                    <SelectTrigger
-                      id="dropdown_category_filter"
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    >
+                    <SelectTrigger className="h-9">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
-                    <SelectContent className="font-geist">
-                      <SelectItem value="all" className="font-geist">
-                        All Categories
-                      </SelectItem>
-                      <SelectItem value="industrial" className="font-geist">
-                        Industrial
-                      </SelectItem>
-                      <SelectItem value="residential" className="font-geist">
-                        Residential
-                      </SelectItem>
-                      <SelectItem value="commercial" className="font-geist">
-                        Commercial
-                      </SelectItem>
-                      <SelectItem value="office" className="font-geist">
-                        Office Buildings
-                      </SelectItem>
-                      <SelectItem value="custom" className="font-geist">
-                        Custom
-                      </SelectItem>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      <SelectItem value="industrial">Industrial</SelectItem>
+                      <SelectItem value="residential">Residential</SelectItem>
+                      <SelectItem value="commercial">Commercial</SelectItem>
+                      <SelectItem value="office">Office Buildings</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label
-                      htmlFor="dropdown_min_price"
-                      className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                    >
-                      Min Price
-                    </Label>
-                    <Input
-                      id="dropdown_min_price"
-                      placeholder="Min"
-                      value={minPrice}
-                      onChange={(e) => {
-                        setMinPrice(formatNumberWithCommas(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    />
-                  </div>
-                  <div>
-                    <Label
-                      htmlFor="dropdown_max_price"
-                      className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                    >
-                      Max Price
-                    </Label>
-                    <Input
-                      id="dropdown_max_price"
-                      placeholder="Max"
-                      value={maxPrice}
-                      onChange={(e) => {
-                        setMaxPrice(formatNumberWithCommas(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    />
+                <DropdownMenuSeparator />
+
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-zinc-900 flex items-center gap-2">
+                    <ArrowUpDown className="h-3 w-3" /> Price Range
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label
+                        htmlFor="dropdown_min_price"
+                        className="text-xs text-zinc-600"
+                      >
+                        Min Price
+                      </Label>
+                      <Input
+                        id="dropdown_min_price"
+                        placeholder="Min"
+                        value={minPrice}
+                        onChange={(e) => {
+                          setMinPrice(formatNumberWithCommas(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label
+                        htmlFor="dropdown_max_price"
+                        className="text-xs text-zinc-600"
+                      >
+                        Max Price
+                      </Label>
+                      <Input
+                        id="dropdown_max_price"
+                        placeholder="Max"
+                        value={maxPrice}
+                        onChange={(e) => {
+                          setMaxPrice(formatNumberWithCommas(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="h-9 text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* UPDATED: Replaced Rooms filters with Downpayment filters */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label
-                      htmlFor="dropdown_min_downpayment"
-                      className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                    >
-                      Min Downpayment
-                    </Label>
-                    <Input
-                      id="dropdown_min_downpayment"
-                      placeholder="Min"
-                      value={minDownpayment}
-                      onChange={(e) => {
-                        setMinDownpayment(
-                          formatNumberWithCommas(e.target.value)
-                        );
-                        setCurrentPage(1);
-                      }}
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    />
-                  </div>
-                  <div>
-                    <Label
-                      htmlFor="dropdown_max_downpayment"
-                      className="block text-sm font-medium text-gray-700 mb-1 font-geist"
-                    >
-                      Max Downpayment
-                    </Label>
-                    <Input
-                      id="dropdown_max_downpayment"
-                      placeholder="Max"
-                      value={maxDownpayment}
-                      onChange={(e) => {
-                        setMaxDownpayment(
-                          formatNumberWithCommas(e.target.value)
-                        );
-                        setCurrentPage(1);
-                      }}
-                      className="w-full border-gray-300 rounded-lg font-geist"
-                    />
+                <DropdownMenuSeparator />
+
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-zinc-900 flex items-center gap-2">
+                    <ArrowUpDown className="h-3 w-3" /> Downpayment Range
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label
+                        htmlFor="dropdown_min_downpayment"
+                        className="text-xs text-zinc-600"
+                      >
+                        Min Downpayment
+                      </Label>
+                      <Input
+                        id="dropdown_min_downpayment"
+                        placeholder="Min"
+                        value={minDownpayment}
+                        onChange={(e) => {
+                          setMinDownpayment(
+                            formatNumberWithCommas(e.target.value)
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label
+                        htmlFor="dropdown_max_downpayment"
+                        className="text-xs text-zinc-600"
+                      >
+                        Max Downpayment
+                      </Label>
+                      <Input
+                        id="dropdown_max_downpayment"
+                        placeholder="Max"
+                        value={maxDownpayment}
+                        onChange={(e) => {
+                          setMaxDownpayment(
+                            formatNumberWithCommas(e.target.value)
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className="h-9 text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200 font-geist"
-                  onClick={() => {
-                    setFilterCategory("all");
-                    setMinPrice("");
-                    setMaxPrice("");
-                    setMinDownpayment(""); // UPDATED
-                    setMaxDownpayment(""); // UPDATED
-                    setCurrentPage(1);
-                  }}
-                >
-                  Clear Filters
-                </Button>
+                {hasActiveFilters && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full h-9 bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+                      onClick={clearFilters}
+                    >
+                      Reset Filters
+                    </Button>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Publish Design Button */}
-            <Button
-              onClick={() => setIsModalOpen(true)}
-              size="sm"
-              className="bg-gray-900 hover:bg-gray-800 text-white font-geist whitespace-nowrap"
-            >
-              <Plus className="mr-2 h-4 w-4" /> Publish Design
-            </Button>
+            <div className="flex-1" />
+
+            {/* Selection Tools */}
+            <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+              {isSelectMode ? (
+                <div className="flex items-center gap-2 bg-zinc-100 p-1 rounded-lg border border-zinc-200 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleSelectAll}
+                    className="h-8 text-xs font-medium text-zinc-700 hover:text-zinc-900 font-geist"
+                  >
+                    {selectedDesigns.size === designs.length
+                      ? "Deselect All"
+                      : "Select All"}
+                  </Button>
+
+                  <div className="h-4 w-px bg-zinc-300" />
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleSelectMode}
+                    className="h-8 w-8 p-0 hover:bg-zinc-200 rounded-md"
+                  >
+                    <X className="h-4 w-4 text-zinc-600" />
+                  </Button>
+
+                  {selectedDesigns.size > 0 && (
+                    <>
+                      <div className="h-4 w-px bg-zinc-300" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleMultiDeleteClick}
+                        className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 font-geist"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete ({selectedDesigns.size})
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  onClick={toggleSelectMode}
+                  className="h-10 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 font-geist"
+                >
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  Select
+                </Button>
+              )}
+            </div>
           </div>
 
-          {/* Multi-select Actions - Moved to the right/end */}
-          <div className="flex items-center gap-2">
-            {isSelectMode ? (
-              <div className="flex gap-2 items-center">
-                {/* Select All / Deselect All */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleSelectAll}
-                  className="font-geist"
-                >
-                  {selectedDesigns.size === designs.length
-                    ? "Deselect All"
-                    : "Select All"}
-                </Button>
-
-                {/* X icon for cancel */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleSelectMode}
-                  className="font-geist"
-                  title="Cancel selection"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-
-                {/* Trash icon for delete */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleMultiDeleteClick}
-                  disabled={selectedDesigns.size === 0}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 font-geist"
-                  title={`Delete ${selectedDesigns.size} selected design${selectedDesigns.size > 1 ? "s" : ""}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-
-                {/* Selection count badge */}
-                {selectedDesigns.size > 0 && (
+          {/* Category Filter Tabs with Number Badges */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-6 px-6 md:mx-0 md:px-0">
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => {
+                  setFilterCategory(category as CategoryFilter);
+                  setCurrentPage(1);
+                }}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap font-geist border relative",
+                  filterCategory === category
+                    ? "bg-zinc-900 text-white border-zinc-900 shadow-sm"
+                    : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  {formatCategoryDisplay(category)}
                   <Badge
                     variant="secondary"
-                    className="bg-blue-100 text-blue-800 hover:bg-blue-200 text-sm"
+                    className={cn(
+                      "h-5 px-1.5 text-xs font-medium rounded-full",
+                      filterCategory === category
+                        ? "bg-white/20 text-white/90 hover:bg-white/30"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    )}
                   >
-                    {selectedDesigns.size} selected
+                    {categoryCounts[category]?.toLocaleString() || 0}
                   </Badge>
-                )}
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleSelectMode}
-                className="font-geist flex items-center gap-2"
-              >
-                <CheckSquare className="h-4 w-4" />
-                Select
-              </Button>
-            )}
+                </span>
+              </button>
+            ))}
           </div>
-        </div>
-        {/* Category Tags - Always visible */}
-        <div className="flex flex-wrap gap-2 border-t px-5 py-5">
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => {
-                setFilterCategory(category);
-                setCurrentPage(1);
-              }}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 font-geist ${
-                filterCategory === category
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {category === "all"
-                ? "All Categories"
-                : capitalizeFirstLetter(category)}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* Scrollable Content Section with Cards and Pagination */}
+      {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          // Skeleton Loading State
-          <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="p-6 md:p-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
               {Array.from({ length: cardsPerPage }).map((_, index) => (
-                <div key={index} className="animate-pulse font-geist">
-                  <div className="bg-gray-200 rounded-xl aspect-video mb-3"></div>
-                  <div className="bg-gray-200 rounded-lg p-3">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="bg-gray-300 rounded h-4 w-3/4 mb-2"></div>
-                        <div className="bg-gray-300 rounded h-3 w-1/2"></div>
-                      </div>
-                      <div className="bg-gray-300 rounded-full h-7 w-7"></div>
-                    </div>
+                <div
+                  key={index}
+                  className="rounded-xl border border-zinc-100 bg-white p-4 space-y-3 animate-pulse"
+                >
+                  <div className="bg-zinc-100 rounded-lg aspect-[4/3] w-full" />
+                  <div className="space-y-2">
+                    <div className="bg-zinc-100 h-4 w-3/4 rounded" />
+                    <div className="bg-zinc-100 h-3 w-1/2 rounded" />
+                  </div>
+                  <div className="pt-2 flex justify-between">
+                    <div className="bg-zinc-100 h-6 w-16 rounded-full" />
+                    <div className="bg-zinc-100 h-6 w-6 rounded-full" />
                   </div>
                 </div>
               ))}
             </div>
           </div>
         ) : designs.length === 0 ? (
-          <div className="p-6">
-            <div className="p-8 text-center font-geist">
-              <NotFound description="Try adjusting the filters or publish your first design" />
+          <div className="h-[60vh] flex flex-col items-center justify-center p-6">
+            <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mb-4 border border-zinc-100">
+              <LayoutGrid className="h-8 w-8 text-zinc-300" />
             </div>
+            <NotFound description="No designs found matching your criteria. Try adjusting the filters or publish your first design." />
+            <Button
+              variant="outline"
+              onClick={clearFilters}
+              className="mt-4 font-geist border-zinc-200"
+            >
+              Clear Filters
+            </Button>
           </div>
         ) : (
-          <div className="px-10 overflow-y-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="px-10 overflow-y-auto mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
               {designs.map((design) => (
                 <AdminCatalogCard
                   key={design.design_id}
@@ -711,7 +876,7 @@ export default function CatalogList() {
               ))}
             </div>
 
-            {/* Pagination Section - Always visible even with 1 page */}
+            {/* Pagination Section */}
             <div className="my-6 px-6 p-10 border-gray-200">
               <Pagination>
                 <PaginationContent className="font-geist">
@@ -720,51 +885,53 @@ export default function CatalogList() {
                       onClick={() =>
                         setCurrentPage((prev) => Math.max(prev - 1, 1))
                       }
-                      className={
-                        currentPage === 1
-                          ? "pointer-events-none opacity-50 font-geist"
-                          : "cursor-pointer font-geist"
-                      }
+                      className={cn(
+                        "font-geist text-sm",
+                        currentPage === 1 && "pointer-events-none opacity-50"
+                      )}
                     />
                   </PaginationItem>
 
-                  {getPageNumbers().map((page, index) => (
-                    <PaginationItem key={index}>
-                      {page === "ellipsis" ? (
-                        <PaginationEllipsis className="font-geist" />
-                      ) : (
-                        <PaginationLink
-                          onClick={() => setCurrentPage(page as number)}
-                          isActive={currentPage === page}
-                          className={
-                            currentPage === page
-                              ? "bg-gray-900 text-white hover:bg-gray-800 font-geist"
-                              : "text-gray-700 hover:bg-gray-100 font-geist"
-                          }
-                        >
-                          {page}
-                        </PaginationLink>
-                      )}
-                    </PaginationItem>
-                  ))}
+                  {getPageNumbers(totalPages, currentPage).map(
+                    (page, index) => (
+                      <PaginationItem key={index}>
+                        {page === "ellipsis" ? (
+                          <PaginationEllipsis className="font-geist" />
+                        ) : (
+                          <PaginationLink
+                            onClick={() => setCurrentPage(page as number)}
+                            isActive={currentPage === page}
+                            className={cn(
+                              "font-geist text-sm",
+                              currentPage === page
+                                ? "bg-zinc-900 text-white hover:bg-zinc-800"
+                                : "text-zinc-700 hover:bg-zinc-100"
+                            )}
+                          >
+                            {page}
+                          </PaginationLink>
+                        )}
+                      </PaginationItem>
+                    )
+                  )}
 
                   <PaginationItem>
                     <PaginationNext
                       onClick={() =>
                         setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                       }
-                      className={
-                        currentPage === totalPages
-                          ? "pointer-events-none opacity-50 font-geist"
-                          : "cursor-pointer font-geist"
-                      }
+                      className={cn(
+                        "font-geist text-sm",
+                        currentPage === totalPages &&
+                          "pointer-events-none opacity-50"
+                      )}
                     />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
 
               {/* Page info */}
-              <div className="text-center mt-4 text-sm text-gray-600 font-geist">
+              <div className="text-center mt-4 text-sm text-zinc-600 font-geist">
                 Page {currentPage} of {totalPages} •{" "}
                 {totalCount.toLocaleString()} total designs
               </div>
@@ -773,6 +940,7 @@ export default function CatalogList() {
         )}
       </div>
 
+      {/* Modals */}
       {selectedDesign && (
         <DesignDetails
           design={selectedDesign}
