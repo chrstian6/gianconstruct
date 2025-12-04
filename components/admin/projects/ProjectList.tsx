@@ -47,7 +47,8 @@ import {
   PaginatedProjectsResponse,
 } from "@/action/project";
 import { getUsers } from "@/action/userManagement";
-import { Project } from "@/types/project";
+import { getProjectMilestones } from "@/action/milestone";
+import { Project, Milestone } from "@/types/project"; // Import Milestone from types
 import ProjectCard from "./ProjectCard";
 import CreateProjectModal from "./CreateProjectModal";
 import EditProjectModal from "./EditProjectModal";
@@ -65,6 +66,8 @@ interface User {
   contactNo?: string;
   address: string;
 }
+
+// Remove the local Milestone interface since we're importing it from types
 
 type StatusFilter = "all" | "pending" | "active" | "completed" | "cancelled";
 type DateFilter = "any" | "today" | "thisWeek" | "thisMonth" | "overdue";
@@ -89,9 +92,23 @@ export default function ProjectList() {
   const [isMultiDeleteModalOpen, setIsMultiDeleteModalOpen] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
 
+  // Milestones progress state
+  const [milestonesProgress, setMilestonesProgress] = useState<{
+    [key: string]: number;
+  }>({});
+
   // State for paginated data
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
+
+  // State for status counts
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({
+    all: 0,
+    pending: 0,
+    active: 0,
+    completed: 0,
+    cancelled: 0,
+  });
 
   const {
     setIsCreateProjectOpen,
@@ -103,6 +120,50 @@ export default function ProjectList() {
 
   // Available statuses for tags
   const statuses = ["all", "pending", "active", "completed", "cancelled"];
+
+  // Function to calculate milestones progress - using imported Milestone type
+  const calculateMilestonesProgress = useCallback(
+    (milestones: Milestone[]): number => {
+      if (!milestones || milestones.length === 0) return 0;
+      const total = milestones.reduce(
+        (sum, milestone) => sum + milestone.progress,
+        0
+      );
+      return Math.round(total / milestones.length);
+    },
+    []
+  );
+
+  // Fetch milestones for all projects
+  const fetchMilestonesProgress = useCallback(
+    async (projects: Project[]) => {
+      const progressMap: { [key: string]: number } = {};
+
+      // Use Promise.all to fetch milestones for all projects concurrently
+      const promises = projects.map(async (project) => {
+        try {
+          const result = await getProjectMilestones(project.project_id);
+          if (result.success && result.milestones) {
+            progressMap[project.project_id] = calculateMilestonesProgress(
+              result.milestones
+            );
+          } else {
+            progressMap[project.project_id] = 0;
+          }
+        } catch (error) {
+          console.error(
+            `Error fetching milestones for project ${project.project_id}:`,
+            error
+          );
+          progressMap[project.project_id] = 0;
+        }
+      });
+
+      await Promise.all(promises);
+      setMilestonesProgress(progressMap);
+    },
+    [calculateMilestonesProgress]
+  );
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -117,9 +178,15 @@ export default function ProjectList() {
 
       if (response.success && response.data) {
         const data = response.data as PaginatedProjectsResponse;
-        setProjects(data.projects || []);
+        const projectsData = data.projects || [];
+        setProjects(projectsData);
         setTotalCount(data.totalCount || 0);
         setTotalPages(data.totalPages || 1);
+
+        // Fetch milestones progress for the loaded projects
+        if (projectsData.length > 0) {
+          await fetchMilestonesProgress(projectsData);
+        }
       } else {
         toast.error(response.error || "Failed to fetch projects");
         setProjects([]);
@@ -135,7 +202,13 @@ export default function ProjectList() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, statusFilter, searchQuery, dateFilter]);
+  }, [
+    currentPage,
+    statusFilter,
+    searchQuery,
+    dateFilter,
+    fetchMilestonesProgress,
+  ]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -151,10 +224,51 @@ export default function ProjectList() {
     }
   }, []);
 
+  // Fetch status counts for all statuses
+  const fetchStatusCounts = useCallback(async () => {
+    try {
+      const counts: Record<string, number> = {};
+
+      // Fetch count for "all" status (no filter)
+      const allResult = await getProjectsPaginated({
+        page: 1,
+        limit: 1,
+        search: searchQuery || undefined,
+        dateFilter: dateFilter !== "any" ? dateFilter : undefined,
+      });
+
+      counts.all =
+        allResult.success && allResult.data
+          ? allResult.data.totalCount || 0
+          : 0;
+
+      // Fetch counts for each specific status
+      for (const status of statuses.filter((s) => s !== "all")) {
+        const statusResult = await getProjectsPaginated({
+          page: 1,
+          limit: 1,
+          status: status,
+          search: searchQuery || undefined,
+          dateFilter: dateFilter !== "any" ? dateFilter : undefined,
+        });
+
+        counts[status] =
+          statusResult.success && statusResult.data
+            ? statusResult.data.totalCount || 0
+            : 0;
+      }
+
+      setStatusCounts(counts);
+    } catch (error) {
+      console.error("Error fetching status counts:", error);
+    }
+  }, [searchQuery, dateFilter]);
+
   useEffect(() => {
     fetchProjects();
     fetchUsers();
-  }, [fetchProjects, fetchUsers]);
+    fetchStatusCounts();
+  }, [fetchProjects, fetchUsers, fetchStatusCounts]);
 
   // Reset selection when projects change
   useEffect(() => {
@@ -199,6 +313,7 @@ export default function ProjectList() {
       if (response.success) {
         toast.success("Project deleted successfully");
         await fetchProjects();
+        await fetchStatusCounts(); // Refresh status counts after deletion
       } else {
         toast.error(response.error || "Failed to delete project");
       }
@@ -209,7 +324,7 @@ export default function ProjectList() {
       setIsDeleteModalOpen(false);
       setProjectToDelete(null);
     }
-  }, [projectToDelete, fetchProjects]);
+  }, [projectToDelete, fetchProjects, fetchStatusCounts]);
 
   const handleMultiDeleteConfirm = useCallback(async () => {
     if (selectedProjects.size === 0) return;
@@ -221,6 +336,7 @@ export default function ProjectList() {
           `Successfully deleted ${selectedProjects.size} project${selectedProjects.size > 1 ? "s" : ""}`
         );
         await fetchProjects();
+        await fetchStatusCounts(); // Refresh status counts after deletion
         setSelectedProjects(new Set());
         setIsSelectMode(false);
       } else {
@@ -232,7 +348,7 @@ export default function ProjectList() {
     } finally {
       setIsMultiDeleteModalOpen(false);
     }
-  }, [selectedProjects, fetchProjects]);
+  }, [selectedProjects, fetchProjects, fetchStatusCounts]);
 
   const handleDeleteCancel = useCallback(() => {
     setIsDeleteModalOpen(false);
@@ -251,6 +367,7 @@ export default function ProjectList() {
         if (response.success) {
           toast.success("Project cancelled successfully");
           await fetchProjects();
+          await fetchStatusCounts(); // Refresh status counts after cancellation
         } else {
           toast.error(response.error || "Failed to cancel project");
         }
@@ -259,7 +376,7 @@ export default function ProjectList() {
         console.error("Cancel project error:", error);
       }
     },
-    [fetchProjects]
+    [fetchProjects, fetchStatusCounts]
   );
 
   const handleEditProject = useCallback(
@@ -272,13 +389,15 @@ export default function ProjectList() {
   const handleProjectUpdated = useCallback(
     async (updatedProject: Project) => {
       await fetchProjects();
+      await fetchStatusCounts(); // Refresh status counts after update
     },
-    [fetchProjects]
+    [fetchProjects, fetchStatusCounts]
   );
 
   const handleProjectCreated = useCallback(async () => {
     await fetchProjects();
-  }, [fetchProjects]);
+    await fetchStatusCounts(); // Refresh status counts after creation
+  }, [fetchProjects, fetchStatusCounts]);
 
   const getPageNumbers = useCallback(
     (totalPages: number, currentPage: number) => {
@@ -326,7 +445,7 @@ export default function ProjectList() {
   };
 
   const formatStatusDisplay = (status: string): string => {
-    return capitalizeFirstLetter(status);
+    return status === "all" ? "All Projects" : capitalizeFirstLetter(status);
   };
 
   const toggleSelectMode = useCallback(() => {
@@ -565,7 +684,7 @@ export default function ProjectList() {
             </div>
           </div>
 
-          {/* Status Filter Tabs */}
+          {/* Status Filter Tabs with Number Badges */}
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-6 px-6 md:mx-0 md:px-0">
             {statuses.map((status) => (
               <button
@@ -575,15 +694,26 @@ export default function ProjectList() {
                   setCurrentPage(1);
                 }}
                 className={cn(
-                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap font-geist border",
+                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap font-geist border relative",
                   statusFilter === status
                     ? "bg-zinc-900 text-white border-zinc-900 shadow-sm"
                     : "bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
                 )}
               >
-                {status === "all"
-                  ? "All Projects"
-                  : formatStatusDisplay(status)}
+                <span className="flex items-center gap-2">
+                  {formatStatusDisplay(status)}
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "h-5 px-1.5 text-xs font-medium rounded-full",
+                      statusFilter === status
+                        ? "bg-white/20 text-white/90 hover:bg-white/30"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    )}
+                  >
+                    {statusCounts[status]?.toLocaleString() || 0}
+                  </Badge>
+                </span>
               </button>
             ))}
           </div>
@@ -643,6 +773,9 @@ export default function ProjectList() {
                   isSelected={selectedProjects.has(project.project_id)}
                   onToggleSelect={() =>
                     toggleProjectSelection(project.project_id)
+                  }
+                  milestonesProgress={
+                    milestonesProgress[project.project_id] || 0
                   }
                 />
               ))}

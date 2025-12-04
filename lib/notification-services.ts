@@ -273,6 +273,9 @@ class NotificationService {
         "milestone_reached",
         "project_timeline_update",
         "photo_timeline_update",
+        "invoice_sent",
+        "invoice_paid",
+        "payment_received",
       ];
       const validAppointmentTypes = [
         "appointment_confirmed",
@@ -647,6 +650,17 @@ class NotificationService {
           );
           break;
 
+        case "payment_received":
+          console.log("💰 Using paymentReceived template for payment_received");
+          template = EmailTemplates.paymentReceived(
+            mockProject,
+            mockUser,
+            combinedData.transactionId as string,
+            combinedData.amount as number,
+            combinedData.paidDate as string
+          );
+          break;
+
         case "project_completed":
           template = EmailTemplates.projectStatusUpdate(
             mockProject,
@@ -693,6 +707,29 @@ class NotificationService {
             (combinedData.updateDescription ||
               "Our team has been making progress on your project.") as string,
             combinedData.progress as number
+          );
+          break;
+
+        case "invoice_sent":
+          console.log("🧾 Using invoiceSent template for invoice_sent");
+          template = EmailTemplates.invoiceSent(
+            mockProject,
+            mockUser,
+            combinedData.transactionId as string,
+            combinedData.amount as number,
+            combinedData.dueDate as string,
+            combinedData.paymentType as string
+          );
+          break;
+
+        case "invoice_paid":
+          console.log("✅ Using invoicePaid template for invoice_paid");
+          template = EmailTemplates.invoicePaid(
+            mockProject,
+            mockUser,
+            combinedData.transactionId as string,
+            combinedData.amount as number,
+            combinedData.paidDate as string
           );
           break;
 

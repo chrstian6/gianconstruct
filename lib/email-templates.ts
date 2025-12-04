@@ -1005,4 +1005,189 @@ export const EmailTemplates = {
       },
     };
   },
+
+  // Add this to the EmailTemplates object
+  invoiceSent: (
+    project: any,
+    user: any,
+    transactionId: string,
+    amount: number,
+    dueDate: string,
+    type: string
+  ) => {
+    const paymentTypeLabels: Record<string, string> = {
+      downpayment: "Down Payment",
+      partial_payment: "Partial Payment",
+      balance: "Balance Payment",
+      full: "Full Payment",
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Invoice Number</div>
+    <div class="detail-value">INV-${transactionId.slice(-8).toUpperCase()}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Type</div>
+    <div class="detail-value">${paymentTypeLabels[type] || type}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount Due</div>
+    <div class="detail-value"><strong>₱${amount.toLocaleString()}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Due Date</div>
+    <div class="detail-value">${new Date(dueDate).toLocaleDateString()}</div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `Invoice for ${project.name} - ₱${amount.toLocaleString()}`,
+      data: {
+        title: "Invoice for Your Project",
+        message: `Dear ${user?.name || "Valued Client"},<br><br>This is your official invoice for <strong>${project.name}</strong>. Please review the payment details below and complete the payment by the due date to avoid any delays in your project timeline.`,
+        details,
+        nextSteps: `
+<strong>Payment Instructions:</strong><br>
+1. You can pay directly through our secure payment portal<br>
+2. Bank Transfer: BPI Account # 1234-5678-90 (GianConstruct Inc.)<br>
+3. GCash: 0908 982 1649 (GianConstruct)<br>
+4. Please include the invoice number as payment reference
+      `,
+        showButton: true,
+        buttonText: "Pay Now",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/payments/${transactionId}`,
+      },
+    };
+  },
+
+  // Also add this template to handle invoice paid notifications
+  invoicePaid: (
+    project: any,
+    user: any,
+    transactionId: string,
+    amount: number,
+    paidDate: string
+  ) => {
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Transaction ID</div>
+    <div class="detail-value">${transactionId}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount Paid</div>
+    <div class="detail-value"><strong>₱${amount.toLocaleString()}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Date</div>
+    <div class="detail-value">${new Date(paidDate).toLocaleDateString()}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Confirmation Number</div>
+    <div class="detail-value">CONF-${transactionId.slice(-8).toUpperCase()}</div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `Payment Confirmation - ${project.name}`,
+      data: {
+        title: "Payment Received Successfully",
+        message: `Dear ${user?.name || "Valued Client"},<br><br>Thank you for your payment of <strong>₱${amount.toLocaleString()}</strong> for <strong>${project.name}</strong>. Your payment has been processed successfully and we have received your funds.`,
+        details,
+        nextSteps:
+          "Your project will continue as scheduled. You can track all updates through your client portal.",
+        showButton: true,
+        buttonText: "View Project",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/user/projects/${project.project_id}`,
+      },
+    };
+  },
+
+  // Add this function to your EmailTemplates object
+  paymentReceived: (
+    project: any,
+    user: any,
+    transactionId: string,
+    amount: number,
+    paidDate: string
+  ) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    };
+
+    return {
+      subject: `Payment Received - ${project.name}`,
+      data: {
+        title: "Payment Received Confirmation",
+        message: `Dear ${user.name},<br><br>We have successfully received your payment for <strong>${project.name}</strong>. Thank you for your prompt payment!`,
+        details: `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Transaction ID</div>
+    <div class="detail-value">${transactionId}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount Paid</div>
+    <div class="detail-value"><strong>${formatCurrency(amount)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Date</div>
+    <div class="detail-value">${formatDate(paidDate)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Status</div>
+    <div class="detail-value"><strong class="text-green-600">Confirmed</strong></div>
+  </div>
+</div>
+      `,
+        nextSteps: `
+<strong>Next Steps:</strong><br>
+1. Your payment has been recorded in our system<br>
+2. Your project progress will continue as scheduled<br>
+3. You can view your updated payment status in your account<br>
+4. A receipt will be issued for your records
+      `,
+        showButton: true,
+        buttonText: "View Project",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/user/projects/${project.project_id}`,
+      },
+    };
+  },
 };

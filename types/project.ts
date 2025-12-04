@@ -205,3 +205,17 @@ export interface PaymentSummary {
   pending_transactions: Transaction[];
   all_transactions: Transaction[];
 }
+
+export interface Milestone {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string;
+  progress: number;
+  target_date?: Date;
+  completed: boolean;
+  completed_at?: Date;
+  order: number;
+  created_at: Date;
+  updated_at: Date;
+}

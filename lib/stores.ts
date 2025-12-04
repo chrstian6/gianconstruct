@@ -5,7 +5,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { IInventory } from "@/types/Inventory";
 import { ISupplier } from "@/types/supplier";
-import { Project } from "@/types/project"; // Import your actual Project type
+import { Project } from "@/types/project";
+import { ProjectTransactionDetail } from "@/action/confirmed-projects";
 
 // Define User type for user management
 interface User {
@@ -26,6 +27,24 @@ interface CreateAccountData {
   lastName: string;
   email: string;
   phone: string;
+}
+
+// Add Payment Dialog State interface
+interface PaymentDialogState {
+  transaction: ProjectTransactionDetail | null;
+}
+
+// Add Manual Payment Dialog State interface - UPDATED
+interface ManualPaymentData {
+  projectId: string;
+  clientEmail: string;
+  clientName?: string;
+  projectName?: string;
+  remainingBalance?: number;
+  totalValue?: number;
+  totalPaid?: number;
+  description?: string;
+  maxAmount?: number;
 }
 
 interface ModalStore {
@@ -62,6 +81,14 @@ interface ModalStore {
   // Create account from notification
   createAccountData: CreateAccountData | null;
 
+  // Payment Dialog Modal
+  isPaymentDialogOpen: boolean;
+  paymentDialogState: PaymentDialogState;
+
+  // Manual Payment Dialog Modal - ADDED
+  isManualPaymentDialogOpen: boolean;
+  manualPaymentData: ManualPaymentData | null;
+
   // Modal control methods
   setIsLoginOpen: (open: boolean) => void;
   setIsCreateAccountOpen: (open: boolean) => void;
@@ -77,6 +104,21 @@ interface ModalStore {
   setIsEditUserOpen: (open: boolean, user?: User | null) => void;
   setIsAddTimelineUpdateOpen: (open: boolean, project?: Project | null) => void;
   setCreateAccountData: (data: CreateAccountData | null) => void;
+
+  // Payment Dialog Modal methods
+  setIsPaymentDialogOpen: (
+    open: boolean,
+    transaction?: ProjectTransactionDetail | null
+  ) => void;
+  setPaymentDialogState: (state: Partial<PaymentDialogState>) => void;
+
+  // Manual Payment Dialog Modal methods - ADDED
+  setIsManualPaymentDialogOpen: (
+    open: boolean,
+    paymentData?: ManualPaymentData | null
+  ) => void;
+  setManualPaymentData: (data: Partial<ManualPaymentData> | null) => void;
+  resetManualPaymentData: () => void;
 }
 
 interface AuthStore {
@@ -119,6 +161,8 @@ export const useModalStore = create<ModalStore>((set) => ({
   isViewSupplierOpen: false,
   isEditUserOpen: false,
   isAddTimelineUpdateOpen: false,
+  isPaymentDialogOpen: false,
+  isManualPaymentDialogOpen: false, // ADDED
 
   designIdToDelete: null,
   editingProject: null,
@@ -127,6 +171,10 @@ export const useModalStore = create<ModalStore>((set) => ({
   editingUser: null,
   timelineProject: null,
   createAccountData: null,
+  paymentDialogState: {
+    transaction: null,
+  },
+  manualPaymentData: null, // ADDED
 
   // Modal control methods
   setIsLoginOpen: (open: boolean) => {
@@ -192,6 +240,66 @@ export const useModalStore = create<ModalStore>((set) => ({
 
   setCreateAccountData: (data: CreateAccountData | null) => {
     set({ createAccountData: data });
+  },
+
+  // Payment Dialog Modal methods
+  setIsPaymentDialogOpen: (
+    open: boolean,
+    transaction?: ProjectTransactionDetail | null
+  ) => {
+    set({
+      isPaymentDialogOpen: open,
+      paymentDialogState: {
+        transaction: open ? (transaction ?? null) : null,
+      },
+    });
+  },
+
+  setPaymentDialogState: (state: Partial<PaymentDialogState>) => {
+    set((prev) => ({
+      paymentDialogState: {
+        ...prev.paymentDialogState,
+        ...state,
+      },
+    }));
+  },
+
+  // ADDED: Manual Payment Dialog Modal methods
+  setIsManualPaymentDialogOpen: (
+    open: boolean,
+    paymentData?: ManualPaymentData | null
+  ) => {
+    set({
+      isManualPaymentDialogOpen: open,
+      manualPaymentData: open ? (paymentData ?? null) : null,
+    });
+  },
+
+  setManualPaymentData: (data: Partial<ManualPaymentData> | null) => {
+    set((prev) => ({
+      manualPaymentData: data
+        ? {
+            ...(prev.manualPaymentData || {
+              projectId: "",
+              clientEmail: "",
+              clientName: "",
+              projectName: "",
+              remainingBalance: 0,
+              totalValue: 0,
+              totalPaid: 0,
+              description: "",
+              maxAmount: 0,
+            }),
+            ...data,
+          }
+        : null,
+    }));
+  },
+
+  resetManualPaymentData: () => {
+    set({
+      manualPaymentData: null,
+    });
   },
 }));
 

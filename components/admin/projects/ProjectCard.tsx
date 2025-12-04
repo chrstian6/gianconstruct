@@ -22,6 +22,7 @@ import {
   Play,
   HardHat,
   CheckSquare,
+  Target,
 } from "lucide-react";
 import { Project } from "@/types/project";
 import {
@@ -44,6 +45,7 @@ interface ProjectCardProps {
   isSelectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  milestonesProgress?: number; // Add this prop for milestones progress
 }
 
 export default function ProjectCard({
@@ -57,56 +59,8 @@ export default function ProjectCard({
   isSelectMode = false,
   isSelected = false,
   onToggleSelect,
+  milestonesProgress = 0, // Default to 0 if not provided
 }: ProjectCardProps) {
-  const calculateProgress = (startDate: Date, endDate: Date | undefined) => {
-    if (!endDate) return 0;
-
-    const start = new Date(startDate).getTime();
-    const end = new Date(endDate).getTime();
-    const now = new Date().getTime();
-
-    if (now >= end) return 100;
-    if (now <= start) return 0;
-
-    const totalDuration = end - start;
-    const elapsed = now - start;
-
-    return Math.min(
-      100,
-      Math.max(0, Math.round((elapsed / totalDuration) * 100))
-    );
-  };
-
-  const getDaysRemaining = (endDate: Date | undefined) => {
-    if (!endDate) return null;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const end = new Date(endDate);
-    end.setHours(0, 0, 0, 0);
-
-    const diffTime = end.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return 0;
-    if (diffDays === 0) return 0;
-
-    return diffDays;
-  };
-
-  const isProjectOverdue = (endDate: Date | undefined) => {
-    if (!endDate) return false;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const end = new Date(endDate);
-    end.setHours(0, 0, 0, 0);
-
-    return today > end;
-  };
-
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("en-US", {
       month: "short",
@@ -115,11 +69,12 @@ export default function ProjectCard({
     });
   };
 
-  const getProgressColorClass = (progress: number, isOverdue: boolean) => {
-    if (isOverdue) return "bg-red-500";
-    if (progress >= 90) return "bg-amber-500";
+  const getProgressColorClass = (progress: number) => {
+    if (progress >= 90) return "bg-green-500";
     if (progress >= 75) return "bg-blue-500";
-    return "bg-green-500";
+    if (progress >= 50) return "bg-amber-500";
+    if (progress >= 25) return "bg-orange-500";
+    return "bg-red-500";
   };
 
   // Status configuration with icons and colors - REMOVED "not-started"
@@ -150,16 +105,7 @@ export default function ProjectCard({
   const displayLocation =
     project.location?.fullAddress || location || "Construction Site";
 
-  const progress =
-    project.status === "completed"
-      ? 100
-      : calculateProgress(project.startDate, project.endDate);
-  const daysRemaining = getDaysRemaining(project.endDate);
-  const isOverdue = isProjectOverdue(project.endDate);
-  const progressColorClass =
-    project.status === "completed"
-      ? "bg-green-500"
-      : getProgressColorClass(progress, isOverdue);
+  const progressColorClass = getProgressColorClass(milestonesProgress);
 
   const StatusIcon =
     statusConfig[project.status as keyof typeof statusConfig]?.icon || Clock;
@@ -339,43 +285,51 @@ export default function ProjectCard({
             </div>
           </div>
 
-          {/* Progress section - Only show for active and completed projects */}
-          {(project.status === "active" || project.status === "completed") &&
-            project.endDate && (
-              <div className="pt-1">
-                <div className="flex justify-between items-center mb-1">
+          {/* Milestones Progress section - Show for all project statuses except cancelled */}
+          {project.status !== "cancelled" && (
+            <div className="pt-1">
+              <div className="flex justify-between items-center mb-1">
+                <div className="flex items-center gap-1">
+                  <Target className="h-3 w-3 text-gray-600" />
                   <span className="text-[0.6rem] font-medium text-gray-700">
-                    Progress: {progress}%
+                    Milestones Progress: {milestonesProgress}%
                   </span>
-                  {project.status === "completed" ? (
-                    <span className="text-[0.6rem] text-green-600 font-medium bg-green-50 px-1 py-0.5 rounded">
-                      Completed
-                    </span>
-                  ) : (
-                    <span
-                      className={`text-[0.6rem] font-medium px-1 py-0.5 rounded ${
-                        isOverdue
-                          ? "text-red-700 bg-red-50"
-                          : "text-blue-700 bg-blue-50"
-                      }`}
-                    >
-                      {isOverdue
-                        ? "Overdue"
-                        : daysRemaining === 0
-                          ? "Final day"
-                          : `${daysRemaining}d left`}
-                    </span>
-                  )}
                 </div>
-
-                <div className="w-full bg-gray-200 rounded-full h-1">
-                  <div
-                    className={`h-1 rounded-full ${progressColorClass} transition-all duration-300`}
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
+                {project.status === "completed" ? (
+                  <span className="text-[0.6rem] text-green-600 font-medium bg-green-50 px-1 py-0.5 rounded">
+                    Completed
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[0.6rem] font-medium px-1 py-0.5 rounded ${
+                      milestonesProgress === 100
+                        ? "text-green-700 bg-green-50"
+                        : milestonesProgress >= 75
+                          ? "text-blue-700 bg-blue-50"
+                          : milestonesProgress >= 50
+                            ? "text-amber-700 bg-amber-50"
+                            : "text-gray-700 bg-gray-50"
+                    }`}
+                  >
+                    {milestonesProgress === 100
+                      ? "All Complete"
+                      : milestonesProgress >= 75
+                        ? "Almost Done"
+                        : milestonesProgress >= 50
+                          ? "Halfway"
+                          : "In Progress"}
+                  </span>
+                )}
               </div>
-            )}
+
+              <div className="w-full bg-gray-200 rounded-full h-1">
+                <div
+                  className={`h-1 rounded-full ${progressColorClass} transition-all duration-300`}
+                  style={{ width: `${milestonesProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Special message for pending projects - REMOVED "not-started" condition */}
           {project.status === "pending" && (
