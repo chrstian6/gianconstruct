@@ -19,11 +19,11 @@ import {
   User as UserIcon,
   Mail,
   Phone,
-  CalendarIcon,
   Upload,
   X,
   Image as ImageIcon,
   ArrowLeft,
+  CalendarIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createProject } from "@/action/project";
@@ -36,8 +36,13 @@ import {
   cities,
   barangays,
 } from "select-philippines-address";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
 
 interface Region {
   region_code: string;
@@ -82,13 +87,6 @@ interface CreateProjectModalProps {
   onProjectCreated: () => void;
 }
 
-interface CustomDateInputProps {
-  value?: string;
-  onClick?: () => void;
-  placeholder?: string;
-  disabled?: boolean;
-}
-
 interface ValidationError {
   field: string;
   message: string;
@@ -100,27 +98,6 @@ interface ProjectImage {
   description: string;
   previewUrl: string;
 }
-
-const CustomDateInput = React.forwardRef<
-  HTMLButtonElement,
-  CustomDateInputProps
->(({ value, onClick, placeholder, disabled }, ref) => (
-  <Button
-    variant="outline"
-    onClick={onClick}
-    ref={ref}
-    disabled={disabled}
-    className={cn(
-      "w-full justify-start text-left font-normal border-gray-300 focus:ring-gray-500 font-geist",
-      !value && "text-gray-500"
-    )}
-  >
-    <CalendarIcon className="mr-2 h-4 w-4" />
-    {value || placeholder}
-  </Button>
-));
-
-CustomDateInput.displayName = "CustomDateInput";
 
 // Project Images Section Component
 const ProjectImagesSection = ({
@@ -163,18 +140,18 @@ const ProjectImagesSection = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900 font-geist">
+        <h3 className="text-sm font-medium text-foreground font-geist">
           Project Images
         </h3>
-        <span className="text-xs text-gray-600 font-geist">
+        <span className="text-xs text-muted-foreground font-geist">
           {projectImages.length} image(s) added
         </span>
       </div>
 
       {/* Image Upload Area */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+      <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-muted-foreground/50 transition-colors bg-muted/20">
         <input
           type="file"
           id="project-images"
@@ -184,11 +161,11 @@ const ProjectImagesSection = ({
           className="hidden"
         />
         <label htmlFor="project-images" className="cursor-pointer block">
-          <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-600 font-geist">
+          <Upload className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+          <p className="text-sm text-muted-foreground font-geist">
             Click to upload images or drag and drop
           </p>
-          <p className="text-xs text-gray-500 font-geist mt-1">
+          <p className="text-xs text-muted-foreground/70 font-geist mt-2">
             PNG, JPG, GIF up to 10MB each
           </p>
         </label>
@@ -200,22 +177,22 @@ const ProjectImagesSection = ({
           {projectImages.map((image, index) => (
             <div
               key={index}
-              className="border border-gray-200 rounded-lg p-4 space-y-3 bg-background"
+              className="border border-border rounded-lg p-5 space-y-4 bg-card"
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-3 flex-1">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                <div className="flex items-center space-x-4 flex-1">
+                  <div className="w-20 h-20 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
                     <img
                       src={image.previewUrl}
                       alt={image.title}
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <div>
+                  <div className="flex-1 space-y-4">
+                    <div className="space-y-2">
                       <Label
                         htmlFor={`image-title-${index}`}
-                        className="text-xs text-gray-600"
+                        className="text-sm font-medium text-foreground"
                       >
                         Title
                       </Label>
@@ -230,10 +207,10 @@ const ProjectImagesSection = ({
                         maxLength={100}
                       />
                     </div>
-                    <div>
+                    <div className="space-y-2">
                       <Label
                         htmlFor={`image-description-${index}`}
-                        className="text-xs text-gray-600"
+                        className="text-sm font-medium text-foreground"
                       >
                         Description (Optional)
                       </Label>
@@ -255,13 +232,13 @@ const ProjectImagesSection = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => onImageRemove(index)}
-                  className="text-gray-400 hover:text-red-500"
+                  className="text-muted-foreground hover:text-destructive ml-4"
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex items-center text-xs text-gray-500 font-geist">
-                <ImageIcon className="h-3 w-3 mr-1" />
+              <div className="flex items-center text-xs text-muted-foreground font-geist">
+                <ImageIcon className="h-3 w-3 mr-2" />
                 {image.file.name} • {(image.file.size / 1024 / 1024).toFixed(2)}{" "}
                 MB
               </div>
@@ -271,9 +248,9 @@ const ProjectImagesSection = ({
       )}
 
       {isUploading && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <AlertCircle className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-800 font-geist">
+        <Alert className="bg-muted border-border">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="font-geist">
             Uploading {projectImages.length} image(s)...
           </AlertDescription>
         </Alert>
@@ -312,6 +289,10 @@ export default function CreateProjectModal({
   const [showValidationDialog, setShowValidationDialog] = useState(false);
   const [projectImages, setProjectImages] = useState<ProjectImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Add state for calendar popovers
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   // Fetch users and regions when modal opens
   useEffect(() => {
@@ -425,17 +406,18 @@ export default function CreateProjectModal({
     }
   }, [selectedMunicipality]);
 
-  // Filter users based on search query
+  // Fixed: Case-insensitive user search
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
-    const query = searchQuery.toLowerCase();
+    if (!searchQuery.trim()) return users;
+
+    const query = searchQuery.toLowerCase().trim();
     return users.filter(
       (user) =>
-        user.firstName.toLowerCase().includes(query) ||
-        user.lastName.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
+        user.firstName?.toLowerCase().includes(query) ||
+        user.lastName?.toLowerCase().includes(query) ||
+        user.email?.toLowerCase().includes(query) ||
         user.contactNo?.toLowerCase().includes(query) ||
-        user.user_id.toLowerCase().includes(query)
+        user.user_id?.toLowerCase().includes(query)
     );
   }, [users, searchQuery]);
 
@@ -512,6 +494,21 @@ export default function CreateProjectModal({
       newImages[index][field] = value;
       return newImages;
     });
+  };
+
+  // Fixed: Date handling functions
+  const handleStartDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setStartDate(date);
+      setShowStartDatePicker(false); // Close popover on select
+    }
+  };
+
+  const handleEndDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setEndDate(date);
+      setShowEndDatePicker(false); // Close popover on select
+    }
   };
 
   // Validate form data
@@ -788,83 +785,92 @@ export default function CreateProjectModal({
           <Button
             variant="outline"
             onClick={handleClose}
-            className="border-gray-300 text-gray-700 hover:bg-gray-100 rounded-full"
+            className="border-border text-foreground hover:bg-muted rounded-full px-6 py-2.5"
           >
             Cancel
           </Button>
         }
       >
-        <div className="space-y-2">
-          <Label
-            htmlFor="user-search"
-            className="text-sm font-medium text-gray-900 font-geist"
-          >
-            Search Users
-          </Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              id="user-search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, email, or phone..."
-              className="pl-10 pr-4 py-2 border-gray-300 focus:border-[var(--orange)] focus:ring-[var(--orange)] font-geist"
-            />
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <Label
+              htmlFor="user-search"
+              className="text-sm font-medium text-foreground font-geist"
+            >
+              Search Users
+            </Label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="user-search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, email, or phone..."
+                className="pl-11 pr-4 py-3 border-border focus:border-foreground focus:ring-foreground font-geist"
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-gray-900 font-geist">
-            Available Users ({filteredUsers.length})
-          </Label>
-          <div className="border border-gray-300 rounded-lg max-h-60 overflow-y-auto">
-            {filteredUsers.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 font-geist">
-                {searchQuery ? "No users found" : "No users available"}
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-200">
-                {filteredUsers.map((user) => (
-                  <button
-                    key={user.user_id}
-                    onClick={() => handleUserSelect(user.user_id)}
-                    className="w-full p-4 text-left hover:bg-gray-50 transition-colors focus:outline-none focus:bg-gray-50 font-geist"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <UserIcon className="h-4 w-4 text-gray-600" />
-                          <span className="font-medium text-gray-900">
-                            {user.firstName} {user.lastName}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                          <Mail className="h-3 w-3" />
-                          <span>{user.email}</span>
-                        </div>
-                        {user.contactNo && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                            <Phone className="h-3 w-3" />
-                            <span>{user.contactNo}</span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium text-foreground font-geist">
+                Available Users
+              </Label>
+              <span className="text-xs text-muted-foreground font-geist">
+                {filteredUsers.length} found
+              </span>
+            </div>
+            <div className="border border-border rounded-lg max-h-80 overflow-y-auto">
+              {filteredUsers.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground font-geist">
+                  {searchQuery ? "No users found" : "No users available"}
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {filteredUsers.map((user) => (
+                    <button
+                      key={user.user_id}
+                      onClick={() => handleUserSelect(user.user_id)}
+                      className="w-full p-5 text-left hover:bg-muted/50 transition-colors focus:outline-none focus:bg-muted/50 font-geist"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <UserIcon className="h-5 w-5 text-muted-foreground" />
+                            <span className="font-medium text-foreground">
+                              {user.firstName} {user.lastName}
+                            </span>
                           </div>
-                        )}
-                        <div className="text-xs text-gray-500">
-                          ID: {user.user_id} • Role: {user.role}
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <Mail className="h-4 w-4" />
+                            <span>{user.email}</span>
+                          </div>
+                          {user.contactNo && (
+                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                              <Phone className="h-4 w-4" />
+                              <span>{user.contactNo}</span>
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground flex items-center gap-4">
+                            <span>ID: {user.user_id}</span>
+                            <span>•</span>
+                            <span>Role: {user.role}</span>
+                          </div>
+                        </div>
+                        <div className="ml-6">
+                          <div className="w-3 h-3 bg-primary rounded-full animate-pulse" />
                         </div>
                       </div>
-                      <div className="ml-4">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground flex items-start gap-2 pt-2 font-geist">
+              <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              Click on a user to assign them to the project
+            </p>
           </div>
-          <p className="text-xs text-gray-600 flex items-start gap-1.5 font-geist">
-            <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-            Click on a user to assign them to the project
-          </p>
         </div>
       </ProjectModalLayout>
     );
@@ -879,323 +885,380 @@ export default function CreateProjectModal({
         title="Project Details"
         description="Enter the basic information for your construction project"
         footerActions={
-          <>
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
             <Button
               variant="outline"
               onClick={handleBack}
-              className="flex-1 min-w-[120px] order-2 sm:order-1 border-gray-300 text-gray-700 hover:bg-gray-100 rounded-full font-geist"
+              className="flex-1 py-3 border-border text-foreground hover:bg-muted rounded-full font-geist"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
             <Button
               onClick={handleNextToImages}
-              className="flex-1 min-w-[120px] order-1 sm:order-2 bg-gray-900 hover:bg-gray-800 text-white rounded-full font-geist"
+              className="flex-1 py-3 bg-foreground hover:bg-foreground/90 text-background rounded-full font-geist"
             >
               Continue to Images
             </Button>
-          </>
+          </div>
         }
       >
-        {showValidationDialog && (
-          <Alert variant="destructive" className="mb-4 font-geist">
-            <AlertCircle className="h-5 w-5" />
-            <AlertTitle>Validation Errors</AlertTitle>
-            <AlertDescription>
-              <p className="text-sm">Unable to process your request.</p>
-              <p className="text-sm mb-2">
-                Please verify your project information and try again.
-              </p>
-              <ul className="list-disc pl-5 space-y-1">
-                {validationErrors.map((error, index) => (
-                  <li key={index} className="text-sm text-red-600">
-                    {error.message.replace(/^- /, "")}
-                  </li>
-                ))}
-              </ul>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowValidationDialog(false)}
-                className="mt-4 text-red-600 hover:text-red-800 hover:bg-red-100"
-              >
-                Dismiss
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-        {selectedUser && (
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-900 font-geist">
-                  Assigned User:
+        <div className="space-y-6">
+          {showValidationDialog && (
+            <Alert variant="destructive" className="font-geist">
+              <AlertCircle className="h-5 w-5" />
+              <AlertTitle>Validation Errors</AlertTitle>
+              <AlertDescription>
+                <p className="text-sm">Unable to process your request.</p>
+                <p className="text-sm mb-3">
+                  Please verify your project information and try again.
                 </p>
-                <p className="text-sm text-blue-700 font-geist">
-                  {selectedUser.firstName} {selectedUser.lastName}
-                </p>
-                <p className="text-xs text-blue-600 font-geist">
-                  {selectedUser.email}
-                </p>
-                {selectedUser.contactNo && (
-                  <p className="text-xs text-blue-600 font-geist">
-                    {selectedUser.contactNo}
+                <ul className="list-disc pl-5 space-y-2">
+                  {validationErrors.map((error, index) => (
+                    <li key={index} className="text-sm">
+                      {error.message.replace(/^- /, "")}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowValidationDialog(false)}
+                  className="mt-4 hover:bg-destructive/10"
+                >
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {selectedUser && (
+            <div className="bg-muted p-5 rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-black font-geist bg-muted">
+                    Assigned User:
                   </p>
+                  <p className="text-sm text-foreground/80 font-geist bg-muted">
+                    {selectedUser.firstName} {selectedUser.lastName}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-geist bg-muted">
+                    {selectedUser.email}
+                  </p>
+                  {selectedUser.contactNo && (
+                    <p className="text-xs text-muted-foreground font-geist bg-muted">
+                      {selectedUser.contactNo}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBack}
+                  className="text-foreground/70 hover:text-foreground hover:bg-muted-foreground/10 font-geist"
+                >
+                  Change
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor="projectTitle"
+                  className="text-sm font-medium text-foreground font-geist"
+                >
+                  Project Title
+                </Label>
+                <span className="text-xs text-muted-foreground font-geist">
+                  {projectTitle.length}/50 characters
+                </span>
+              </div>
+              <Input
+                id="projectTitle"
+                value={projectTitle}
+                onChange={(e) => setProjectTitle(e.target.value)}
+                placeholder="e.g., Office Building Construction, Highway Expansion"
+                className="py-3 px-4 border-border focus:ring-foreground font-geist"
+                maxLength={50}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor="totalCost"
+                  className="text-sm font-medium text-foreground font-geist"
+                >
+                  Total Cost
+                </Label>
+                <span className="text-xs text-muted-foreground font-geist">
+                  {totalCost.replace(/,/g, "").length}/20 characters
+                </span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground font-geist">
+                  ₱
+                </span>
+                <Input
+                  id="totalCost"
+                  type="text"
+                  value={totalCost}
+                  onChange={handleTotalCostChange}
+                  placeholder="e.g., 1,000,000"
+                  className="py-3 pl-10 pr-4 border-border focus:ring-foreground font-geist"
+                  maxLength={20}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground font-geist">
+                  Start Date
+                </Label>
+                <Popover
+                  open={showStartDatePicker}
+                  onOpenChange={setShowStartDatePicker}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal border-border font-geist py-3",
+                        !startDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-3 h-4 w-4" />
+                      {startDate
+                        ? format(startDate, "PPP")
+                        : "Pick a start date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <div className="pointer-events-auto">
+                      <Calendar
+                        mode="single"
+                        selected={startDate || undefined}
+                        onSelect={handleStartDateSelect}
+                        initialFocus
+                        disabled={(date) => date < new Date()}
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground font-geist">
+                  Completion Date (Optional)
+                </Label>
+                <Popover
+                  open={showEndDatePicker}
+                  onOpenChange={setShowEndDatePicker}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal border-border font-geist py-3",
+                        !endDate && "text-muted-foreground"
+                      )}
+                      disabled={!startDate}
+                    >
+                      <CalendarIcon className="mr-3 h-4 w-4" />
+                      {endDate
+                        ? format(endDate, "PPP")
+                        : "Pick a completion date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <div className="pointer-events-auto">
+                      <Calendar
+                        mode="single"
+                        selected={endDate || undefined}
+                        onSelect={handleEndDateSelect}
+                        initialFocus
+                        disabled={(date) => !startDate || date < startDate}
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <h3 className="text-sm font-medium text-foreground font-geist">
+              Project Location
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground font-geist">
+                  Region
+                </Label>
+                <Select
+                  value={selectedRegion}
+                  onValueChange={setSelectedRegion}
+                >
+                  <SelectTrigger className="w-full border-border focus:ring-foreground font-geist py-3">
+                    <SelectValue placeholder="Select region" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1000]">
+                    {regionList.map((region: Region) => (
+                      <SelectItem
+                        key={region.region_code}
+                        value={region.region_code}
+                      >
+                        {region.region_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground font-geist">
+                  Province
+                </Label>
+                <Select
+                  value={selectedProvince}
+                  onValueChange={setSelectedProvince}
+                  disabled={!selectedRegion}
+                >
+                  <SelectTrigger className="w-full border-border focus:ring-foreground font-geist py-3">
+                    <SelectValue placeholder="Select province" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1000]">
+                    {provinceList.map((province: Province) => (
+                      <SelectItem
+                        key={province.province_code}
+                        value={province.province_code}
+                      >
+                        {province.province_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground font-geist">
+                  Municipality/City
+                </Label>
+                <Select
+                  value={selectedMunicipality}
+                  onValueChange={setSelectedMunicipality}
+                  disabled={!selectedProvince}
+                >
+                  <SelectTrigger className="w-full border-border focus:ring-foreground font-geist py-3">
+                    <SelectValue placeholder="Select municipality/city" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1000]">
+                    {cityList.map((city: City) => (
+                      <SelectItem key={city.city_code} value={city.city_code}>
+                        {city.city_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground font-geist">
+                  Barangay
+                </Label>
+                <Select
+                  value={selectedBarangay}
+                  onValueChange={setSelectedBarangay}
+                  disabled={!selectedMunicipality}
+                >
+                  <SelectTrigger className="w-full border-border focus:ring-foreground font-geist py-3">
+                    <SelectValue placeholder="Select barangay" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1000]">
+                    {barangayList.map((barangay: Barangay) => (
+                      <SelectItem
+                        key={barangay.brgy_code}
+                        value={barangay.brgy_code}
+                      >
+                        {barangay.brgy_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {(selectedRegion ||
+              selectedProvince ||
+              selectedMunicipality ||
+              selectedBarangay) && (
+              <div className="bg-muted p-4 rounded-lg border border-border mt-4">
+                <h4 className="text-xs font-medium text-foreground mb-3 font-geist bg-muted">
+                  Selected Location:
+                </h4>
+                <p className="text-sm text-foreground/90 font-geist bg-muted">
+                  {[
+                    barangayList.find((b) => b.brgy_code === selectedBarangay)
+                      ?.brgy_name,
+                    cityList.find((c) => c.city_code === selectedMunicipality)
+                      ?.city_name,
+                    provinceList.find(
+                      (p) => p.province_code === selectedProvince
+                    )?.province_name,
+                    regionList.find((r) => r.region_code === selectedRegion)
+                      ?.region_name,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Project Summary */}
+          {(startDate || endDate || totalCost) && (
+            <div className="bg-muted p-5 rounded-lg border border-border">
+              <h4 className="text-sm font-medium mb-4 flex items-center gap-2 text-foreground font-geist bg-muted">
+                <AlertCircle className="h-4 w-4" />
+                Construction Timeline
+              </h4>
+              <div className="grid grid-cols-2 gap-5 text-sm">
+                {startDate && endDate && (
+                  <div className="space-y-1">
+                    <span className="text-foreground/70 font-geist bg-muted">
+                      Duration:
+                    </span>
+                    <p className="font-medium text-foreground font-geist bg-muted">
+                      {calculateDuration(startDate, endDate)} working days
+                    </p>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <span className="text-foreground/70 font-geist bg-muted">
+                    Project ID:
+                  </span>
+                  <p className="font-mono font-medium text-foreground font-geist bg-muted">
+                    Will be generated automatically
+                  </p>
+                </div>
+                {totalCost && (
+                  <div className="space-y-1">
+                    <span className="text-foreground/70 font-geist bg-muted">
+                      Estimated Cost:
+                    </span>
+                    <p className="font-medium text-foreground font-geist bg-muted">
+                      ₱{totalCost}
+                    </p>
+                  </div>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBack}
-                className="text-blue-600 hover:text-blue-800 hover:bg-blue-100 font-geist"
-              >
-                Change
-              </Button>
-            </div>
-          </div>
-        )}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="projectTitle"
-              className="text-sm font-medium text-gray-900 font-geist"
-            >
-              Project Title
-            </Label>
-            <span className="text-xs text-gray-600 font-geist">
-              {projectTitle.length}/50 characters
-            </span>
-          </div>
-          <Input
-            id="projectTitle"
-            value={projectTitle}
-            onChange={(e) => setProjectTitle(e.target.value)}
-            placeholder="e.g., Office Building Construction, Highway Expansion"
-            className="py-2.5 px-3.5 border-gray-300 focus:ring-gray-500 font-geist"
-            maxLength={50}
-          />
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="totalCost"
-              className="text-sm font-medium text-gray-900 font-geist"
-            >
-              Total Cost
-            </Label>
-            <span className="text-xs text-gray-600 font-geist">
-              {totalCost.replace(/,/g, "").length}/20 characters
-            </span>
-          </div>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600 font-geist">
-              ₱
-            </span>
-            <Input
-              id="totalCost"
-              type="text"
-              value={totalCost}
-              onChange={handleTotalCostChange}
-              placeholder="e.g., 1,000,000"
-              className="py-2.5 pl-8 pr-3.5 border-gray-300 focus:ring-gray-500 font-geist"
-              maxLength={20}
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-900 font-geist">
-              Start Date
-            </Label>
-            <DatePicker
-              selected={startDate}
-              onChange={(date: Date | null) => setStartDate(date)}
-              selectsStart
-              startDate={startDate}
-              endDate={endDate}
-              minDate={new Date()}
-              placeholderText="Pick a start date"
-              customInput={<CustomDateInput />}
-              className="w-full"
-              popperClassName="react-datepicker-popper z-[1000]"
-              wrapperClassName="w-full"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-900 font-geist">
-              Completion Date (Optional)
-            </Label>
-            <DatePicker
-              selected={endDate}
-              onChange={(date: Date | null) => setEndDate(date)}
-              selectsEnd
-              startDate={startDate}
-              endDate={endDate}
-              minDate={startDate || new Date()}
-              placeholderText="Pick a completion date"
-              customInput={<CustomDateInput disabled={!startDate} />}
-              className="w-full"
-              popperClassName="react-datepicker-popper z-[1000]"
-              wrapperClassName="w-full"
-            />
-          </div>
-        </div>
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 font-geist">
-            Project Location
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-900 font-geist">
-                Region
-              </Label>
-              <Select value={selectedRegion} onValueChange={setSelectedRegion}>
-                <SelectTrigger className="w-full border-gray-300 focus:ring-gray-500 font-geist">
-                  <SelectValue placeholder="Select region" />
-                </SelectTrigger>
-                <SelectContent className="z-[1000]">
-                  {regionList.map((region: Region) => (
-                    <SelectItem
-                      key={region.region_code}
-                      value={region.region_code}
-                    >
-                      {region.region_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-900 font-geist">
-                Province
-              </Label>
-              <Select
-                value={selectedProvince}
-                onValueChange={setSelectedProvince}
-                disabled={!selectedRegion}
-              >
-                <SelectTrigger className="w-full border-gray-300 focus:ring-gray-500 font-geist">
-                  <SelectValue placeholder="Select province" />
-                </SelectTrigger>
-                <SelectContent className="z-[1000]">
-                  {provinceList.map((province: Province) => (
-                    <SelectItem
-                      key={province.province_code}
-                      value={province.province_code}
-                    >
-                      {province.province_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-900 font-geist">
-                Municipality/City
-              </Label>
-              <Select
-                value={selectedMunicipality}
-                onValueChange={setSelectedMunicipality}
-                disabled={!selectedProvince}
-              >
-                <SelectTrigger className="w-full border-gray-300 focus:ring-gray-500 font-geist">
-                  <SelectValue placeholder="Select municipality/city" />
-                </SelectTrigger>
-                <SelectContent className="z-[1000]">
-                  {cityList.map((city: City) => (
-                    <SelectItem key={city.city_code} value={city.city_code}>
-                      {city.city_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-900 font-geist">
-                Barangay
-              </Label>
-              <Select
-                value={selectedBarangay}
-                onValueChange={setSelectedBarangay}
-                disabled={!selectedMunicipality}
-              >
-                <SelectTrigger className="w-full border-gray-300 focus:ring-gray-500 font-geist">
-                  <SelectValue placeholder="Select barangay" />
-                </SelectTrigger>
-                <SelectContent className="z-[1000]">
-                  {barangayList.map((barangay: Barangay) => (
-                    <SelectItem
-                      key={barangay.brgy_code}
-                      value={barangay.brgy_code}
-                    >
-                      {barangay.brgy_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {(selectedRegion ||
-            selectedProvince ||
-            selectedMunicipality ||
-            selectedBarangay) && (
-            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-              <h4 className="text-xs font-medium text-gray-700 mb-2 font-geist">
-                Selected Location:
-              </h4>
-              <p className="text-sm text-gray-900 font-geist">
-                {[
-                  barangayList.find((b) => b.brgy_code === selectedBarangay)
-                    ?.brgy_name,
-                  cityList.find((c) => c.city_code === selectedMunicipality)
-                    ?.city_name,
-                  provinceList.find((p) => p.province_code === selectedProvince)
-                    ?.province_name,
-                  regionList.find((r) => r.region_code === selectedRegion)
-                    ?.region_name,
-                ]
-                  .filter(Boolean)
-                  .join(", ")}
-              </p>
             </div>
           )}
         </div>
-
-        {/* Project Summary */}
-        {(startDate || endDate || totalCost) && (
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <h4 className="text-sm font-medium mb-3 flex items-center gap-1.5 text-gray-900 font-geist">
-              <AlertCircle className="h-4 w-4" />
-              Construction Timeline
-            </h4>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              {startDate && endDate && (
-                <div>
-                  <span className="text-gray-700 font-geist">Duration:</span>
-                  <p className="font-medium text-gray-900 font-geist">
-                    {calculateDuration(startDate, endDate)} working days
-                  </p>
-                </div>
-              )}
-              <div>
-                <span className="text-gray-700 font-geist">Project ID:</span>
-                <p className="font-mono font-medium text-gray-900 font-geist">
-                  Will be generated automatically
-                </p>
-              </div>
-              {totalCost && (
-                <div>
-                  <span className="text-gray-700 font-geist">
-                    Estimated Cost:
-                  </span>
-                  <p className="font-medium text-gray-900 font-geist">
-                    ₱{totalCost}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </ProjectModalLayout>
     );
   }
@@ -1208,11 +1271,11 @@ export default function CreateProjectModal({
       title="Project Images"
       description="Upload and manage images for your construction project"
       footerActions={
-        <>
+        <div className="flex flex-col sm:flex-row gap-3 w-full">
           <Button
             variant="outline"
             onClick={handleBack}
-            className="flex-1 min-w-[120px] order-2 sm:order-1 border-gray-300 text-gray-700 hover:bg-gray-100 rounded-full font-geist"
+            className="flex-1 py-3 border-border text-foreground hover:bg-muted rounded-full font-geist"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
@@ -1220,95 +1283,105 @@ export default function CreateProjectModal({
           <Button
             onClick={handleCreateProject}
             disabled={isLoading || isUploading}
-            className="flex-1 min-w-[120px] order-1 sm:order-2 bg-gray-900 hover:bg-gray-800 text-white rounded-full font-geist"
+            className="flex-1 py-3 bg-foreground hover:bg-foreground/90 text-background rounded-full font-geist"
           >
             {isLoading || isUploading ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-background mr-2" />
                 {isUploading ? "Uploading..." : "Creating..."}
               </>
             ) : (
               "Create Project"
             )}
           </Button>
-        </>
+        </div>
       }
     >
-      {showValidationDialog && (
-        <Alert variant="destructive" className="mb-4 font-geist">
-          <AlertCircle className="h-5 w-5" />
-          <AlertTitle>Validation Errors</AlertTitle>
-          <AlertDescription>
-            <p className="text-sm">Unable to process your request.</p>
-            <p className="text-sm mb-2">
-              Please verify your project information and try again.
-            </p>
-            <ul className="list-disc pl-5 space-y-1">
-              {validationErrors.map((error, index) => (
-                <li key={index} className="text-sm text-red-600">
-                  {error.message.replace(/^- /, "")}
-                </li>
-              ))}
-            </ul>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowValidationDialog(false)}
-              className="mt-4 text-red-600 hover:text-red-800 hover:bg-red-100"
-            >
-              Dismiss
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="space-y-6">
+        {showValidationDialog && (
+          <Alert variant="destructive" className="font-geist">
+            <AlertCircle className="h-5 w-5" />
+            <AlertTitle>Validation Errors</AlertTitle>
+            <AlertDescription>
+              <p className="text-sm">Unable to process your request.</p>
+              <p className="text-sm mb-3">
+                Please verify your project information and try again.
+              </p>
+              <ul className="list-disc pl-5 space-y-2">
+                {validationErrors.map((error, index) => (
+                  <li key={index} className="text-sm">
+                    {error.message.replace(/^- /, "")}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowValidationDialog(false)}
+                className="mt-4 hover:bg-destructive/10"
+              >
+                Dismiss
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {/* Project Summary in Images Step */}
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
-        <h4 className="text-sm font-medium mb-3 text-gray-900 font-geist">
-          Project Summary
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-gray-700 font-geist">Project Title:</span>
-            <p className="font-medium text-gray-900 font-geist">
-              {projectTitle || "Not provided"}
-            </p>
-          </div>
-          <div>
-            <span className="text-gray-700 font-geist">Assigned User:</span>
-            <p className="font-medium text-gray-900 font-geist">
-              {selectedUser
-                ? `${selectedUser.firstName} ${selectedUser.lastName}`
-                : "Not assigned"}
-            </p>
-          </div>
-          {totalCost && (
-            <div>
-              <span className="text-gray-700 font-geist">Estimated Cost:</span>
-              <p className="font-medium text-gray-900 font-geist">
-                ₱{totalCost}
+        {/* Project Summary in Images Step */}
+        <div className="bg-muted p-5 rounded-lg border border-border">
+          <h4 className="text-sm font-medium mb-4 text-foreground font-geist bg-muted">
+            Project Summary
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
+            <div className="space-y-1">
+              <span className="text-foreground/70 font-geist bg-muted">
+                Project Title:
+              </span>
+              <p className="font-medium text-foreground font-geist bg-muted">
+                {projectTitle || "Not provided"}
               </p>
             </div>
-          )}
-          {startDate && (
-            <div>
-              <span className="text-gray-700 font-geist">Start Date:</span>
-              <p className="font-medium text-gray-900 font-geist">
-                {startDate.toLocaleDateString()}
+            <div className="space-y-1">
+              <span className="text-foreground/70 font-geist bg-muted">
+                Assigned User:
+              </span>
+              <p className="font-medium text-foreground font-geist bg-muted">
+                {selectedUser
+                  ? `${selectedUser.firstName} ${selectedUser.lastName}`
+                  : "Not assigned"}
               </p>
             </div>
-          )}
+            {totalCost && (
+              <div className="space-y-1">
+                <span className="text-foreground/70 font-geist bg-muted">
+                  Estimated Cost:
+                </span>
+                <p className="font-medium text-foreground font-geist bg-muted">
+                  ₱{totalCost}
+                </p>
+              </div>
+            )}
+            {startDate && (
+              <div className="space-y-1">
+                <span className="text-foreground/70 font-geist bg-muted">
+                  Start Date:
+                </span>
+                <p className="font-medium text-foreground font-geist bg-muted">
+                  {format(startDate, "MMM dd, yyyy")}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Project Images Section */}
-      <ProjectImagesSection
-        projectImages={projectImages}
-        onImagesChange={handleImagesChange}
-        onImageRemove={handleImageRemove}
-        onImageUpdate={handleImageUpdate}
-        isUploading={isUploading}
-      />
+        {/* Project Images Section */}
+        <ProjectImagesSection
+          projectImages={projectImages}
+          onImagesChange={handleImagesChange}
+          onImageRemove={handleImageRemove}
+          onImageUpdate={handleImageUpdate}
+          isUploading={isUploading}
+        />
+      </div>
     </ProjectModalLayout>
   );
 }

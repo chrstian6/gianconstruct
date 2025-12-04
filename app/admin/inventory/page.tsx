@@ -665,14 +665,17 @@ function MainInventoryContent() {
   };
 
   // Export to PDF using the PDF formatter
+  // Export to PDF using the PDF formatter with filtered results
   const handleExportPDF = async () => {
     try {
       const { exportToPDF } = PDFFormatter({
-        inventoryItems: filteredItems,
+        inventoryItems: filteredItems, // This is the key change - using filteredItems instead of items
         categoryStats: inventoryStats.categoryStats,
         totalItems: inventoryStats.total,
         inStockCount: inventoryStats.inStock,
         restockNeededCount: inventoryStats.restockNeeded,
+        totalCapital: inventoryStats.totalCapital,
+        totalValue: inventoryStats.totalValue,
       });
       await exportToPDF();
       toast.success("Inventory report exported to PDF");

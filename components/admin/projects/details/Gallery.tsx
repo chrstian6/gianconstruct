@@ -595,15 +595,15 @@ export default function Gallery({ projectId }: GalleryProps) {
 
             {/* Image info in modal */}
             <div className="absolute bottom-4 left-4 z-10 max-w-md">
-              <h3 className="font-semibold text-white font-geist text-sm">
+              <h3 className="font-semibold text-white font-geist text-sm bg-transparent">
                 {images[selectedImageIndex].title}
               </h3>
               {images[selectedImageIndex].description && (
-                <p className="text-white/80 font-geist text-xs mt-1">
+                <p className="text-white/80 font-geist text-xs mt-1 bg-transparent">
                   {images[selectedImageIndex].description}
                 </p>
               )}
-              <p className="text-white/60 font-geist text-xs mt-1">
+              <p className="text-white/60 font-geist text-xs mt-1 bg-transparent">
                 Uploaded on {formatDate(images[selectedImageIndex].uploadedAt)}
               </p>
             </div>

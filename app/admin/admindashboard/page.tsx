@@ -1,115 +1,118 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Folder, MessageSquare, Users } from "lucide-react";
+import ReportGenerator from "@/components/admin/admindashboard/ReportGenerator";
+import { OverviewDashboard } from "@/components/admin/admindashboard/OverviewDashboard";
 
 export default function AdminDashboardPage() {
-  // Mock data for dashboard
-  const metrics = [
-    { title: "Total Projects", value: 12, icon: Folder },
-    { title: "Upcoming Meetings", value: 3, icon: MessageSquare },
-    { title: "Active Users", value: 25, icon: Users },
-    { title: "Scheduled Tasks", value: 8, icon: Calendar },
-  ];
-
-  const projects = [
-    {
-      id: 1,
-      name: "Residential Villa",
-      status: "In Progress",
-      dueDate: "2025-07-15",
-    },
-    {
-      id: 2,
-      name: "Commercial Complex",
-      status: "Planning",
-      dueDate: "2025-08-01",
-    },
-    {
-      id: 3,
-      name: "Community Center",
-      status: "Completed",
-      dueDate: "2025-05-30",
-    },
-  ];
-
   return (
     <main className="flex-1 overflow-y-auto p-6 font-inter">
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger
+            value="overview"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="reports"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            Reports
+          </TabsTrigger>
+          <TabsTrigger
+            value="activity"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            Recent Activity
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
-          {/* Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {metrics.map((metric, index) => (
-              <Card key={index}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {metric.title}
-                  </CardTitle>
-                  <metric.icon className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{metric.value}</div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        <TabsContent value="overview" className="space-y-0">
+          <OverviewDashboard />
+        </TabsContent>
 
-          {/* Projects Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Projects</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Project Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Due Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {projects.map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell>{project.id}</TableCell>
-                      <TableCell>{project.name}</TableCell>
-                      <TableCell>{project.status}</TableCell>
-                      <TableCell>{project.dueDate}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+        <TabsContent value="reports">
+          <ReportGenerator />
         </TabsContent>
 
         <TabsContent value="activity">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-black">
-                Placeholder for recent activity (e.g., user actions, project
-                updates).
-              </p>
-            </CardContent>
-          </Card>
+          <div className="border-border bg-card rounded-lg border p-6">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              Recent Activity
+            </h2>
+            <p className="text-muted-foreground mb-4">
+              User actions, system events, and project updates
+            </p>
+            <div className="space-y-4">
+              <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-foreground">
+                    Project "Residential Villa" Updated
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    2 hours ago
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Status changed from "Planning" to "In Progress"
+                </p>
+              </div>
+              <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-foreground">
+                    New Inventory Sale
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    5 hours ago
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Sold 15 units of "Concrete Blocks" for ₱45,000
+                </p>
+              </div>
+              <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-foreground">
+                    User Login
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Yesterday
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Admin user logged in from IP 192.168.1.100
+                </p>
+              </div>
+              <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-foreground">
+                    Report Generated
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    2 days ago
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Monthly revenue report generated for Q2 2025
+                </p>
+              </div>
+              <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-foreground">
+                    Inventory Restocked
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    3 days ago
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  50 units of "Steel Beams" added to inventory
+                </p>
+              </div>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </main>

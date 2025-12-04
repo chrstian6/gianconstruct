@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, Upload, FileText } from "lucide-react";
+import { Download, Trash2, FileText } from "lucide-react";
 import NotFound from "@/components/admin/NotFound";
 import {
   Table,
@@ -15,11 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import {
-  uploadDocument,
-  deleteDocument,
-  getDocumentDownloadUrl,
-} from "@/action/document";
+import { deleteDocument, getDocumentDownloadUrl } from "@/action/document";
 
 interface Document {
   id: string;
@@ -69,37 +65,7 @@ export default function Documents({
   documents,
   onDocumentsUpdate,
 }: DocumentsProps) {
-  const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const result = await uploadDocument(projectId, formData);
-
-      if (result.success) {
-        toast.success("Document uploaded successfully");
-        onDocumentsUpdate();
-      } else {
-        toast.error(result.error || "Failed to upload document");
-      }
-    } catch (error) {
-      toast.error("Failed to upload document");
-    } finally {
-      setIsUploading(false);
-      // Reset file input
-      event.target.value = "";
-    }
-  };
 
   const handleDeleteDocument = async (documentId: string) => {
     if (!confirm("Are you sure you want to delete this document?")) {
@@ -155,26 +121,6 @@ export default function Documents({
           <div className="text-sm text-gray-600">
             {documents.length}{" "}
             {documents.length === 1 ? "document" : "documents"}
-          </div>
-          <div className="relative">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-3 text-xs rounded-md"
-              disabled={isUploading}
-              onClick={() => document.getElementById("file-upload")?.click()}
-            >
-              <Upload className="h-3 w-3 mr-1" />
-              {isUploading ? "Uploading..." : "Upload"}
-            </Button>
-            <input
-              id="file-upload"
-              type="file"
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              onChange={handleFileUpload}
-              accept="*/*"
-              disabled={isUploading}
-            />
           </div>
         </div>
       </CardHeader>

@@ -23,6 +23,7 @@ import {
   Activity,
   MoreHorizontal,
   Loader2,
+  Target,
 } from "lucide-react";
 import { Project, Task } from "@/types/project";
 import { updateProject } from "@/action/project";
@@ -50,6 +51,7 @@ import ProjectTimeline from "./ProjectTimeline";
 import ProposedDesignTab from "./design/ProposedDesignTab";
 import Documents from "./details/Documents";
 import Gallery from "./details/Gallery";
+import MilestonesTab from "./details/MilestonesTab";
 import AddTimelineUpdateModal from "@/components/admin/projects/AddTimelineUpdateModal";
 import { useModalStore } from "@/lib/stores";
 import NotFound from "@/components/admin/NotFound";
@@ -286,6 +288,28 @@ export default function ProjectDetails({
     setTimelineRefreshKey((prev) => prev + 1);
   };
 
+  const handleAddMilestoneClick = () => {
+    // This will trigger the MilestonesTab's create dialog
+    if (activeTab === "milestones") {
+      const milestoneTab = document.querySelector("[data-milestone-tab]");
+      if (milestoneTab) {
+        const addButton = milestoneTab.querySelector("button");
+        if (addButton) addButton.click();
+      }
+    } else {
+      // If not on milestones tab, switch to it and then trigger the dialog
+      setActiveTab("milestones");
+      // Use a small delay to ensure the tab has switched and component is rendered
+      setTimeout(() => {
+        const milestoneTab = document.querySelector("[data-milestone-tab]");
+        if (milestoneTab) {
+          const addButton = milestoneTab.querySelector("button");
+          if (addButton) addButton.click();
+        }
+      }, 100);
+    }
+  };
+
   // --- Skeletons ---
   const GenericSkeleton = () => (
     <div className="space-y-6 animate-pulse max-w-[1600px] mx-auto p-6">
@@ -367,6 +391,7 @@ export default function ProjectDetails({
 
   const tabs = [
     { id: "timeline", label: "Timeline", icon: Activity },
+    { id: "milestones", label: "Milestones", icon: Target },
     { id: "proposed-design", label: "Design", icon: Layout },
     { id: "client", label: "Client", icon: Users },
     { id: "details", label: "Details", icon: Info },
@@ -411,7 +436,17 @@ export default function ProjectDetails({
                   disabled={isUploading}
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload
+                  Upload Document
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                  onClick={handleAddMilestoneClick}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Milestone
                 </Button>
 
                 <Button
@@ -448,7 +483,10 @@ export default function ProjectDetails({
                         document.getElementById("document-upload")?.click()
                       }
                     >
-                      Upload File
+                      Upload Document
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleAddMilestoneClick}>
+                      Add Milestone
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>
                       Edit Details
@@ -487,7 +525,9 @@ export default function ProjectDetails({
                 </span>
                 <div className="flex items-center gap-1.5 font-mono text-sm text-zinc-700">
                   <Hash className="h-3.5 w-3.5 text-zinc-400" />
-                  {project.project_id.substring(0, 8)}
+                  <span title={project.project_id} className="truncate">
+                    {project.project_id}
+                  </span>
                 </div>
               </div>
 
@@ -588,6 +628,19 @@ export default function ProjectDetails({
                     onUpdate={onUpdate}
                   />
                 </div>
+              )}
+
+              {activeTab === "milestones" && (
+                <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
+                  <CardHeader className="border-b border-zinc-100 pb-4">
+                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                      Project Milestones
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6" data-milestone-tab>
+                    <MilestonesTab projectId={project.project_id} />
+                  </CardContent>
+                </Card>
               )}
 
               {activeTab === "proposed-design" && (

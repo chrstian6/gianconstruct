@@ -111,7 +111,8 @@ export interface NotificationDocument extends Document, BaseNotification {
     | "payments"
     | "documents"
     | "system"
-    | "general";
+    | "general"
+    | "invoices";
   relatedId?: string;
 
   // Role-based access control
@@ -180,6 +181,7 @@ const NotificationSchema = new Schema<NotificationDocument>(
         "documents",
         "system",
         "general",
+        "invoices",
       ],
       index: true,
     },
@@ -202,6 +204,7 @@ const NotificationSchema = new Schema<NotificationDocument>(
         "milestone_reached",
         "system_alert",
         "general_message",
+        "invoice_sent",
       ],
       index: true,
     },
