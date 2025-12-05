@@ -2655,3 +2655,87 @@ export async function deleteTimelineEntryById(
     };
   }
 }
+
+// Update the getCurrentUserActiveProjectsCount function in your project.ts
+export async function getCurrentUserActiveProjectsCount(): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    // Get the current user from session
+    const session = await verifySession();
+    if (!session) {
+      console.log("❌ No session found");
+      return { success: true, count: 0 };
+    }
+
+    console.log("🔍 Session data for debugging:", {
+      userId: session.userId,
+      user_id: session.user_id,
+      username: session.email,
+      email: session.email,
+      role: session.role,
+    });
+
+    // Try to find the correct user ID format
+    let actualUserId = session.userId;
+
+    // If the session userId looks like a MongoDB ObjectId (24 hex chars), try to find the actual user_id
+    if (session.userId && /^[0-9a-fA-F]{24}$/.test(session.userId)) {
+      console.log(
+        "🔍 Session userId looks like MongoDB ObjectId, looking up actual user..."
+      );
+
+      const user = await User.findOne({
+        _id: new mongoose.Types.ObjectId(session.userId),
+      });
+      if (user && user.user_id) {
+        actualUserId = user.user_id;
+        console.log(
+          "✅ Found actual user_id from User collection:",
+          actualUserId
+        );
+      } else {
+        console.log(
+          "❌ Could not find user with that ObjectId, using session.userId"
+        );
+      }
+    }
+
+    // Also try user_id from session directly
+    if (!actualUserId && session.user_id) {
+      actualUserId = session.user_id;
+      console.log("✅ Using user_id from session:", actualUserId);
+    }
+
+    // Also try username as fallback
+    if (!actualUserId && session.email) {
+      actualUserId = session.email;
+      console.log("✅ Using username from session as fallback:", actualUserId);
+    }
+
+    if (!actualUserId) {
+      console.log("❌ No user ID could be determined from session");
+      return { success: true, count: 0 };
+    }
+
+    console.log("🔍 Final user ID to search for projects:", actualUserId);
+
+    // Count active projects with this user ID
+    const count = await Project.countDocuments({
+      userId: actualUserId,
+      status: "active",
+    });
+
+    console.log("✅ Active projects count for user", actualUserId, ":", count);
+    return { success: true, count };
+  } catch (error) {
+    console.error("❌ Error counting active projects for current user:", error);
+    return {
+      success: false,
+      error: "Failed to count active projects",
+    };
+  }
+}
