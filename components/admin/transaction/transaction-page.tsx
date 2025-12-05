@@ -21,6 +21,8 @@ import {
   CreditCard,
   FileText,
   Filter,
+  TrendingUp,
+  Layers,
 } from "lucide-react";
 import { InventoryPOS } from "@/components/admin/transaction/inventory-pos";
 import { ReceiptHistory } from "@/components/admin/transaction/receipt-history";
@@ -46,6 +48,9 @@ import { Progress } from "@/components/ui/progress";
 import { AreaChart } from "@/components/ui/area-chart";
 import { format } from "date-fns";
 import { generateReport, type ReportFilters } from "@/action/reports";
+import { TransactionHistory } from "@/components/admin/transaction/transaction-history";
+import { ProjectTransactions } from "@/components/admin/transaction/project-transactions";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface PaymentData {
   id: string;
@@ -102,12 +107,17 @@ interface TransactionItem {
   status: string;
 }
 
-const TABS = ["Overview", "Inventory PoS", "Transactions", "Receipt History"];
+const TABS = [
+  "Overview",
+  "Inventory PoS",
+  "Project Transactions",
+  "Receipt History",
+];
 
 const TAB_TO_SLUG: Record<string, string> = {
   Overview: "overview",
   "Inventory PoS": "inventory-pos",
-  Transactions: "transactions",
+  "Project Transactions": "project-transactions",
   "Receipt History": "receipt-history",
 };
 
@@ -267,10 +277,7 @@ export default function TransactionPage() {
 
       if (activeTab === "Overview") {
         await loadOverviewData();
-      } else if (
-        activeTab === "Receipt History" ||
-        activeTab === "Transactions"
-      ) {
+      } else if (activeTab === "Receipt History") {
         await loadReceipts();
       }
     };
@@ -516,11 +523,14 @@ export default function TransactionPage() {
         color: "text-green-600",
       },
       {
-        title: "Transaction Count",
-        value: (successfulReceipts + voidedReceipts).toString(),
-        change: { value: 8, isPositive: true },
-        icon: CreditCard,
-        description: "Total transactions processed",
+        title: "Project Revenue",
+        value: formatCurrency(metrics.projectRevenue || 0),
+        change: calculateChange(
+          metrics.projectRevenue || 0,
+          prevMetrics.projectRevenue || 0
+        ),
+        icon: TrendingUp,
+        description: "Revenue from project payments",
         color: "text-purple-600",
       },
       {
@@ -1027,13 +1037,13 @@ export default function TransactionPage() {
                       New Sale
                     </Button>
                     <Button
-                      onClick={() => handleTabChange("Receipt History")}
+                      onClick={() => handleTabChange("Project Transactions")}
                       variant="outline"
                       size="sm"
                       className="text-xs"
                     >
-                      <FileText className="h-3 w-3 mr-1" />
-                      View Receipts
+                      <Layers className="h-3 w-3 mr-1" />
+                      View Projects
                     </Button>
                   </div>
                 </div>
@@ -1045,15 +1055,25 @@ export default function TransactionPage() {
     );
   };
 
+  const renderProjectTransactionsContent = () => {
+    return (
+      <div className="h-full overflow-y-auto p-6">
+        <ProjectTransactions />
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "Inventory PoS":
         return (
           <InventoryPOS
-            key={activeTab} // Changed from inventoryKey to activeTab
+            key={activeTab}
             onPaymentProcess={handleInventoryPOSPayment}
           />
         );
+      case "Project Transactions":
+        return renderProjectTransactionsContent();
       case "Receipt History":
         return (
           <div className="h-full overflow-y-auto p-6">
@@ -1089,159 +1109,6 @@ export default function TransactionPage() {
                 <p className="text-gray-600 mt-2">Loading receipts...</p>
               </div>
             )}
-          </div>
-        );
-      case "Transactions":
-        return (
-          <div className="h-full overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 font-geist">
-                  All Transactions
-                </h2>
-                <p className="text-gray-600 mt-1 text-sm font-geist">
-                  View and manage all transaction records
-                </p>
-              </div>
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filter
-              </Button>
-            </div>
-
-            <Card className="border-border bg-card mb-6">
-              <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Total Transactions
-                    </p>
-                    <p className="text-2xl font-bold text-foreground font-geist">
-                      {receipts.length}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Total Revenue
-                    </p>
-                    <p className="text-2xl font-bold text-foreground font-geist">
-                      {formatCurrency(
-                        receipts
-                          .filter((r) => !isVoided(r))
-                          .reduce(
-                            (sum, receipt) => sum + receipt.totalAmount,
-                            0
-                          )
-                      )}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Successful</p>
-                    <p className="text-2xl font-bold text-green-600 font-geist">
-                      {receipts.filter((r) => !isVoided(r)).length}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Voided</p>
-                    <p className="text-2xl font-bold text-red-600 font-geist">
-                      {receipts.filter((r) => isVoided(r)).length}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-foreground font-geist">
-                  Transaction List
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Client</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Payment Method</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {receipts.slice(0, 10).map((receipt) => (
-                      <TableRow key={receipt.id}>
-                        <TableCell className="font-medium">
-                          {receipt.referenceNumber}
-                        </TableCell>
-                        <TableCell>{receipt.clientInfo.clientName}</TableCell>
-                        <TableCell className="font-medium">
-                          {formatCurrencyDecimal(receipt.totalAmount)}
-                        </TableCell>
-                        <TableCell>
-                          {format(
-                            new Date(receipt.transactionDate),
-                            "MMM dd, yyyy"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {receipt.paymentMethod}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              isVoided(receipt) ? "destructive" : "default"
-                            }
-                          >
-                            {isVoided(receipt) ? "Voided" : "Completed"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handlePrintReceipt(receipt)}
-                            >
-                              Print
-                            </Button>
-                            {!isVoided(receipt) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  const reason = prompt(
-                                    "Enter reason for void:"
-                                  );
-                                  if (reason) {
-                                    const password = prompt(
-                                      "Enter admin password:"
-                                    );
-                                    if (password) {
-                                      handleVoidReceipt(
-                                        receipt.id,
-                                        reason,
-                                        password
-                                      );
-                                    }
-                                  }
-                                }}
-                              >
-                                Void
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
           </div>
         );
       case "Overview":
