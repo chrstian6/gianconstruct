@@ -26,6 +26,7 @@ import {
 import { AreaChart } from "@/components/ui/area-chart";
 import { format } from "date-fns";
 import { generateReport, type ReportFilters } from "@/action/reports";
+import { OverviewDashboardSkeleton } from "@/components/admin/admindashboard/skeleton/OverviewDashboardSkeleton";
 
 // Monochromatic gradient colors
 const MONOCHROMATIC_GRADIENTS = [
@@ -276,12 +277,9 @@ export function OverviewDashboard({
     }));
   };
 
+  // Show skeleton loading state
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <OverviewDashboardSkeleton />;
   }
 
   const metrics = getMetrics();
