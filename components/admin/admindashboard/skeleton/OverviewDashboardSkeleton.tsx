@@ -68,7 +68,8 @@ export function OverviewDashboardSkeleton() {
                     <Skeleton
                       className="w-full"
                       style={{
-                        height: `${30 + Math.random() * 70}%`,
+                        // Deterministic heights based on index
+                        height: `${30 + (index % 5) * 15}%`,
                         backgroundColor: "hsl(0, 0%, 80%)",
                       }}
                     />

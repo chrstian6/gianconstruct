@@ -36,6 +36,20 @@ interface ICounterDocument {
   sequence_value: number;
 }
 
+// Add this interface near your other interfaces in action/project.ts
+export interface CompletedProject {
+  project_id: string;
+  name: string;
+  projectImages: Array<{
+    url: string;
+    title: string;
+    description?: string;
+    uploadedAt: string;
+  }>;
+  startDate: string;
+  endDate: string;
+}
+
 const counterSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   sequence_value: { type: Number, default: 0 },
@@ -2652,6 +2666,149 @@ export async function deleteTimelineEntryById(
     return {
       success: false,
       error: "Failed to delete timeline entry",
+    };
+  }
+}
+
+// Update the getCurrentUserActiveProjectsCount function in your project.ts
+export async function getCurrentUserActiveProjectsCount(): Promise<{
+  success: boolean;
+  count?: number;
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    // Get the current user from session
+    const session = await verifySession();
+    if (!session) {
+      console.log("❌ No session found");
+      return { success: true, count: 0 };
+    }
+
+    console.log("🔍 Session data for debugging:", {
+      userId: session.userId,
+      user_id: session.user_id,
+      username: session.email,
+      email: session.email,
+      role: session.role,
+    });
+
+    // Try to find the correct user ID format
+    let actualUserId = session.userId;
+
+    // If the session userId looks like a MongoDB ObjectId (24 hex chars), try to find the actual user_id
+    if (session.userId && /^[0-9a-fA-F]{24}$/.test(session.userId)) {
+      console.log(
+        "🔍 Session userId looks like MongoDB ObjectId, looking up actual user..."
+      );
+
+      const user = await User.findOne({
+        _id: new mongoose.Types.ObjectId(session.userId),
+      });
+      if (user && user.user_id) {
+        actualUserId = user.user_id;
+        console.log(
+          "✅ Found actual user_id from User collection:",
+          actualUserId
+        );
+      } else {
+        console.log(
+          "❌ Could not find user with that ObjectId, using session.userId"
+        );
+      }
+    }
+
+    // Also try user_id from session directly
+    if (!actualUserId && session.user_id) {
+      actualUserId = session.user_id;
+      console.log("✅ Using user_id from session:", actualUserId);
+    }
+
+    // Also try username as fallback
+    if (!actualUserId && session.email) {
+      actualUserId = session.email;
+      console.log("✅ Using username from session as fallback:", actualUserId);
+    }
+
+    if (!actualUserId) {
+      console.log("❌ No user ID could be determined from session");
+      return { success: true, count: 0 };
+    }
+
+    console.log("🔍 Final user ID to search for projects:", actualUserId);
+
+    // Count active projects with this user ID
+    const count = await Project.countDocuments({
+      userId: actualUserId,
+      status: "active",
+    });
+
+    console.log("✅ Active projects count for user", actualUserId, ":", count);
+    return { success: true, count };
+  } catch (error) {
+    console.error("❌ Error counting active projects for current user:", error);
+    return {
+      success: false,
+      error: "Failed to count active projects",
+    };
+  }
+}
+
+// Add this function to your existing action/project.ts file
+// Add this function to your existing action/project.ts file
+export async function getCompletedProjects(): Promise<{
+  success: boolean;
+  data?: CompletedProject[];
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    console.log("📋 Fetching completed projects...");
+
+    // Fetch only completed projects with required fields
+    const completedProjects = await Project.find(
+      { status: "completed" },
+      "project_id name projectImages startDate endDate"
+    )
+      .sort({ endDate: -1 }) // Most recently completed first
+      .limit(12) // Limit to 12 projects
+      .lean(); // Use lean() to get plain JavaScript objects
+
+    console.log(`✅ Found ${completedProjects.length} completed projects`);
+
+    // Format the response data - ensure all fields are serializable
+    const formattedProjects = completedProjects.map((project: any) => {
+      // Ensure projectImages are properly serialized
+      const serializedProjectImages = (project.projectImages || []).map(
+        (image: any) => ({
+          url: image.url || "",
+          title: image.title || "",
+          description: image.description || "",
+          uploadedAt:
+            image.uploadedAt?.toISOString() || new Date().toISOString(),
+        })
+      );
+
+      return {
+        project_id: project.project_id || "",
+        name: project.name || "",
+        projectImages: serializedProjectImages,
+        startDate: project.startDate?.toISOString() || new Date().toISOString(),
+        endDate: project.endDate?.toISOString() || new Date().toISOString(),
+      };
+    });
+
+    console.log("✅ Formatted projects for serialization");
+
+    return {
+      success: true,
+      data: formattedProjects,
+    };
+  } catch (error) {
+    console.error("❌ Error fetching completed projects:", error);
+    return {
+      success: false,
+      error: "Failed to fetch completed projects",
     };
   }
 }

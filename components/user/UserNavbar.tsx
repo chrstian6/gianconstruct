@@ -1,4 +1,4 @@
-// components/user/UserNavbar.tsx - FIXED NOTIFICATION FETCHING
+// components/user/UserNavbar.tsx - REDESIGNED NOTIFICATION UI
 "use client";
 import React from "react";
 import { useState, useEffect, useCallback } from "react";
@@ -418,64 +418,43 @@ export function UserNavbar({
     return items;
   };
 
-  // Get notification icon based on feature and type
+  // Get notification icon based on feature and type (monochromatic - orange theme)
   const getNotificationIcon = (notification: Notification) => {
+    const iconClass = "h-4 w-4";
+
+    // All icons use orange color family for consistency
     switch (notification.feature) {
       case "appointments":
-        switch (notification.type) {
-          case "appointment_confirmed":
-            return <Calendar className="h-4 w-4 text-green-600" />;
-          case "appointment_cancelled":
-            return <Calendar className="h-4 w-4 text-red-600" />;
-          case "appointment_rescheduled":
-            return <Calendar className="h-4 w-4 text-amber-600" />;
-          case "appointment_completed":
-            return <Calendar className="h-4 w-4 text-blue-600" />;
-          default:
-            return <Calendar className="h-4 w-4 text-gray-600" />;
-        }
+        return <Calendar className={cn(iconClass, "text-amber-600")} />;
       case "projects":
-        switch (notification.type) {
-          case "project_created":
-            return <FileText className="h-4 w-4 text-blue-600" />;
-          case "project_confirmed":
-            return <FileText className="h-4 w-4 text-green-600" />;
-          case "project_completed":
-            return <FileText className="h-4 w-4 text-purple-600" />;
-          case "project_cancelled":
-            return <FileText className="h-4 w-4 text-red-600" />;
-          case "milestone_reached":
-            return <FileText className="h-4 w-4 text-amber-600" />;
-          default:
-            return <FileText className="h-4 w-4 text-blue-600" />;
-        }
+        return <FileText className={cn(iconClass, "text-amber-600")} />;
       case "payments":
-        return <DollarSign className="h-4 w-4 text-green-600" />;
+        return <DollarSign className={cn(iconClass, "text-amber-600")} />;
       case "documents":
-        return <FileText className="h-4 w-4 text-amber-600" />;
+        return <FileText className={cn(iconClass, "text-amber-600")} />;
       case "system":
-        return <AlertTriangle className="h-4 w-4 text-red-600" />;
+        return <AlertTriangle className={cn(iconClass, "text-amber-600")} />;
       case "general":
-        return <MessageSquare className="h-4 w-4 text-gray-600" />;
+        return <MessageSquare className={cn(iconClass, "text-amber-600")} />;
       default:
-        return <Bell className="h-4 w-4 text-gray-600" />;
+        return <Bell className={cn(iconClass, "text-amber-600")} />;
     }
   };
 
-  // Get meeting type icon
+  // Get meeting type icon (monochromatic)
   const getMeetingTypeIcon = (meetingType?: string) => {
-    if (!meetingType)
-      return <Phone className="h-3.5 w-3.5 text-muted-foreground" />;
+    if (!meetingType) return null;
 
+    const iconClass = "h-3 w-3 text-gray-500";
     switch (meetingType) {
       case "phone":
-        return <Phone className="h-3.5 w-3.5 text-muted-foreground" />;
+        return <Phone className={iconClass} />;
       case "video":
-        return <Video className="h-3.5 w-3.5 text-muted-foreground" />;
+        return <Video className={iconClass} />;
       case "onsite":
-        return <MapPin className="h-3.5 w-3.5 text-muted-foreground" />;
+        return <MapPin className={iconClass} />;
       default:
-        return <Phone className="h-3.5 w-3.5 text-muted-foreground" />;
+        return <Phone className={iconClass} />;
     }
   };
 
@@ -558,168 +537,187 @@ export function UserNavbar({
             <Button
               variant="ghost"
               size="sm"
-              className="relative p-2"
+              className="relative p-2 hover:bg-transparent"
               disabled={backgroundLoading}
             >
-              <Bell className="h-5 w-5" />
-              {userId && unreadCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                >
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Badge>
-              )}
-              {backgroundLoading && (
-                <div className="absolute -bottom-1 -right-1">
-                  <div className="h-2 w-2 bg-blue-500 rounded-full animate-ping" />
-                </div>
-              )}
+              {/* Bell Icon with Orange Theme */}
+              <div className="relative">
+                <Bell className="h-5 w-5 text-gray-700 hover:text-amber-600 transition-colors" />
+
+                {/* Unread Count Badge - Orange Theme */}
+                {userId && unreadCount > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 w-5 min-w-0 p-0 flex items-center justify-center rounded-full bg-amber-500 border-2 border-background text-[10px] font-bold text-white shadow-sm">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Badge>
+                )}
+
+                {/* Background Loading Indicator */}
+                {backgroundLoading && (
+                  <div className="absolute -bottom-1 -right-1">
+                    <div className="h-2 w-2 bg-amber-500 rounded-full animate-ping" />
+                  </div>
+                )}
+              </div>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="w-96 max-h-[80vh] overflow-hidden"
+            className="w-96 max-h-[80vh] overflow-hidden rounded-none border border-gray-200 shadow-lg"
           >
-            <DropdownMenuLabel className="flex items-center justify-between p-4">
-              <div>
-                <h3 className="font-semibold text-base">My Notifications</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {userId
-                    ? `${notifications.length} total • ${unreadCount} unread`
-                    : "Please log in to view notifications"}
-                  {backgroundLoading && " • Refreshing..."}
-                </p>
-              </div>
-              {userId && unreadCount > 0 && (
-                <div className="flex items-center gap-2">
+            {/* Header - Clean Minimalist */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-base text-gray-900">
+                    Notifications
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {userId
+                      ? `${notifications.length} total • ${unreadCount} unread`
+                      : "Please log in to view notifications"}
+                    {backgroundLoading && " • Refreshing..."}
+                  </p>
+                </div>
+                {userId && unreadCount > 0 && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleMarkAllAsRead}
-                    className="h-7 text-xs"
+                    className="h-7 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                     disabled={loading}
                   >
-                    <CheckCheck className="h-3 w-3 mr-1" />
-                    Mark all
+                    <CheckCheck className="h-3 w-3 mr-1.5" />
+                    Mark all as read
                   </Button>
-                </div>
-              )}
-            </DropdownMenuLabel>
+                )}
+              </div>
+            </div>
 
-            <DropdownMenuSeparator />
-
+            {/* Notifications List - Clean Facebook-like Design */}
             <div className="max-h-96 overflow-y-auto">
               {!userId ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center">
-                  <Bell className="h-12 w-12 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                  <Bell className="h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-sm font-medium text-gray-600 mb-1">
                     Please Log In
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-500">
                     Notifications are available for registered users with active
                     accounts.
                   </p>
                 </div>
               ) : loading ? (
                 <div className="flex flex-col items-center justify-center p-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                  <p className="text-sm text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin text-amber-500 mb-2" />
+                  <p className="text-sm text-gray-500">
                     Loading your notifications...
                   </p>
                 </div>
               ) : notifications.length > 0 ? (
-                <DropdownMenuGroup>
+                <div className="divide-y divide-gray-100">
                   {notifications.map((notification) => (
                     <DropdownMenuItem
                       key={notification._id}
                       className={cn(
-                        "p-4 cursor-pointer transition-colors focus:bg-accent relative border-l-2",
-                        !notification.isRead
-                          ? "border-l-blue-500 bg-blue-50/50"
-                          : "border-l-transparent"
+                        "p-4 cursor-pointer transition-colors focus:bg-gray-50 focus:text-gray-900",
+                        !notification.isRead && "bg-gray-50"
                       )}
                       onClick={() => handleNotificationItemClick(notification)}
                       disabled={markingAsRead === notification._id}
                     >
                       <div className="flex items-start gap-3 w-full">
-                        {/* Icon */}
-                        <div className="flex-shrink-0 mt-0.5">
+                        {/* Icon Container - Square, No Border Radius */}
+                        <div
+                          className={cn(
+                            "flex-shrink-0 w-10 h-10 flex items-center justify-center",
+                            !notification.isRead
+                              ? "bg-amber-50 border border-amber-100"
+                              : "bg-gray-50 border border-gray-100"
+                          )}
+                        >
                           {getNotificationIcon(notification)}
                         </div>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 space-y-2">
-                          {/* Header */}
-                          <div className="flex items-start justify-between gap-2">
+                        {/* Content - Clean Minimalist */}
+                        <div className="flex-1 min-w-0">
+                          {/* Title Row */}
+                          <div className="flex items-start justify-between gap-2 mb-1">
                             <span
                               className={cn(
                                 "text-sm font-semibold line-clamp-1",
                                 !notification.isRead
-                                  ? "text-foreground"
-                                  : "text-muted-foreground"
+                                  ? "text-gray-900"
+                                  : "text-gray-600"
                               )}
                             >
                               {notification.title}
                             </span>
-                            {markingAsRead === notification._id && (
-                              <Loader2 className="h-3 w-3 animate-spin text-primary flex-shrink-0" />
-                            )}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {markingAsRead === notification._id && (
+                                <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
+                              )}
+                              <span className="text-xs text-gray-400 flex items-center gap-0.5">
+                                <Clock className="h-3 w-3" />
+                                {notification.timeAgo}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Message */}
                           <p
                             className={cn(
-                              "text-sm leading-relaxed line-clamp-2",
+                              "text-sm leading-relaxed line-clamp-2 mb-2",
                               !notification.isRead
-                                ? "text-foreground"
-                                : "text-muted-foreground"
+                                ? "text-gray-700"
+                                : "text-gray-500"
                             )}
                           >
                             {notification.message}
                           </p>
 
-                          {/* Metadata */}
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                              {notification.appointmentMetadata
-                                ?.meetingType && (
-                                <div className="flex items-center gap-1">
-                                  {getMeetingTypeIcon(
-                                    notification.appointmentMetadata.meetingType
-                                  )}
-                                  <span className="capitalize">
-                                    {
-                                      notification.appointmentMetadata
-                                        .meetingType
-                                    }
-                                  </span>
-                                </div>
-                              )}
-                              {notification.projectMetadata?.projectName && (
-                                <Badge variant="outline" className="text-xs">
-                                  {notification.projectMetadata.projectName}
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <Clock className="h-3 w-3" />
-                              <span>{notification.timeAgo}</span>
-                            </div>
+                          {/* Metadata Tags - Minimalist */}
+                          <div className="flex items-center gap-2">
+                            {notification.appointmentMetadata?.meetingType && (
+                              <div className="flex items-center gap-1 text-xs text-gray-500">
+                                {getMeetingTypeIcon(
+                                  notification.appointmentMetadata.meetingType
+                                )}
+                                <span className="capitalize">
+                                  {notification.appointmentMetadata.meetingType}
+                                </span>
+                              </div>
+                            )}
+                            {notification.projectMetadata?.projectName && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600">
+                                {notification.projectMetadata.projectName}
+                              </span>
+                            )}
+                            {notification.paymentMetadata?.amount && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600">
+                                ₱
+                                {notification.paymentMetadata.amount.toLocaleString()}
+                              </span>
+                            )}
                           </div>
                         </div>
+
+                        {/* Unread Indicator - Minimal Dot */}
+                        {!notification.isRead && (
+                          <div className="flex-shrink-0 mt-1.5">
+                            <div className="w-2 h-2 rounded-full bg-amber-500" />
+                          </div>
+                        )}
                       </div>
                     </DropdownMenuItem>
                   ))}
-                </DropdownMenuGroup>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center p-8 text-center">
-                  <Bell className="h-12 w-12 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                  <Bell className="h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-sm font-medium text-gray-600 mb-1">
                     No notifications yet
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-500">
                     You're all caught up! New updates about your appointments
                     and projects will appear here.
                   </p>
@@ -727,24 +725,24 @@ export function UserNavbar({
               )}
             </div>
 
+            {/* Footer - Refresh Button */}
             {userId && notifications.length > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <div className="p-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-center text-xs"
-                    onClick={() => fetchNotifications(true)}
-                    disabled={loading || backgroundLoading}
-                  >
-                    {loading || backgroundLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin mr-2" />
-                    ) : null}
-                    Refresh Notifications
-                  </Button>
-                </div>
-              </>
+              <div className="border-t border-gray-100 p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  onClick={() => fetchNotifications(true)}
+                  disabled={loading || backgroundLoading}
+                >
+                  {loading || backgroundLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                  ) : (
+                    <Bell className="h-3.5 w-3.5 mr-2" />
+                  )}
+                  Refresh Notifications
+                </Button>
+              </div>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -754,7 +752,7 @@ export function UserNavbar({
           variant="outline"
           size="sm"
           onClick={onAppointmentsClick}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
         >
           <Calendar className="h-4 w-4" />
           <span>Appointments</span>

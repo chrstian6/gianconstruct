@@ -44,13 +44,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-
-// Import the TransactionHistory component
 import { TransactionHistory } from "@/components/admin/transaction/transaction-history";
-// Import the PaymentDialog component
 import { PaymentDialog } from "@/components/admin/transaction/payment-dialog";
-// Import the ManualPaymentDialog component
 import { ManualPaymentDialog } from "@/components/admin/transaction/manual-payment-dialog";
+import {
+  ProjectTransactionsSkeleton,
+  ProjectDetailsSkeleton,
+  LoadingSpinner,
+} from "@/components/admin/transaction/skeleton/project-transactions-skeleton";
 
 // Define local interface that matches the server response
 interface ProjectTransaction {
@@ -109,6 +110,66 @@ interface ProjectTransactionsProps {
   onRefresh?: () => void;
 }
 
+// Cache implementation
+class ProjectTransactionsCache {
+  private static instance: ProjectTransactionsCache;
+  private cache: Map<string, any> = new Map();
+  private cacheTimestamps: Map<string, number> = new Map();
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  private constructor() {}
+
+  static getInstance(): ProjectTransactionsCache {
+    if (!ProjectTransactionsCache.instance) {
+      ProjectTransactionsCache.instance = new ProjectTransactionsCache();
+    }
+    return ProjectTransactionsCache.instance;
+  }
+
+  set(key: string, data: any) {
+    this.cache.set(key, data);
+    this.cacheTimestamps.set(key, Date.now());
+  }
+
+  get(key: string): any | null {
+    const timestamp = this.cacheTimestamps.get(key);
+    if (!timestamp || Date.now() - timestamp > this.CACHE_TTL) {
+      this.cache.delete(key);
+      this.cacheTimestamps.delete(key);
+      return null;
+    }
+    return this.cache.get(key) || null;
+  }
+
+  has(key: string): boolean {
+    const timestamp = this.cacheTimestamps.get(key);
+    if (!timestamp || Date.now() - timestamp > this.CACHE_TTL) {
+      this.cache.delete(key);
+      this.cacheTimestamps.delete(key);
+      return false;
+    }
+    return this.cache.has(key);
+  }
+
+  delete(key: string) {
+    this.cache.delete(key);
+    this.cacheTimestamps.delete(key);
+  }
+
+  clear() {
+    this.cache.clear();
+    this.cacheTimestamps.clear();
+  }
+
+  // Specific cache keys
+  static getProjectsKey = "confirmed_projects";
+  static getProjectTransactionsKey = (projectId: string) =>
+    `project_transactions_${projectId}`;
+  static getProjectMilestonesKey = (projectId: string) =>
+    `project_milestones_${projectId}`;
+  static getProjectProgressKey = "project_progress";
+}
+
 export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
   transactions: initialTransactions,
   isLoading: initialIsLoading = false,
@@ -127,6 +188,7 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
   const [projectProgress, setProjectProgress] = useState<
     Record<string, number>
   >({});
+  const [cache] = useState(() => ProjectTransactionsCache.getInstance());
 
   // Load data if not provided via props
   useEffect(() => {
@@ -134,19 +196,60 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
       loadConfirmedProjects();
     } else {
       setTransactions(initialTransactions);
+      // Try to load cached progress
+      const cachedProgress = cache.get(
+        ProjectTransactionsCache.getProjectProgressKey
+      );
+      if (cachedProgress) {
+        setProjectProgress(cachedProgress);
+      } else {
+        // Calculate initial progress
+        const initialProgress = initialTransactions.reduce(
+          (acc, project) => {
+            acc[project.project_id] = project.totalPaid
+              ? Math.round((project.totalPaid / project.totalValue) * 100)
+              : 0;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
+        setProjectProgress(initialProgress);
+      }
     }
   }, [initialTransactions]);
 
-  const loadConfirmedProjects = async () => {
+  const loadConfirmedProjects = async (forceRefresh = false) => {
     setIsLoading(true);
     setError(null);
     setSelectedProject(null);
-    setProjectProgress({});
+
+    // Check cache first
+    if (!forceRefresh && cache.has(ProjectTransactionsCache.getProjectsKey)) {
+      const cachedData = cache.get(ProjectTransactionsCache.getProjectsKey);
+      if (cachedData) {
+        setTransactions(cachedData);
+        setIsLoading(false);
+
+        // Try to load cached progress
+        const cachedProgress = cache.get(
+          ProjectTransactionsCache.getProjectProgressKey
+        );
+        if (cachedProgress) {
+          setProjectProgress(cachedProgress);
+        } else {
+          await loadAllProjectMilestones(cachedData);
+        }
+        return;
+      }
+    }
 
     try {
       const result = await getConfirmedProjects();
 
       if (result.success && result.data) {
+        // Cache the data
+        cache.set(ProjectTransactionsCache.getProjectsKey, result.data);
+
         setTransactions(result.data);
 
         // Load milestones for all projects to calculate progress
@@ -168,44 +271,100 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
 
   const loadAllProjectMilestones = async (projects: ProjectTransaction[]) => {
     const progressMap: Record<string, number> = {};
+    const promises: Promise<void>[] = [];
 
     for (const project of projects) {
-      try {
-        const result = await getProjectMilestones(project.project_id);
-        if (
-          result.success &&
-          result.milestones &&
-          result.milestones.length > 0
-        ) {
-          const totalProgress = result.milestones.reduce((sum, milestone) => {
-            return sum + milestone.progress;
-          }, 0);
-          progressMap[project.project_id] = Math.round(
-            totalProgress / result.milestones.length
+      const cacheKey = ProjectTransactionsCache.getProjectMilestonesKey(
+        project.project_id
+      );
+
+      // Check cache for milestones
+      if (cache.has(cacheKey)) {
+        const cachedMilestones = cache.get(cacheKey);
+        if (cachedMilestones && cachedMilestones.length > 0) {
+          const totalProgress = cachedMilestones.reduce(
+            (sum: number, milestone: Milestone) => {
+              return sum + milestone.progress;
+            },
+            0
           );
-        } else {
-          // If no milestones, show payment progress
-          progressMap[project.project_id] = project.totalPaid
-            ? Math.round((project.totalPaid / project.totalValue) * 100)
-            : 0;
+          progressMap[project.project_id] = Math.round(
+            totalProgress / cachedMilestones.length
+          );
+          continue;
         }
-      } catch (error) {
-        console.error(
-          `Error loading milestones for project ${project.project_id}:`,
-          error
-        );
-        progressMap[project.project_id] = 0;
       }
+
+      // If no cache, fetch from API
+      promises.push(
+        (async () => {
+          try {
+            const result = await getProjectMilestones(project.project_id);
+            if (
+              result.success &&
+              result.milestones &&
+              result.milestones.length > 0
+            ) {
+              // Cache the milestones
+              cache.set(cacheKey, result.milestones);
+
+              const totalProgress = result.milestones.reduce(
+                (sum, milestone) => {
+                  return sum + milestone.progress;
+                },
+                0
+              );
+              progressMap[project.project_id] = Math.round(
+                totalProgress / result.milestones.length
+              );
+            } else {
+              // If no milestones, show payment progress
+              progressMap[project.project_id] = project.totalPaid
+                ? Math.round((project.totalPaid / project.totalValue) * 100)
+                : 0;
+            }
+          } catch (error) {
+            console.error(
+              `Error loading milestones for project ${project.project_id}:`,
+              error
+            );
+            progressMap[project.project_id] = 0;
+          }
+        })()
+      );
     }
+
+    // Wait for all promises to complete
+    await Promise.all(promises);
+
+    // Cache the progress map
+    cache.set(ProjectTransactionsCache.getProjectProgressKey, progressMap);
 
     setProjectProgress(progressMap);
   };
 
-  const loadProjectMilestones = async (projectId: string) => {
+  const loadProjectMilestones = async (
+    projectId: string,
+    forceRefresh = false
+  ) => {
+    const cacheKey =
+      ProjectTransactionsCache.getProjectMilestonesKey(projectId);
+
+    // Check cache first
+    if (!forceRefresh && cache.has(cacheKey)) {
+      const cachedMilestones = cache.get(cacheKey);
+      if (cachedMilestones) {
+        setMilestones(cachedMilestones);
+        return;
+      }
+    }
+
     setIsLoadingMilestones(true);
     try {
       const result = await getProjectMilestones(projectId);
       if (result.success && result.milestones) {
+        // Cache the milestones
+        cache.set(cacheKey, result.milestones);
         setMilestones(result.milestones);
       }
     } catch (error) {
@@ -215,7 +374,28 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
     }
   };
 
-  const loadProjectTransactions = async (projectId: string) => {
+  const loadProjectTransactions = async (
+    projectId: string,
+    forceRefresh = false
+  ) => {
+    const cacheKey =
+      ProjectTransactionsCache.getProjectTransactionsKey(projectId);
+
+    // Check cache first
+    if (!forceRefresh && cache.has(cacheKey)) {
+      const cachedData = cache.get(cacheKey);
+      if (cachedData) {
+        setSelectedProject(cachedData);
+        toast.success(
+          `Loaded ${cachedData.transactions.length} transactions from cache`
+        );
+
+        // Load cached milestones
+        await loadProjectMilestones(projectId, false);
+        return;
+      }
+    }
+
     setIsLoadingTransactions(true);
     setMilestones([]);
 
@@ -223,11 +403,14 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
       const result = await getProjectTransactions(projectId);
 
       if (result.success && result.data) {
+        // Cache the data
+        cache.set(cacheKey, result.data);
+
         setSelectedProject(result.data);
         toast.success(`Loaded ${result.data.transactions.length} transactions`);
 
         // Load milestones for this project
-        await loadProjectMilestones(projectId);
+        await loadProjectMilestones(projectId, false);
       } else {
         toast.error(result.error || "Failed to load project transactions");
       }
@@ -239,19 +422,55 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
     }
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (forceRefresh = false) => {
     if (selectedProject) {
-      await loadProjectTransactions(selectedProject.project.project_id);
+      await loadProjectTransactions(
+        selectedProject.project.project_id,
+        forceRefresh
+      );
     } else {
-      await loadConfirmedProjects();
+      await loadConfirmedProjects(forceRefresh);
     }
     if (onRefresh) {
       onRefresh();
     }
   };
 
+  const handleForceRefresh = async () => {
+    if (selectedProject) {
+      // Clear cache for this project
+      cache.delete(
+        ProjectTransactionsCache.getProjectTransactionsKey(
+          selectedProject.project.project_id
+        )
+      );
+      cache.delete(
+        ProjectTransactionsCache.getProjectMilestonesKey(
+          selectedProject.project.project_id
+        )
+      );
+    } else {
+      // Clear all project caches
+      cache.delete(ProjectTransactionsCache.getProjectsKey);
+      cache.delete(ProjectTransactionsCache.getProjectProgressKey);
+
+      // Also clear individual project caches
+      transactions.forEach((project) => {
+        cache.delete(
+          ProjectTransactionsCache.getProjectTransactionsKey(project.project_id)
+        );
+        cache.delete(
+          ProjectTransactionsCache.getProjectMilestonesKey(project.project_id)
+        );
+      });
+    }
+
+    await handleRefresh(true);
+    toast.success("Cache cleared and data refreshed");
+  };
+
   const handleProjectClick = async (project: ProjectTransaction) => {
-    await loadProjectTransactions(project.project_id);
+    await loadProjectTransactions(project.project_id, false);
   };
 
   const handleBackToProjects = () => {
@@ -426,38 +645,14 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
 
   const stats = calculateStats();
 
-  if (isLoading) {
-    return (
-      <div className="h-full overflow-y-auto p-6">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-gray-900 font-geist">
-              Project Transactions
-            </h2>
-            <p className="text-gray-600 mt-1 text-sm font-geist">
-              View all confirmed projects with their transaction details
-            </p>
-          </div>
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            disabled={isLoading}
-            className="flex items-center gap-2 border-gray-300"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-4 text-gray-600">
-              Loading project transactions...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+  // Show skeleton loading for initial load
+  if (isLoading && !initialTransactions) {
+    return <ProjectTransactionsSkeleton />;
+  }
+
+  // Show skeleton for loading project details
+  if (selectedProject && isLoadingTransactions) {
+    return <ProjectDetailsSkeleton />;
   }
 
   if (error) {
@@ -472,14 +667,24 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
               View all confirmed projects with their transaction details
             </p>
           </div>
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            className="flex items-center gap-2 border-gray-300"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => handleForceRefresh()}
+              variant="outline"
+              className="flex items-center gap-2 border-gray-300"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Force Refresh
+            </Button>
+            <Button
+              onClick={() => handleRefresh()}
+              variant="outline"
+              className="flex items-center gap-2 border-gray-300"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </div>
         <Card className="border-gray-300">
           <CardContent className="pt-6 text-center">
@@ -489,7 +694,7 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
             </h3>
             <p className="text-gray-600 font-geist mb-4">{error}</p>
             <Button
-              onClick={handleRefresh}
+              onClick={() => handleForceRefresh()}
               variant="outline"
               className="border-gray-300"
             >
@@ -514,12 +719,12 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
             </p>
           </div>
           <Button
-            onClick={handleRefresh}
+            onClick={() => handleForceRefresh()}
             variant="outline"
             className="flex items-center gap-2 border-gray-300"
           >
             <RefreshCw className="h-4 w-4" />
-            Refresh
+            Force Refresh
           </Button>
         </div>
         <Card>
@@ -533,7 +738,7 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
               here once clients confirm their projects.
             </p>
             <Button
-              onClick={handleRefresh}
+              onClick={() => handleForceRefresh()}
               variant="default"
               className="bg-gray-900 hover:bg-gray-800"
             >
@@ -575,37 +780,60 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
               </p>
             </div>
           </div>
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            disabled={isLoadingTransactions}
-            className="flex items-center gap-2 border-gray-300"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => handleForceRefresh()}
+              variant="outline"
+              disabled={isLoadingTransactions}
+              className="flex items-center gap-2 border-gray-300"
+            >
+              {isLoadingTransactions ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {isLoadingTransactions ? "Loading..." : "Force Refresh"}
+            </Button>
+            <Button
+              onClick={() => handleRefresh()}
+              variant="outline"
+              disabled={isLoadingTransactions}
+              className="flex items-center gap-2 border-gray-300"
+            >
+              {isLoadingTransactions ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {isLoadingTransactions ? "Loading..." : "Refresh"}
+            </Button>
+          </div>
         </div>
 
-        {/* REMOVED: Duplicate stats above TransactionHistory */}
-        {/* The TransactionHistory component already shows its own stats */}
+        {/* Show loading spinner if transactions are loading */}
+        {isLoadingTransactions ? (
+          <LoadingSpinner text="Loading project transactions..." />
+        ) : (
+          <>
+            {/* Transactions Table using separated component */}
+            <TransactionHistory
+              transactions={transactions}
+              isLoading={isLoadingTransactions}
+              projectId={project.project_id}
+              clientEmail={project.userEmail}
+              clientName={project.clientName}
+              projectName={project.projectName}
+              totalValue={project.totalValue}
+              onRefresh={() => loadProjectTransactions(project.project_id)}
+            />
 
-        {/* Transactions Table using separated component */}
-        <TransactionHistory
-          transactions={transactions}
-          isLoading={isLoadingTransactions}
-          projectId={project.project_id}
-          clientEmail={project.userEmail}
-          clientName={project.clientName}
-          projectName={project.projectName}
-          totalValue={project.totalValue}
-          onRefresh={() => loadProjectTransactions(project.project_id)}
-        />
+            {/* Payment Dialog */}
+            <PaymentDialog />
 
-        {/* Payment Dialog */}
-        <PaymentDialog />
-
-        {/* Manual Payment Dialog */}
-        <ManualPaymentDialog />
+            {/* Manual Payment Dialog */}
+            <ManualPaymentDialog />
+          </>
+        )}
       </div>
     );
   }
@@ -620,317 +848,430 @@ export const ProjectTransactions: React.FC<ProjectTransactionsProps> = ({
             Project Transactions
           </h2>
           <p className="text-gray-600 mt-1 text-sm font-geist">
-            Click on any project to view its transaction details
+            Click on any project to view its transaction details. Data is cached
+            for 5 minutes.
           </p>
         </div>
-        <Button
-          onClick={handleRefresh}
-          variant="outline"
-          className="flex items-center gap-2 border-gray-300"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
-
-      {/* Statistics Cards - REDESIGNED to match transaction-history */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-blue-700">
-                Total Projects Value
-              </p>
-              <p className="text-lg font-bold text-gray-900">
-                {formatCurrencyWithDecimal(stats.totalValue)}
-              </p>
-              <p className="text-xs text-blue-600">
-                {stats.totalProjects} projects
-              </p>
-            </div>
-            <TrendingUp className="h-5 w-5 text-blue-600" />
-          </div>
-        </div>
-
-        <div className="bg-green-50 border border-green-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-green-700">
-                Total Amount Paid
-              </p>
-              <p className="text-lg font-bold text-gray-900">
-                {formatCurrencyWithDecimal(stats.totalPaid)}
-              </p>
-              <p className="text-xs text-green-600">
-                {stats.fullyPaidProjects} fully paid
-              </p>
-            </div>
-            <DollarSign className="h-5 w-5 text-green-600" />
-          </div>
-        </div>
-
-        <div className="bg-orange-50 border border-orange-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-orange-700">
-                Remaining Balance
-              </p>
-              <p className="text-lg font-bold text-gray-900">
-                {formatCurrencyWithDecimal(stats.totalBalance)}
-              </p>
-              <p className="text-xs text-orange-600">
-                {stats.partiallyPaidProjects + stats.notPaidProjects} with
-                balance
-              </p>
-            </div>
-            <FileText className="h-5 w-5 text-orange-600" />
-          </div>
-        </div>
-
-        <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-purple-700">
-                Avg Payment Progress
-              </p>
-              <p className="text-lg font-bold text-gray-900">
-                {stats.averagePaymentProgress}%
-              </p>
-              <p className="text-xs text-purple-600">
-                {stats.fullyPaidProjects} completed •{" "}
-                {stats.partiallyPaidProjects} in progress
-              </p>
-            </div>
-            <Percent className="h-5 w-5 text-purple-600" />
-          </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => handleForceRefresh()}
+            variant="outline"
+            disabled={isLoading}
+            className="flex items-center gap-2 border-gray-300"
+          >
+            {isLoading ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {isLoading ? "Refreshing..." : "Force Refresh"}
+          </Button>
+          <Button
+            onClick={() => handleRefresh()}
+            variant="outline"
+            disabled={isLoading}
+            className="flex items-center gap-2 border-gray-300"
+          >
+            {isLoading ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </Button>
         </div>
       </div>
 
-      {/* Progress Summary Bar */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between text-sm mb-2">
-          <span className="text-gray-600">Overall Payment Progress</span>
-          <span className="font-medium text-gray-900">
-            {stats.totalValue > 0
-              ? Math.round((stats.totalPaid / stats.totalValue) * 100)
-              : 0}
-            %
-          </span>
-        </div>
-        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-green-600 transition-all duration-300"
-            style={{
-              width: `${stats.totalValue > 0 ? Math.min(100, (stats.totalPaid / stats.totalValue) * 100) : 0}%`,
-            }}
-          />
-        </div>
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>₱0</span>
-          <span>{formatCurrencyWithDecimal(stats.totalValue)}</span>
-        </div>
+      {/* Cache status indicator */}
+      <div className="mb-4 text-sm text-gray-500">
+        {cache.has(ProjectTransactionsCache.getProjectsKey)
+          ? "✓ Using cached data (5 min TTL)"
+          : "Loading fresh data..."}
       </div>
 
-      {/* Project Status Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-yellow-700">
-                Active Projects
-              </p>
-              <p className="text-lg font-bold text-gray-900">{stats.ongoing}</p>
-              <p className="text-xs text-yellow-600">
-                {Math.round((stats.ongoing / stats.totalProjects) * 100)}% of
-                total
-              </p>
+      {/* Show loading state for stats */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-gray-100 border border-gray-200 rounded-lg p-4 animate-pulse"
+            >
+              <div className="flex items-center justify-between">
+                <div className="space-y-2 w-full">
+                  <div className="h-4 bg-gray-300 rounded w-32"></div>
+                  <div className="h-6 bg-gray-300 rounded w-24"></div>
+                  <div className="h-3 bg-gray-300 rounded w-40"></div>
+                </div>
+                <div className="h-5 w-5 bg-gray-300 rounded-full"></div>
+              </div>
             </div>
-            <Clock className="h-5 w-5 text-yellow-600" />
-          </div>
+          ))}
         </div>
+      ) : (
+        <>
+          {/* Statistics Cards - REDESIGNED to match transaction-history */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-blue-700">
+                    Total Projects Value
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {formatCurrencyWithDecimal(stats.totalValue)}
+                  </p>
+                  <p className="text-xs text-blue-600">
+                    {stats.totalProjects} projects
+                  </p>
+                </div>
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
 
-        <div className="bg-green-50 border border-green-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-green-700">
-                Completed Projects
-              </p>
-              <p className="text-lg font-bold text-gray-900">
-                {stats.completed}
-              </p>
-              <p className="text-xs text-green-600">
-                {Math.round((stats.completed / stats.totalProjects) * 100)}%
-                success rate
-              </p>
+            <div className="bg-green-50 border border-green-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-700">
+                    Total Amount Paid
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {formatCurrencyWithDecimal(stats.totalPaid)}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {stats.fullyPaidProjects} fully paid
+                  </p>
+                </div>
+                <DollarSign className="h-5 w-5 text-green-600" />
+              </div>
             </div>
-            <CheckCircle className="h-5 w-5 text-green-600" />
-          </div>
-        </div>
 
-        <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-gray-700">
-                Pending Projects
-              </p>
-              <p className="text-lg font-bold text-gray-900">{stats.pending}</p>
-              <p className="text-xs text-gray-600">
-                {Math.round((stats.pending / stats.totalProjects) * 100)}%
-                awaiting action
-              </p>
+            <div className="bg-orange-50 border border-orange-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-orange-700">
+                    Remaining Balance
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {formatCurrencyWithDecimal(stats.totalBalance)}
+                  </p>
+                  <p className="text-xs text-orange-600">
+                    {stats.partiallyPaidProjects + stats.notPaidProjects} with
+                    balance
+                  </p>
+                </div>
+                <FileText className="h-5 w-5 text-orange-600" />
+              </div>
             </div>
-            <Users className="h-5 w-5 text-gray-600" />
+
+            <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-purple-700">
+                    Avg Payment Progress
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {stats.averagePaymentProgress}%
+                  </p>
+                  <p className="text-xs text-purple-600">
+                    {stats.fullyPaidProjects} completed •{" "}
+                    {stats.partiallyPaidProjects} in progress
+                  </p>
+                </div>
+                <Percent className="h-5 w-5 text-purple-600" />
+              </div>
+            </div>
           </div>
+
+          {/* Progress Summary Bar */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-gray-600">Overall Payment Progress</span>
+              <span className="font-medium text-gray-900">
+                {stats.totalValue > 0
+                  ? Math.round((stats.totalPaid / stats.totalValue) * 100)
+                  : 0}
+                %
+              </span>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-600 transition-all duration-300"
+                style={{
+                  width: `${stats.totalValue > 0 ? Math.min(100, (stats.totalPaid / stats.totalValue) * 100) : 0}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>₱0</span>
+              <span>{formatCurrencyWithDecimal(stats.totalValue)}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Show loading state for project status summary */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-gray-100 border border-gray-200 rounded-lg p-4 animate-pulse"
+            >
+              <div className="flex items-center justify-between">
+                <div className="space-y-2 w-full">
+                  <div className="h-4 bg-gray-300 rounded w-32"></div>
+                  <div className="h-6 bg-gray-300 rounded w-16"></div>
+                  <div className="h-3 bg-gray-300 rounded w-36"></div>
+                </div>
+                <div className="h-5 w-5 bg-gray-300 rounded-full"></div>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Project Status Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-yellow-700">
+                    Active Projects
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {stats.ongoing}
+                  </p>
+                  <p className="text-xs text-yellow-600">
+                    {Math.round((stats.ongoing / stats.totalProjects) * 100)}%
+                    of total
+                  </p>
+                </div>
+                <Clock className="h-5 w-5 text-yellow-600" />
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-700">
+                    Completed Projects
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {stats.completed}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {Math.round((stats.completed / stats.totalProjects) * 100)}%
+                    success rate
+                  </p>
+                </div>
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-gray-700">
+                    Pending Projects
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {stats.pending}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {Math.round((stats.pending / stats.totalProjects) * 100)}%
+                    awaiting action
+                  </p>
+                </div>
+                <Users className="h-5 w-5 text-gray-600" />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Projects Table */}
       <Card className="border-gray-300">
         <CardHeader>
           <CardTitle className="text-gray-900">Confirmed Projects</CardTitle>
           <CardDescription className="text-gray-600">
-            Click on any project to view its detailed transaction history
+            Click on any project to view its detailed transaction history. Data
+            is cached for fast navigation.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border border-gray-300">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-gray-700">
-                    Project Details
-                  </TableHead>
-                  <TableHead className="text-gray-700">Client</TableHead>
-                  <TableHead className="text-gray-700">Value</TableHead>
-                  <TableHead className="text-gray-700">Timeline</TableHead>
-                  <TableHead className="text-gray-700">Progress</TableHead>
-                  <TableHead className="text-gray-700">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.map((transaction) => {
-                  const progress = projectProgress[transaction.project_id] || 0;
-                  return (
-                    <TableRow
-                      key={transaction.id}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors border-gray-300"
-                      onClick={() => handleProjectClick(transaction)}
-                    >
-                      <TableCell>
-                        <div className="flex flex-col space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Hash className="h-4 w-4 text-gray-500" />
-                            <code className="font-mono text-sm font-semibold text-gray-900">
-                              {transaction.project_id}
-                            </code>
-                          </div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {transaction.projectName || "Unnamed Project"}
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <CalendarDays className="h-3 w-3" />
-                            <span>
-                              Started: {formatDate(transaction.startDate)}
-                            </span>
-                          </div>
-                          {transaction.location?.fullAddress && (
+          {isLoading ? (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg animate-pulse"
+                  >
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-300 rounded w-32"></div>
+                      <div className="h-3 bg-gray-300 rounded w-48"></div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-300 rounded w-24"></div>
+                      <div className="h-3 bg-gray-300 rounded w-20"></div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-300 rounded w-24"></div>
+                      <div className="h-3 bg-gray-300 rounded w-20"></div>
+                    </div>
+                    <div className="h-6 bg-gray-300 rounded w-20"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-gray-300">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-gray-700">
+                      Project Details
+                    </TableHead>
+                    <TableHead className="text-gray-700">Client</TableHead>
+                    <TableHead className="text-gray-700">Value</TableHead>
+                    <TableHead className="text-gray-700">Timeline</TableHead>
+                    <TableHead className="text-gray-700">Progress</TableHead>
+                    <TableHead className="text-gray-700">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((transaction) => {
+                    const progress =
+                      projectProgress[transaction.project_id] || 0;
+                    return (
+                      <TableRow
+                        key={transaction.id}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors border-gray-300"
+                        onClick={() => handleProjectClick(transaction)}
+                      >
+                        <TableCell>
+                          <div className="flex flex-col space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Hash className="h-4 w-4 text-gray-500" />
+                              <code className="font-mono text-sm font-semibold text-gray-900">
+                                {transaction.project_id}
+                              </code>
+                            </div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {transaction.projectName || "Unnamed Project"}
+                            </div>
                             <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <MapPin className="h-3 w-3" />
-                              <span className="truncate max-w-[200px]">
-                                {transaction.location.fullAddress}
+                              <CalendarDays className="h-3 w-3" />
+                              <span>
+                                Started: {formatDate(transaction.startDate)}
                               </span>
                             </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col space-y-1">
-                          <div className="font-medium text-gray-900">
-                            {transaction.clientName}
-                          </div>
-                          {transaction.userEmail && (
-                            <div className="text-sm text-gray-600 truncate max-w-[150px]">
-                              {transaction.userEmail}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col space-y-1">
-                          <span className="font-semibold text-gray-900">
-                            {formatCurrencyWithDecimal(transaction.totalValue)}
-                          </span>
-                          {transaction.totalPaid !== undefined && (
-                            <span className="text-sm text-gray-600">
-                              Paid:{" "}
-                              {formatCurrencyWithDecimal(transaction.totalPaid)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col space-y-2">
-                          <div className="text-sm text-gray-700">
-                            {transaction.endDate ? (
-                              <>
-                                <div>
-                                  Start: {formatDate(transaction.startDate)}
-                                </div>
-                                <div>
-                                  End: {formatDate(transaction.endDate)}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {getProjectDuration(
-                                    transaction.startDate,
-                                    transaction.endDate
-                                  )}
-                                </div>
-                              </>
-                            ) : (
-                              <div>
-                                Started: {formatDate(transaction.startDate)}
+                            {transaction.location?.fullAddress && (
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <MapPin className="h-3 w-3" />
+                                <span className="truncate max-w-[200px]">
+                                  {transaction.location.fullAddress}
+                                </span>
                               </div>
                             )}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col space-y-2">
-                          <Progress
-                            value={progress}
-                            className="h-2 bg-gray-200"
-                          />
-                          <div className="text-sm font-medium text-right text-gray-900">
-                            {progress}%
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col items-start space-y-2">
-                          {getStatusBadge(transaction.status)}
-                          {transaction.confirmedAt && (
-                            <div className="text-xs text-gray-500">
-                              Confirmed: {formatDate(transaction.confirmedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col space-y-1">
+                            <div className="font-medium text-gray-900">
+                              {transaction.clientName}
                             </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                            {transaction.userEmail && (
+                              <div className="text-sm text-gray-600 truncate max-w-[150px]">
+                                {transaction.userEmail}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col space-y-1">
+                            <span className="font-semibold text-gray-900">
+                              {formatCurrencyWithDecimal(
+                                transaction.totalValue
+                              )}
+                            </span>
+                            {transaction.totalPaid !== undefined && (
+                              <span className="text-sm text-gray-600">
+                                Paid:{" "}
+                                {formatCurrencyWithDecimal(
+                                  transaction.totalPaid
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col space-y-2">
+                            <div className="text-sm text-gray-700">
+                              {transaction.endDate ? (
+                                <>
+                                  <div>
+                                    Start: {formatDate(transaction.startDate)}
+                                  </div>
+                                  <div>
+                                    End: {formatDate(transaction.endDate)}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {getProjectDuration(
+                                      transaction.startDate,
+                                      transaction.endDate
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div>
+                                  Started: {formatDate(transaction.startDate)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col space-y-2">
+                            <Progress
+                              value={progress}
+                              className="h-2 bg-gray-200"
+                            />
+                            <div className="text-sm font-medium text-right text-gray-900">
+                              {progress}%
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col items-start space-y-2">
+                            {getStatusBadge(transaction.status)}
+                            {transaction.confirmedAt && (
+                              <div className="text-xs text-gray-500">
+                                Confirmed: {formatDate(transaction.confirmedAt)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Footer Stats */}
-      <div className="mt-6 text-sm text-gray-600">
-        <p>
-          Showing {transactions.length} projects. Click any project to view
-          transactions.
-        </p>
-      </div>
+      {!isLoading && (
+        <div className="mt-6 text-sm text-gray-600">
+          <p>
+            Showing {transactions.length} projects. Click any project to view
+            transactions. Data cached for fast navigation.
+          </p>
+        </div>
+      )}
 
       {/* Payment Dialog */}
       <PaymentDialog />
