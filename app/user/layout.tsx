@@ -1,7 +1,7 @@
 // app/user/layout.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AppSidebar from "@/components/user/Sidebar";
 import { UserNavbar } from "@/components/user/UserNavbar";
 import { AppointmentsSheet } from "@/components/user/AppointmentsSheet";
@@ -16,6 +16,11 @@ export default function UserLayout({
   const [appointmentsOpen, setAppointmentsOpen] = useState(false);
   const { initialize, initialized } = useAuthStore();
 
+  // Memoize the UserNavbar to prevent re-renders
+  const memoizedUserNavbar = useMemo(() => {
+    return <UserNavbar onAppointmentsClick={() => setAppointmentsOpen(true)} />;
+  }, []); // Empty dependency array - only create once
+
   // Initialize auth store
   useEffect(() => {
     if (!initialized) {
@@ -27,7 +32,7 @@ export default function UserLayout({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <UserNavbar onAppointmentsClick={() => setAppointmentsOpen(true)} />
+        {memoizedUserNavbar}
         <main className="flex-1">{children}</main>
       </SidebarInset>
 

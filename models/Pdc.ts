@@ -26,6 +26,11 @@ export interface IPDC extends Document {
   cancelledAt?: Date;
 }
 
+// Extended interface for JSON representation
+interface IPDCJSON extends Omit<IPDC, "_id" | "__v"> {
+  pdc_id: string;
+}
+
 const PDCItemReferenceSchema = new Schema<IPDCItemReference>(
   {
     product_id: {
@@ -109,10 +114,17 @@ const PDCSchema = new Schema<IPDC>(
     timestamps: true,
     toJSON: {
       transform: function (doc, ret) {
-        ret.pdc_id = ret._id;
-        delete ret._id;
-        delete ret.__v;
-        return ret;
+        // Create a new object to avoid modifying the original ret
+        const result = { ...ret } as any;
+
+        // Add pdc_id field
+        result.pdc_id = result._id.toString();
+
+        // Remove fields we don't want in the JSON
+        delete result._id;
+        delete result.__v;
+
+        return result;
       },
     },
   }

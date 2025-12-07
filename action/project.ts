@@ -36,6 +36,20 @@ interface ICounterDocument {
   sequence_value: number;
 }
 
+// Add this interface near your other interfaces in action/project.ts
+export interface CompletedProject {
+  project_id: string;
+  name: string;
+  projectImages: Array<{
+    url: string;
+    title: string;
+    description?: string;
+    uploadedAt: string;
+  }>;
+  startDate: string;
+  endDate: string;
+}
+
 const counterSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   sequence_value: { type: Number, default: 0 },
@@ -2736,6 +2750,65 @@ export async function getCurrentUserActiveProjectsCount(): Promise<{
     return {
       success: false,
       error: "Failed to count active projects",
+    };
+  }
+}
+
+// Add this function to your existing action/project.ts file
+// Add this function to your existing action/project.ts file
+export async function getCompletedProjects(): Promise<{
+  success: boolean;
+  data?: CompletedProject[];
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    console.log("📋 Fetching completed projects...");
+
+    // Fetch only completed projects with required fields
+    const completedProjects = await Project.find(
+      { status: "completed" },
+      "project_id name projectImages startDate endDate"
+    )
+      .sort({ endDate: -1 }) // Most recently completed first
+      .limit(12) // Limit to 12 projects
+      .lean(); // Use lean() to get plain JavaScript objects
+
+    console.log(`✅ Found ${completedProjects.length} completed projects`);
+
+    // Format the response data - ensure all fields are serializable
+    const formattedProjects = completedProjects.map((project: any) => {
+      // Ensure projectImages are properly serialized
+      const serializedProjectImages = (project.projectImages || []).map(
+        (image: any) => ({
+          url: image.url || "",
+          title: image.title || "",
+          description: image.description || "",
+          uploadedAt:
+            image.uploadedAt?.toISOString() || new Date().toISOString(),
+        })
+      );
+
+      return {
+        project_id: project.project_id || "",
+        name: project.name || "",
+        projectImages: serializedProjectImages,
+        startDate: project.startDate?.toISOString() || new Date().toISOString(),
+        endDate: project.endDate?.toISOString() || new Date().toISOString(),
+      };
+    });
+
+    console.log("✅ Formatted projects for serialization");
+
+    return {
+      success: true,
+      data: formattedProjects,
+    };
+  } catch (error) {
+    console.error("❌ Error fetching completed projects:", error);
+    return {
+      success: false,
+      error: "Failed to fetch completed projects",
     };
   }
 }

@@ -1,5 +1,11 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import {
   Search,
   Plus,
@@ -69,7 +75,7 @@ class WebBluetoothPrinter {
         optionalServices: [
           "generic_access",
           "000018f0-0000-1000-8000-00805f9b34fb",
-        ], // Common printer service
+        ],
       });
 
       console.log("Connecting to GATT server...");
@@ -79,11 +85,10 @@ class WebBluetoothPrinter {
         throw new Error("Failed to connect to GATT server");
       }
 
-      // Try common printer services
       const services = [
-        "000018f0-0000-1000-8000-00805f9b34fb", // Common thermal printer service
-        "00001101-0000-1000-8000-00805f9b34fb", // Serial Port Profile
-        "e7810a71-73ae-499d-8c15-faa9aef0c3f2", // BLE printer service
+        "000018f0-0000-1000-8000-00805f9b34fb",
+        "00001101-0000-1000-8000-00805f9b34fb",
+        "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
       ];
 
       let serviceFound = false;
@@ -93,7 +98,6 @@ class WebBluetoothPrinter {
           const characteristics = await service.getCharacteristics();
 
           for (const char of characteristics) {
-            // Look for write characteristic
             if (char.properties.write || char.properties.writeWithoutResponse) {
               this.characteristic = char;
               serviceFound = true;
@@ -103,7 +107,6 @@ class WebBluetoothPrinter {
 
           if (serviceFound) break;
         } catch (e) {
-          console.log(`Service ${serviceUUID} not found, trying next...`);
           continue;
         }
       }
@@ -114,7 +117,6 @@ class WebBluetoothPrinter {
 
       this.isConnected = true;
 
-      // Store device info for reconnection
       if (this.device.id && this.device.name) {
         localStorage.setItem(
           "lastBluetoothPrinter",
@@ -150,29 +152,26 @@ class WebBluetoothPrinter {
     }
 
     try {
-      // Convert text to bytes (UTF-8)
       const encoder = new TextEncoder();
       const data = encoder.encode(text);
 
-      // Add ESC/POS initialization and formatting
       const escPosCommands = new Uint8Array([
         this.ESC,
-        0x40, // Initialize printer
+        0x40,
         this.ESC,
         0x21,
-        0x00, // Default text size
+        0x00,
         ...data,
         0x0a,
         0x0a,
         0x0a,
-        0x0a, // Line feeds
+        0x0a,
         0x1d,
         0x56,
         0x41,
-        0x10, // Cut paper (partial)
+        0x10,
       ]);
 
-      // Send data in chunks if needed
       const chunkSize = 512;
       for (let i = 0; i < escPosCommands.length; i += chunkSize) {
         const chunk = escPosCommands.slice(i, i + chunkSize);
@@ -189,7 +188,6 @@ class WebBluetoothPrinter {
       throw new Error("Printer not connected");
     }
 
-    // Generate receipt text
     const receiptText = this.generateReceiptText(transaction);
     await this.print(receiptText);
   }
@@ -197,19 +195,16 @@ class WebBluetoothPrinter {
   private generateReceiptText(transaction: InventoryPOSPayment): string {
     const date = new Date(transaction.transactionDate).toLocaleString();
 
-    let receipt = "\x1B\x40"; // Initialize printer
-    receipt += "\x1B\x21\x00"; // Reset formatting
-
-    // Header
-    receipt += "\x1B\x21\x10"; // Double height
+    let receipt = "\x1B\x40";
+    receipt += "\x1B\x21\x00";
+    receipt += "\x1B\x21\x10";
     receipt += "POS SYSTEM\n";
-    receipt += "\x1B\x21\x00"; // Normal text
+    receipt += "\x1B\x21\x00";
     receipt += "SALES RECEIPT\n";
     receipt += `Ref: ${transaction.referenceNumber}\n`;
     receipt += `Date: ${date}\n`;
     receipt += "=".repeat(32) + "\n\n";
 
-    // Items
     receipt += "QTY  ITEM                AMOUNT\n";
     receipt += "-".repeat(32) + "\n";
 
@@ -226,7 +221,6 @@ class WebBluetoothPrinter {
 
     receipt += "\n" + "=".repeat(32) + "\n";
 
-    // Totals
     receipt += `Subtotal:        ₱${transaction.subtotal.toFixed(2).padStart(10)}\n`;
 
     if (transaction.discountAmount && transaction.discountAmount > 0) {
@@ -237,22 +231,20 @@ class WebBluetoothPrinter {
       receipt += `VAT:             +₱${transaction.taxAmount.toFixed(2).padStart(9)}\n`;
     }
 
-    receipt += "\x1B\x21\x10"; // Double height
+    receipt += "\x1B\x21\x10";
     receipt += `TOTAL:           ₱${transaction.totalAmount.toFixed(2).padStart(10)}\n`;
-    receipt += "\x1B\x21\x00"; // Normal text
+    receipt += "\x1B\x21\x00";
 
     receipt += "\n" + "-".repeat(32) + "\n";
     receipt += `Paid:            ₱${transaction.amountPaid.toFixed(2).padStart(10)}\n`;
     receipt += `Change:          ₱${transaction.change.toFixed(2).padStart(10)}\n`;
 
-    // Footer
     receipt += "\n" + "=".repeat(32) + "\n";
     receipt += "THANK YOU!\n";
     receipt += "This receipt is computer generated\n";
     receipt += "No signature required\n";
 
-    // Cut paper
-    receipt += "\x1D\x56\x41\x10"; // Partial cut
+    receipt += "\x1D\x56\x41\x10";
 
     return receipt;
   }
@@ -293,15 +285,40 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const printWindowRef = useRef<Window | null>(null);
+  const hasLoadedInitial = useRef(false);
+
+  // Memoize calculations
+  const subtotal = useMemo(
+    () => cart.reduce((sum, item) => sum + item.totalPrice, 0),
+    [cart]
+  );
+
+  const discountAmount = useMemo(
+    () => (subtotal * discountPercentage) / 100,
+    [subtotal, discountPercentage]
+  );
+
+  const totalAmount = useMemo(
+    () => subtotal - discountAmount,
+    [subtotal, discountAmount]
+  );
+
+  const paymentAmount = useMemo(
+    () => parseFloat(paymentInput) || 0,
+    [paymentInput]
+  );
+
+  const change = useMemo(
+    () => Math.max(0, paymentAmount - totalAmount),
+    [paymentAmount, totalAmount]
+  );
 
   // Initialize Bluetooth printer
   useEffect(() => {
     const printer = new WebBluetoothPrinter();
     setBluetoothPrinter(printer);
 
-    // Check if Web Bluetooth is supported
     if (!navigator.bluetooth) {
-      console.warn("Web Bluetooth API is not supported in this browser");
       toast.warning(
         "Bluetooth printing not supported in your browser. Use Chrome/Edge for Bluetooth features."
       );
@@ -314,9 +331,12 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
     };
   }, []);
 
-  // Load initial inventory items on component mount
+  // Load initial inventory items - only once
   useEffect(() => {
-    loadInitialItems();
+    if (!hasLoadedInitial.current) {
+      loadInitialItems();
+      hasLoadedInitial.current = true;
+    }
   }, []);
 
   const loadInitialItems = async () => {
@@ -470,8 +490,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
         },
       ];
     });
-
-    // REMOVED: toast.success(`${item.name} added to cart`);
   };
 
   const updateCartQuantity = (productId: string, newQuantity: number) => {
@@ -505,17 +523,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
     );
     toast.success("Item removed from cart");
   };
-
-  const calculateSubtotal = () => {
-    return cart.reduce((sum, item) => sum + item.totalPrice, 0);
-  };
-
-  // FIXED: Removed VAT calculations
-  const subtotal = calculateSubtotal();
-  const discountAmount = (subtotal * discountPercentage) / 100;
-  const totalAmount = subtotal - discountAmount;
-  const paymentAmount = parseFloat(paymentInput) || 0;
-  const change = Math.max(0, paymentAmount - totalAmount);
 
   const handleNumpadClick = (value: string) => {
     if (value === "C") {
@@ -779,7 +786,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
         await bluetoothPrinter.printReceipt(transaction);
         toast.success("Receipt sent to Bluetooth printer!");
       } else {
-        // Fallback to browser printing
         const receiptHTML = generateThermalReceipt(transaction);
 
         if (printWindowRef.current) {
@@ -880,7 +886,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
         onPaymentProcess(paymentData);
       }
 
-      // Auto print receipt with selected method
       await handlePrintReceipt(paymentData);
 
       // Reset form
@@ -947,7 +952,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
         </Button>
       )}
 
-      {/* Print Method Selector */}
       <Select
         value={printMethod}
         onValueChange={(value: "browser" | "bluetooth") =>
@@ -980,7 +984,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
       {/* Left Sidebar - Inventory Items */}
       <div className="w-80 border-r border-border bg-card flex flex-col">
         <div className="p-3 space-y-3 flex flex-col h-full">
-          {/* Search Bar */}
           <div className="relative flex-shrink-0">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -995,7 +998,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
             )}
           </div>
 
-          {/* Inventory Items */}
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-4">
@@ -1098,7 +1100,7 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
         {/* Main Container - Order Section */}
         <div className="flex-1 flex flex-col min-h-0 p-3">
           <div className="flex-1 flex flex-col min-h-0 border border-border rounded-lg">
-            {/* Items Header - Always Visible */}
+            {/* Items Header */}
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border bg-muted/50 flex-shrink-0">
               <div className="col-span-1">QTY</div>
               <div className="col-span-5">PRODUCT</div>
@@ -1118,12 +1120,10 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                       key={item.product_id}
                       className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-xs hover:bg-muted/50 transition-colors border-b border-border/50"
                     >
-                      {/* Qty */}
                       <div className="col-span-1 font-medium">
                         {item.quantity}
                       </div>
 
-                      {/* Product Name */}
                       <div className="col-span-5">
                         <h4 className="font-medium text-foreground truncate">
                           {item.name}
@@ -1133,14 +1133,12 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                         </p>
                       </div>
 
-                      {/* Sale Price */}
                       <div className="col-span-3">
                         <span className="font-semibold text-foreground">
                           ₱{item.unitPrice.toFixed(2)}
                         </span>
                       </div>
 
-                      {/* Actions */}
                       <div className="col-span-3 flex items-center gap-1">
                         <Button
                           variant="outline"
@@ -1194,15 +1192,13 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
               )}
             </div>
 
-            {/* Fixed Bottom Section - ALWAYS VISIBLE */}
+            {/* Fixed Bottom Section */}
             <div className="border-t border-border bg-background p-3 space-y-2 flex-shrink-0">
-              {/* Subtotal - ALWAYS VISIBLE */}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal:</span>
                 <span className="font-medium">₱{subtotal.toFixed(2)}</span>
               </div>
 
-              {/* Total - ALWAYS VISIBLE */}
               <div className="flex justify-between items-center">
                 <span className="text-base font-bold text-foreground">
                   Total:
@@ -1212,7 +1208,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                 </span>
               </div>
 
-              {/* Confirm Payment Button - ALWAYS VISIBLE but disabled when no items */}
               <Button
                 onClick={() => setShowPaymentModal(true)}
                 disabled={isProcessing || cart.length === 0}
@@ -1252,15 +1247,12 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Payment Tab */}
               <TabsContent value="payment" className="space-y-3">
-                {/* Amount Breakdown */}
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal:</span>
                     <span>₱{subtotal.toFixed(2)}</span>
                   </div>
-                  {/* Discount Input */}
                   <div className="flex items-center gap-2 pt-1">
                     <span className="text-muted-foreground whitespace-nowrap">
                       Discount:
@@ -1290,7 +1282,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                     <span>₱{totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
-                {/* Amount Due */}
                 <div className="text-center p-2 bg-muted rounded">
                   <div className="text-xs text-muted-foreground mb-1">
                     Amount Due
@@ -1299,7 +1290,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                     ₱{totalAmount.toFixed(2)}
                   </div>
                 </div>
-                {/* Amount Received & Change Side by Side */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="text-center p-2 bg-blue-50 rounded border border-blue-200">
                     <div className="text-xs text-muted-foreground mb-0.5">
@@ -1329,7 +1319,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                     </div>
                   </div>
                 </div>
-                {/* Numpad */}
                 <div className="space-y-1">
                   <div className="grid grid-cols-3 gap-1">
                     {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(
@@ -1371,7 +1360,6 @@ export function InventoryPOS({ onPaymentProcess }: InventoryPOSProps) {
                 </div>
               </TabsContent>
 
-              {/* Client Info Tab */}
               <TabsContent value="client" className="space-y-2">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">

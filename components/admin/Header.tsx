@@ -1,4 +1,4 @@
-// components/admin/Header.tsx - FOCUSED ON INQUIRY NOTIFICATIONS ONLY
+// components/admin/Header.tsx - REDESIGNED NOTIFICATION UI
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -192,21 +192,22 @@ export function Header() {
 
   const breadcrumbs = generateBreadcrumbs();
 
-  // Get notification icon based on type
+  // Get notification icon based on type (Monochrome Black/White Theme)
   const getNotificationIcon = (notification: Notification) => {
+    const iconClass = "h-4 w-4";
     switch (notification.type) {
       case "appointment_confirmed":
-        return <Calendar className="h-4 w-4 text-green-600" />;
+        return <Calendar className={cn(iconClass, "text-gray-800")} />;
       case "appointment_cancelled":
-        return <Calendar className="h-4 w-4 text-red-600" />;
+        return <Calendar className={cn(iconClass, "text-gray-800")} />;
       case "appointment_rescheduled":
-        return <Calendar className="h-4 w-4 text-amber-600" />;
+        return <Calendar className={cn(iconClass, "text-gray-800")} />;
       case "appointment_completed":
-        return <Calendar className="h-4 w-4 text-blue-600" />;
+        return <Calendar className={cn(iconClass, "text-gray-800")} />;
       case "inquiry_submitted":
-        return <MessageSquare className="h-4 w-4 text-purple-600" />;
+        return <MessageSquare className={cn(iconClass, "text-gray-800")} />;
       default:
-        return <Calendar className="h-4 w-4 text-gray-600" />;
+        return <Calendar className={cn(iconClass, "text-gray-800")} />;
     }
   };
 
@@ -375,21 +376,26 @@ export function Header() {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "relative text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200",
-                  isNotificationOpen && "bg-accent text-accent-foreground"
+                  "relative p-2 hover:bg-transparent hover:text-gray-900",
+                  isNotificationOpen && "text-gray-900"
                 )}
                 onClick={toggleNotificationDropdown}
               >
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs h-5 w-5 p-0 flex items-center justify-center min-w-0">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </Badge>
-                )}
+                {/* Bell Icon with Badge */}
+                <div className="relative">
+                  <Bell className="h-5 w-5 text-gray-700 hover:text-gray-900 transition-colors" />
+
+                  {/* Unread Count Badge - Gray/Black Theme */}
+                  {unreadCount > 0 && (
+                    <Badge className="absolute -top-2 -right-2 h-5 w-5 min-w-0 p-0 flex items-center justify-center rounded-full bg-gray-900 border-2 border-background text-[10px] font-bold text-white shadow-sm">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </Badge>
+                  )}
+                </div>
                 <span className="sr-only">Inquiry Notifications</span>
               </Button>
 
-              {/* Dropdown Menu */}
+              {/* Dropdown Menu - Clean Minimalist */}
               <AnimatePresence>
                 {isNotificationOpen && (
                   <motion.div
@@ -397,97 +403,111 @@ export function Header() {
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: -10 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute right-0 top-12 w-96 bg-popover rounded-lg shadow-lg border border-border z-50"
+                    className="absolute right-0 top-12 w-96 bg-background rounded-none border border-gray-200 shadow-lg z-50"
                   >
-                    {/* Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-border">
-                      <div>
-                        <h3 className="font-semibold text-popover-foreground">
-                          Inquiry Notifications
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {unreadCount} unread{" "}
-                          {unreadCount === 1 ? "inquiry" : "inquiries"}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        {unreadCount > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleMarkAllAsRead}
-                            className="text-xs text-primary hover:text-primary hover:bg-accent h-8 px-2"
-                          >
-                            <Check className="h-3 w-3 mr-1" />
-                            Mark all read
-                          </Button>
-                        )}
-                        {notifications.length > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setIsClearAllConfirmOpen(true)}
-                            className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2"
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" />
-                            Clear all
-                          </Button>
-                        )}
+                    {/* Header - Clean Minimalist */}
+                    <div className="p-4 border-b border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-base text-gray-900">
+                            Inquiries
+                          </h3>
+                          <p className="text-sm text-gray-500 mt-0.5">
+                            {unreadCount} unread{" "}
+                            {unreadCount === 1 ? "inquiry" : "inquiries"}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {unreadCount > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleMarkAllAsRead}
+                              className="h-7 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                              disabled={loading}
+                            >
+                              <Check className="h-3 w-3 mr-1.5" />
+                              Mark all read
+                            </Button>
+                          )}
+                          {notifications.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setIsClearAllConfirmOpen(true)}
+                              className="h-7 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                            >
+                              <Trash2 className="h-3 w-3 mr-1.5" />
+                              Clear all
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Notifications List */}
+                    {/* Notifications List - Clean Facebook-like Design */}
                     <div className="max-h-96 overflow-y-auto">
                       {loading ? (
-                        <div className="flex flex-col items-center justify-center py-8">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                          <p className="text-sm text-muted-foreground mt-2">
+                        <div className="flex flex-col items-center justify-center p-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800 mb-2" />
+                          <p className="text-sm text-gray-500">
                             Loading inquiries...
                           </p>
                         </div>
                       ) : notifications.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                          <Bell className="h-8 w-8 mb-2 text-muted" />
-                          <p className="text-sm">No inquiry notifications</p>
-                          <p className="text-xs text-muted-foreground mt-1">
+                        <div className="flex flex-col items-center justify-center p-8 text-center">
+                          <Bell className="h-12 w-12 text-gray-300 mb-3" />
+                          <p className="text-sm font-medium text-gray-600 mb-1">
+                            No inquiry notifications
+                          </p>
+                          <p className="text-xs text-gray-500">
                             You're all caught up!
                           </p>
                         </div>
                       ) : (
-                        <div className="divide-y divide-border">
-                          {notifications.map((notification) => {
-                            return (
-                              <motion.div
-                                key={notification._id}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className={cn(
-                                  "p-3 transition-colors hover:bg-accent/50 group cursor-pointer",
-                                  !notification.isRead &&
-                                    "bg-accent hover:bg-accent"
-                                )}
-                                onClick={() =>
-                                  setSelectedNotification(notification)
-                                }
-                              >
-                                <div className="flex gap-3">
-                                  {/* Icon */}
-                                  <div className="flex-shrink-0 mt-0.5">
-                                    {getNotificationIcon(notification)}
-                                  </div>
+                        <div className="divide-y divide-gray-100">
+                          {notifications.map((notification) => (
+                            <div
+                              key={notification._id}
+                              className={cn(
+                                "p-4 cursor-pointer transition-colors hover:bg-gray-50",
+                                !notification.isRead && "bg-gray-50"
+                              )}
+                              onClick={() =>
+                                setSelectedNotification(notification)
+                              }
+                            >
+                              <div className="flex items-start gap-3 w-full">
+                                {/* Icon Container - Square, No Border Radius */}
+                                <div
+                                  className={cn(
+                                    "flex-shrink-0 w-10 h-10 flex items-center justify-center border border-gray-200",
+                                    !notification.isRead
+                                      ? "bg-gray-100"
+                                      : "bg-white"
+                                  )}
+                                >
+                                  {getNotificationIcon(notification)}
+                                </div>
 
-                                  {/* Content */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between">
-                                      <h4
-                                        className={cn(
-                                          "text-sm font-medium line-clamp-1 text-popover-foreground",
-                                          !notification.isRead &&
-                                            "font-semibold"
-                                        )}
-                                      >
-                                        {notification.title || "No Title"}
-                                      </h4>
+                                {/* Content - Clean Minimalist */}
+                                <div className="flex-1 min-w-0">
+                                  {/* Title Row */}
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <span
+                                      className={cn(
+                                        "text-sm font-semibold line-clamp-1",
+                                        !notification.isRead
+                                          ? "text-gray-900"
+                                          : "text-gray-600"
+                                      )}
+                                    >
+                                      {notification.title || "No Title"}
+                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <span className="text-xs text-gray-400">
+                                        {notification.timeAgo || "Recently"}
+                                      </span>
                                       <Button
                                         variant="ghost"
                                         size="icon"
@@ -496,59 +516,60 @@ export function Header() {
                                           setDeleteConfirmId(notification._id);
                                           setIsDeleteConfirmOpen(true);
                                         }}
-                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                        className="h-5 w-5 text-gray-400 hover:text-gray-900 hover:bg-gray-100"
                                       >
                                         <Trash2 className="h-3 w-3" />
                                       </Button>
                                     </div>
-                                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                      {notification.message || "No message"}
-                                    </p>
-                                    <div className="flex items-center justify-between mt-2">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <Badge
-                                          variant="outline"
-                                          className={cn(
-                                            "text-xs",
-                                            notification.type ===
-                                              "inquiry_submitted"
-                                              ? "bg-purple-100 text-purple-800 border-purple-200"
-                                              : "bg-blue-100 text-blue-800 border-blue-200"
-                                          )}
-                                        >
-                                          {getTypeLabel(notification.type)}
-                                        </Badge>
-                                        <span className="text-xs text-muted-foreground">
-                                          {notification.timeAgo || "Recently"}
-                                        </span>
-                                        {isGuestNotification(notification) && (
-                                          <Badge
-                                            variant="outline"
-                                            className="text-xs bg-red-100 text-red-800 border-red-200"
-                                          >
-                                            Guest
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      {!notification.isRead && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleMarkAsRead(notification._id);
-                                          }}
-                                          className="text-xs text-primary hover:text-primary hover:bg-accent h-6 px-2"
-                                        >
-                                          Mark read
-                                        </Button>
-                                      )}
-                                    </div>
+                                  </div>
+
+                                  {/* Message */}
+                                  <p
+                                    className={cn(
+                                      "text-sm leading-relaxed line-clamp-2 mb-2",
+                                      !notification.isRead
+                                        ? "text-gray-700"
+                                        : "text-gray-500"
+                                    )}
+                                  >
+                                    {notification.message || "No message"}
+                                  </p>
+
+                                  {/* Metadata Tags - Minimalist */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200">
+                                      {getTypeLabel(notification.type)}
+                                    </span>
+                                    {isGuestNotification(notification) && (
+                                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200">
+                                        Guest
+                                      </span>
+                                    )}
+                                    {!notification.isRead && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMarkAsRead(notification._id);
+                                        }}
+                                        className="text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 h-6 px-2"
+                                      >
+                                        Mark read
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
-                              </motion.div>
-                            );
-                          })}
+
+                                {/* Unread Indicator - Minimal Dot */}
+                                {!notification.isRead && (
+                                  <div className="flex-shrink-0 mt-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-gray-900" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -565,15 +586,15 @@ export function Header() {
         open={!!selectedNotification}
         onOpenChange={(open) => !open && setSelectedNotification(null)}
       >
-        <DialogContent className="sm:max-w-2xl bg-background border-border">
+        <DialogContent className="sm:max-w-2xl bg-background border-gray-200 rounded-none">
           {selectedNotification && (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-foreground">
+                <DialogTitle className="flex items-center gap-2 text-gray-900">
                   {getNotificationIcon(selectedNotification)}
                   {selectedNotification.title || "No Title"}
                 </DialogTitle>
-                <DialogDescription className="text-muted-foreground">
+                <DialogDescription className="text-gray-500">
                   {selectedNotification.message || "No message"}
                 </DialogDescription>
               </DialogHeader>
@@ -582,26 +603,18 @@ export function Header() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-medium text-muted-foreground">
+                      <h4 className="text-sm font-medium text-gray-500">
                         Type
                       </h4>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-sm",
-                          selectedNotification.type === "inquiry_submitted"
-                            ? "bg-purple-100 text-purple-800 border-purple-200"
-                            : "bg-blue-100 text-blue-800 border-blue-200"
-                        )}
-                      >
+                      <span className="text-sm mt-1 text-gray-900 block px-2 py-1 bg-gray-100 border border-gray-200 w-fit">
                         {getTypeLabel(selectedNotification.type)}
-                      </Badge>
+                      </span>
                     </div>
                     <div>
-                      <h4 className="text-sm font-medium text-muted-foreground">
+                      <h4 className="text-sm font-medium text-gray-500">
                         Date
                       </h4>
-                      <p className="text-sm mt-1 text-foreground">
+                      <p className="text-sm mt-1 text-gray-900">
                         {selectedNotification.createdAt ? (
                           <>
                             {new Date(
@@ -619,25 +632,22 @@ export function Header() {
                     </div>
                     {selectedNotification.userEmail && (
                       <div>
-                        <h4 className="text-sm font-medium text-muted-foreground">
+                        <h4 className="text-sm font-medium text-gray-500">
                           User Email
                         </h4>
-                        <p className="text-sm mt-1 text-foreground">
+                        <p className="text-sm mt-1 text-gray-900">
                           {selectedNotification.userEmail}
                         </p>
                       </div>
                     )}
                     {isGuestNotification(selectedNotification) && (
                       <div>
-                        <h4 className="text-sm font-medium text-muted-foreground">
+                        <h4 className="text-sm font-medium text-gray-500">
                           User Type
                         </h4>
-                        <Badge
-                          variant="outline"
-                          className="text-sm bg-red-100 text-red-800 border-red-200"
-                        >
+                        <span className="text-sm mt-1 text-gray-900 block px-2 py-1 bg-gray-100 border border-gray-200 w-fit">
                           Guest User
-                        </Badge>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -646,10 +656,10 @@ export function Header() {
                   <div className="space-y-4">
                     {selectedNotification.appointmentMetadata && (
                       <div>
-                        <h4 className="text-sm font-medium text-muted-foreground">
+                        <h4 className="text-sm font-medium text-gray-500">
                           Appointment Details
                         </h4>
-                        <div className="text-sm mt-1 space-y-1 text-foreground">
+                        <div className="text-sm mt-1 space-y-1 text-gray-900">
                           {selectedNotification.appointmentMetadata
                             .meetingType && (
                             <p>
@@ -706,7 +716,7 @@ export function Header() {
                 <Button
                   variant="outline"
                   onClick={() => setSelectedNotification(null)}
-                  className="hover:bg-accent"
+                  className="border-gray-300 hover:bg-gray-100 hover:text-gray-900 text-gray-700"
                 >
                   Close
                 </Button>
@@ -716,7 +726,7 @@ export function Header() {
                   <Button
                     variant="default"
                     onClick={() => handleCreateAccount(selectedNotification)}
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-gray-900 hover:bg-gray-800 text-white border border-gray-900"
                   >
                     <UserPlus className="h-4 w-4 mr-2" />
                     Create Account for Guest
@@ -730,7 +740,7 @@ export function Header() {
                       onClick={() =>
                         handleNotificationAction(selectedNotification)
                       }
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                      className="bg-gray-900 hover:bg-gray-800 text-white border border-gray-900"
                     >
                       {selectedNotification.actionLabel}
                     </Button>
@@ -743,7 +753,7 @@ export function Header() {
                       await handleMarkAsRead(selectedNotification._id);
                       setSelectedNotification(null);
                     }}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="bg-gray-900 hover:bg-gray-800 text-white border border-gray-900"
                   >
                     Mark as Read
                   </Button>
@@ -759,12 +769,12 @@ export function Header() {
         open={isDeleteConfirmOpen}
         onOpenChange={setIsDeleteConfirmOpen}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-background border-gray-200">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">
+            <AlertDialogTitle className="text-gray-900">
               Confirm Deletion
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
+            <AlertDialogDescription className="text-gray-500">
               Are you sure you want to delete this inquiry notification? This
               action cannot be undone.
             </AlertDialogDescription>
@@ -772,7 +782,7 @@ export function Header() {
           <AlertDialogFooter>
             <AlertDialogAction
               onClick={() => setIsDeleteConfirmOpen(false)}
-              className="hover:bg-accent"
+              className="border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900"
             >
               Cancel
             </AlertDialogAction>
@@ -782,7 +792,7 @@ export function Header() {
                   handleDeleteNotification(deleteConfirmId);
                 }
               }}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              className="bg-gray-900 hover:bg-gray-800 text-white border border-gray-900"
             >
               Delete
             </AlertDialogAction>
@@ -795,12 +805,12 @@ export function Header() {
         open={isClearAllConfirmOpen}
         onOpenChange={setIsClearAllConfirmOpen}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-background border-gray-200">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">
+            <AlertDialogTitle className="text-gray-900">
               Confirm Clear All
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
+            <AlertDialogDescription className="text-gray-500">
               Are you sure you want to clear all inquiry notifications? This
               action cannot be undone.
             </AlertDialogDescription>
@@ -808,13 +818,13 @@ export function Header() {
           <AlertDialogFooter>
             <AlertDialogAction
               onClick={() => setIsClearAllConfirmOpen(false)}
-              className="hover:bg-accent"
+              className="border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900"
             >
               Cancel
             </AlertDialogAction>
             <AlertDialogAction
               onClick={handleClearAll}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              className="bg-gray-900 hover:bg-gray-800 text-white border border-gray-900"
             >
               Clear All
             </AlertDialogAction>

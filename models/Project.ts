@@ -20,15 +20,27 @@ interface ILocation {
   fullAddress: string;
 }
 
+// Interface for timeline entry
+interface ITimelineEntry {
+  date: Date;
+  photoUrls?: string[];
+  caption?: string;
+  photoUrl?: string; // For backward compatibility
+}
+
 // Interface for Mongoose document
 interface IProjectDocument
   extends Document,
     Omit<z.infer<typeof ProjectPreSaveZodSchema>, "_id"> {
   location?: ILocation;
   projectImages?: IProjectImage[];
+  timeline?: ITimelineEntry[];
   // Add confirmation fields
   confirmedAt?: Date;
   confirmedBy?: string;
+  // Add Mongoose timestamps
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Define the Mongoose schema
@@ -86,6 +98,14 @@ const projectSchema = new Schema(
         uploadedAt: { type: Date, default: Date.now },
       },
     ],
+    timeline: [
+      {
+        date: { type: Date, required: true },
+        photoUrls: [{ type: String }],
+        caption: { type: String },
+        photoUrl: { type: String }, // For backward compatibility
+      },
+    ],
     // Add confirmation fields
     confirmedAt: {
       type: Date,
@@ -99,10 +119,20 @@ const projectSchema = new Schema(
   {
     timestamps: true,
     toJSON: {
-      transform: function (doc, ret) {
+      transform: function (doc: any, ret: any) {
         ret._id = ret._id.toString();
-        ret.createdAt = ret.createdAt.toISOString();
-        ret.updatedAt = ret.updatedAt.toISOString();
+        if (ret.createdAt) {
+          ret.createdAt =
+            ret.createdAt instanceof Date
+              ? ret.createdAt.toISOString()
+              : new Date(ret.createdAt).toISOString();
+        }
+        if (ret.updatedAt) {
+          ret.updatedAt =
+            ret.updatedAt instanceof Date
+              ? ret.updatedAt.toISOString()
+              : new Date(ret.updatedAt).toISOString();
+        }
         // Ensure projectImages is properly formatted
         if (ret.projectImages) {
           ret.projectImages = ret.projectImages.map((image: any) => ({
@@ -112,7 +142,17 @@ const projectSchema = new Schema(
             uploadedAt: image.uploadedAt,
           }));
         }
-        delete ret.__v;
+        // Ensure timeline is properly formatted
+        if (ret.timeline) {
+          ret.timeline = ret.timeline.map((entry: any) => ({
+            date: entry.date,
+            photoUrls:
+              entry.photoUrls ||
+              (entry.photoUrl ? [entry.photoUrl] : undefined),
+            caption: entry.caption,
+          }));
+        }
+        Reflect.deleteProperty(ret, "__v");
       },
     },
   }
@@ -141,7 +181,7 @@ projectSchema.pre("save", function (next) {
       startDate: doc.startDate,
       endDate: doc.endDate,
       userId: doc.userId,
-      totalCost: doc.totalCost,
+      totalCost: doc.totalCost || 0, // Ensure totalCost has a default value
       location: doc.location,
       projectImages: doc.projectImages,
       confirmedAt: doc.confirmedAt,
@@ -184,7 +224,7 @@ projectSchema.pre("findOneAndUpdate", async function (next) {
       startDate: updatedDoc.startDate,
       endDate: updatedDoc.endDate,
       userId: updatedDoc.userId,
-      totalCost: updatedDoc.totalCost,
+      totalCost: updatedDoc.totalCost || 0, // Ensure totalCost has a default value
       location: updatedDoc.location,
       projectImages: updatedDoc.projectImages,
       confirmedAt: updatedDoc.confirmedAt,

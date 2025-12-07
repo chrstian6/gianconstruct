@@ -64,6 +64,30 @@ function OrangeSpinner() {
   );
 }
 
+// Custom wrapper for TeamSwitcher to suppress hydration warnings
+function SafeTeamSwitcher() {
+  const [isClient, setIsClient] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Don't render on server to prevent hydration mismatch
+  if (!isClient) {
+    return (
+      <div className="h-10 w-full flex items-center gap-2 rounded-lg px-3 bg-muted/50 animate-pulse">
+        <div className="h-8 w-8 rounded-full bg-muted"></div>
+        <div className="flex-1 space-y-1">
+          <div className="h-3 w-20 bg-muted rounded"></div>
+          <div className="h-2 w-24 bg-muted/70 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return <TeamSwitcher />;
+}
+
 export default function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
@@ -125,9 +149,11 @@ export default function AppSidebar({
     return pathname === url || pathname.startsWith(url + "/");
   };
 
-  // Format last refreshed time
-  const formatLastRefreshed = () => {
+  // Format last refreshed time - ONLY CLIENT-SIDE
+  const formatLastRefreshed = React.useCallback(() => {
     if (!lastRefreshed) return "";
+
+    // This runs only on client, so no hydration mismatch
     const now = new Date();
     const diffMs = now.getTime() - lastRefreshed.getTime();
     const diffSec = Math.floor(diffMs / 1000);
@@ -139,13 +165,14 @@ export default function AppSidebar({
       hour: "2-digit",
       minute: "2-digit",
     });
-  };
+  }, [lastRefreshed]);
 
   return (
     <>
       <Sidebar collapsible="icon" className="border" {...props}>
         <SidebarHeader>
-          <TeamSwitcher />
+          {/* Use the safe wrapper to prevent hydration errors */}
+          <SafeTeamSwitcher />
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>

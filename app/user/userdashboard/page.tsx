@@ -28,14 +28,26 @@ import {
   TrendingUp,
   Home as HomeIcon,
   RefreshCcw,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores";
-import { format, parseISO, isToday, addDays } from "date-fns";
+import {
+  format,
+  parseISO,
+  isToday,
+  addDays,
+  differenceInDays,
+  formatDistanceToNow,
+} from "date-fns";
 import { getUserInquiries } from "@/action/inquiries";
 import { Inquiry } from "@/types/inquiry";
 import Image from "next/image";
 import Autoplay from "embla-carousel-autoplay";
+import { getCompletedProjects } from "@/action/project";
 
 interface WeatherData {
   condition: "sunny" | "rainy" | "cloudy" | "snowy" | "foggy";
@@ -112,6 +124,21 @@ const WMO_WEATHER_CODES: {
 const CACHE_DURATION = 10 * 60 * 1000;
 const CACHE_KEY = "weather-dashboard-cache";
 
+// Interface for completed project (matches the one in action/project.ts)
+interface CompletedProject {
+  project_id: string;
+  name: string;
+  projectImages: Array<{
+    url: string;
+    title: string;
+    description?: string;
+    uploadedAt: string | Date;
+  }>;
+  startDate: string | Date;
+  endDate: string | Date;
+  statusUpdatedAt?: string | Date; // Added for timestamp when status was updated to complete
+}
+
 export default function UserDashboard() {
   const router = useRouter();
   const { clearUser, user } = useAuthStore();
@@ -130,8 +157,12 @@ export default function UserDashboard() {
     lat: number;
     lng: number;
   } | null>(null);
+  const [completedProjects, setCompletedProjects] = useState<
+    CompletedProject[]
+  >([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
-  const plugin = Autoplay({
+  const bannerPlugin = Autoplay({
     delay: 3000,
     stopOnInteraction: false,
     stopOnMouseEnter: true,
@@ -246,6 +277,7 @@ export default function UserDashboard() {
   useEffect(() => {
     fetchUserInquiries();
     getWeatherData();
+    fetchCompletedProjects();
   }, []);
 
   const getWeatherData = useCallback(async () => {
@@ -372,6 +404,27 @@ export default function UserDashboard() {
     },
     [setCache]
   );
+
+  // Fetch completed projects using the server action
+  const fetchCompletedProjects = useCallback(async () => {
+    setProjectsLoading(true);
+    try {
+      console.log("📋 Fetching completed projects from server action...");
+      const result = await getCompletedProjects();
+      if (result.success && result.data) {
+        console.log(`✅ Loaded ${result.data.length} completed projects`);
+        setCompletedProjects(result.data);
+      } else {
+        console.error("❌ Failed to fetch completed projects:", result.error);
+        setCompletedProjects([]);
+      }
+    } catch (error) {
+      console.error("❌ Error fetching completed projects:", error);
+      setCompletedProjects([]);
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, []);
 
   // Enhanced function to handle both Open-Meteo and OpenWeatherMap data structures
   const processForecastData = useCallback((data: any): ForecastDay[] => {
@@ -758,185 +811,12 @@ export default function UserDashboard() {
     [weather.condition, weather.temperature, getWeatherAdvice]
   );
 
-  // Memoized weather card components
-  const WeatherCardContent = useCallback(() => {
-    return (
-      <CardContent className="p-6">
-        {/* Weather Header with Refresh Icon */}
-        <div className="flex justify-between items-start mb-4">
-          {/* Location at the top */}
-          <div>
-            {weatherLoading ? (
-              <div className="animate-pulse bg-gray-200 rounded h-5 w-32"></div>
-            ) : (
-              <p className="text-2xl font-semibold text-gray-900 tracking-tight">
-                You're in {weather.barangay}, {weather.city}
-              </p>
-            )}
-          </div>
-
-          {/* Refresh Icon */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={getWeatherData}
-            disabled={weatherLoading}
-            className="h-8 w-8"
-          >
-            <RefreshCcw
-              className={`h-4 w-4 ${weatherLoading ? "animate-spin" : ""}`}
-            />
-          </Button>
-        </div>
-
-        {/* Single Row - 3 Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Left Column - Today's Weather */}
-          <div className="space-y-2">
-            <p className="text-sm text-gray-500">Today is</p>
-            {weatherLoading ? (
-              <div className="animate-pulse bg-gray-200 rounded h-7 w-24"></div>
-            ) : (
-              <h2 className="text-3xl font-bold text-orange-500 tracking-tight">
-                {capitalizeFirst(weather.condition)}
-              </h2>
-            )}
-
-            <div className="space-y-1">
-              {weatherLoading ? (
-                <>
-                  <div className="animate-pulse bg-gray-200 rounded h-8 w-16"></div>
-                  <div className="animate-pulse bg-gray-200 rounded h-4 w-20"></div>
-                </>
-              ) : (
-                <>
-                  <div
-                    className={`text-2xl font-bold ${getTemperatureColor(weather.temperature)}`}
-                  >
-                    {weather.temperature}°C
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    Feels like{" "}
-                    {getTemperatureFeeling(
-                      weather.feelsLike || weather.temperature
-                    )}
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Center Column - 5 Day Forecast */}
-          <ForecastCards />
-        </div>
-      </CardContent>
-    );
-  }, [
-    weather,
-    weatherLoading,
-    getWeatherData,
-    getTemperatureColor,
-    getTemperatureFeeling,
-    capitalizeFirst,
-  ]);
-
-  const ForecastCards = useCallback(() => {
-    return (
-      <div className="md:col-span-2">
-        <p className="text-sm font-medium text-gray-600 mb-2 tracking-[1.2]">
-          5-Day Forecast
-        </p>
-        <div className="grid grid-cols-5 gap-2">
-          {weatherLoading
-            ? Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="text-center">
-                  <div className="animate-pulse bg-gray-200 rounded h-4 w-8 mx-auto mb-1"></div>
-                  <div className="animate-pulse bg-gray-200 rounded h-3 w-6 mx-auto mb-1"></div>
-                  <div className="animate-pulse bg-gray-200 rounded h-4 w-10 mx-auto"></div>
-                </div>
-              ))
-            : forecast
-                .slice(0, 5)
-                .map((day, index) => <ForecastDayCard key={index} day={day} />)}
-        </div>
-      </div>
-    );
-  }, [forecast, weatherLoading]);
-
-  const ForecastDayCard = useCallback(({ day }: { day: ForecastDay }) => {
-    return (
-      <div className="text-center py-4 border border-none shadow-md rounded-sm">
-        <p className="text-md font-medium tracking-[1.1] text-gray-600 mb-1">
-          {format(new Date(day.date), "EEE")}
-        </p>
-        <p className="text-xl text-orange-500 font-bold mb-1 tracking-[1.1]">
-          {format(new Date(day.date), "d")}
-        </p>
-        <p className="text-xs font-medium text-gray-600 capitalize">
-          {day.condition}
-        </p>
-      </div>
-    );
+  // Get status update timestamp
+  const getStatusUpdateTime = useCallback((project: CompletedProject) => {
+    // Use statusUpdatedAt if available, otherwise use endDate
+    const updateDate = project.statusUpdatedAt || project.endDate;
+    return format(new Date(updateDate), "MMM d, yyyy 'at' h:mm a");
   }, []);
-
-  const CalendarCardContent = useCallback(() => {
-    return (
-      <CardContent className="p-4">
-        <div className="text-center">
-          {/* Current Date */}
-          <div className="mb-4">
-            <p className="text-sm text-gray-500">Today</p>
-            {weatherLoading ? (
-              <div className="animate-pulse bg-gray-200 rounded h-6 w-32 mx-auto"></div>
-            ) : (
-              <p className="text-lg font-bold text-gray-900">
-                {currentDateDisplay}
-              </p>
-            )}
-          </div>
-
-          {/* Appointments Status */}
-          <div className="mb-4">
-            {weatherLoading ? (
-              <div className="animate-pulse bg-gray-200 rounded h-6 w-24 mx-auto mb-2"></div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center justify-center gap-2">
-                  {appointmentsStatusDisplay.icon}
-                  <p
-                    className={`text-base font-semibold ${appointmentsStatusDisplay.color}`}
-                  >
-                    {appointmentsStatusDisplay.text}
-                  </p>
-                </div>
-                <p className="text-sm text-gray-600">
-                  {appointmentsStatusDisplay.description}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Weather Advice */}
-          <div className="pt-4 border-t border-gray-200">
-            {weatherLoading ? (
-              <div className="animate-pulse bg-gray-200 rounded h-4 w-32 mx-auto"></div>
-            ) : (
-              <div className="flex items-center justify-center gap-2">
-                <p className="text-md tracking-tight font-bold text-gray-700">
-                  {weatherAdvice.message}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    );
-  }, [
-    weatherLoading,
-    currentDateDisplay,
-    appointmentsStatusDisplay,
-    weatherAdvice.message,
-  ]);
 
   // Don't clear cache when component unmounts - cache persists
   useEffect(() => {
@@ -949,238 +829,494 @@ export default function UserDashboard() {
   return (
     <div className="min-h-screen">
       <div className="container mx-auto px-10 py-6">
-        {/* Banner Carousel */}
-        <section className="mb-6">
-          <Carousel
-            className="w-full"
-            plugins={[plugin]}
-            opts={{
-              loop: true,
-              align: "start",
-            }}
-            onMouseEnter={plugin.stop}
-            onMouseLeave={plugin.reset}
-          >
-            <CarouselContent>
-              {banners.map((banner) => {
-                const BannerIcon = banner.icon;
-                return (
-                  <CarouselItem key={banner.id}>
-                    <div className="relative h-64 rounded-sm shadow-sm overflow-hidden">
-                      {/* Background Image */}
-                      <Image
-                        src={banner.image}
-                        alt={banner.imageAlt}
-                        fill
-                        className="object-cover"
-                        priority={banner.id === 1}
-                      />
+        {/* Main Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Left Column: Main Grid (Carousel, Weather, Appointments) - Takes 2/3 */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Carousel Section */}
+            <Card className="bg-white rounded-sm border-none shadow-md">
+              <CardContent className="p-6">
+                <Carousel
+                  className="w-full"
+                  plugins={[bannerPlugin]}
+                  opts={{
+                    loop: true,
+                    align: "start",
+                  }}
+                  onMouseEnter={bannerPlugin.stop}
+                  onMouseLeave={bannerPlugin.reset}
+                >
+                  <CarouselContent>
+                    {banners.map((banner) => {
+                      const BannerIcon = banner.icon;
+                      return (
+                        <CarouselItem key={banner.id}>
+                          <div className="relative h-48 rounded-sm shadow-sm overflow-hidden">
+                            {/* Background Image */}
+                            <Image
+                              src={banner.image}
+                              alt={banner.imageAlt}
+                              fill
+                              className="object-cover"
+                              priority={banner.id === 1}
+                            />
 
-                      {/* Overlay for better text readability */}
-                      <div
-                        className={`absolute inset-0 ${banner.overlay}`}
-                      ></div>
+                            {/* Overlay for better text readability */}
+                            <div
+                              className={`absolute inset-0 ${banner.overlay}`}
+                            ></div>
 
-                      {/* Content */}
-                      <div className="relative z-10 h-full flex items-center p-6">
-                        <div className="max-w-2xl">
-                          {/* Badge */}
-                          <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium mb-4">
-                            {banner.badge}
+                            {/* Content */}
+                            <div className="relative z-10 h-full flex items-center p-6">
+                              <div className="max-w-2xl">
+                                {/* Badge */}
+                                <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium mb-3">
+                                  {banner.badge}
+                                </div>
+
+                                <h2 className="text-2xl tracking-tight text-white font-bold mb-2">
+                                  {banner.title}
+                                </h2>
+                                <p className="text-white/90 tracking-[1.1] text-sm mb-3">
+                                  {banner.description}
+                                </p>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="bg-white text-orange-500 hover:bg-gray-100 text-sm px-6 py-3 font-medium"
+                                >
+                                  {banner.cta}
+                                  <ArrowRight className="h-3 w-3 ml-2" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
+                        </CarouselItem>
+                      );
+                    })}
+                  </CarouselContent>
+                </Carousel>
+              </CardContent>
+            </Card>
 
-                          <h2 className="text-4xl tracking-tight text-white font-bold mb-3">
-                            {banner.title}
-                          </h2>
-                          <p className="text-white/90 tracking-[1.1] text-base mb-4">
-                            {banner.description}
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="bg-white text-orange-500 hover:bg-gray-100 text-base px-10 py-5 font-medium"
-                          >
-                            {banner.cta}
-                            <ArrowRight className="h-4 w-4 ml-2" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </CarouselItem>
-                );
-              })}
-            </CarouselContent>
-          </Carousel>
-        </section>
+            {/* Weather Section */}
+            <Card className="bg-white rounded-sm border-none shadow-md">
+              <CardContent className="p-6">
+                {/* Weather Header with Refresh Icon */}
+                <div className="flex justify-between items-start mb-4">
+                  {/* Location at the top */}
+                  <div>
+                    {weatherLoading ? (
+                      <div className="animate-pulse bg-gray-200 rounded h-5 w-32"></div>
+                    ) : (
+                      <p className="text-2xl font-semibold text-gray-900 tracking-tight">
+                        You're in {weather.barangay}, {weather.city}
+                      </p>
+                    )}
+                  </div>
 
-        {/* Three Column Layout */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Weather Card */}
-          <Card className="bg-white lg:col-span-2 rounded-sm border-none shadow-md">
-            <WeatherCardContent />
-          </Card>
-
-          {/* Calendar Card */}
-          <Card className="bg-white rounded-sm border-none shadow-md">
-            <CalendarCardContent />
-          </Card>
-        </section>
-
-        {/* Appointments Section */}
-        <section className="mb-6">
-          <Card className="bg-white border-black">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-black" />
-                    Today's Appointments
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {hasAppointmentsToday
-                      ? `${todaysAppointments.length} appointment${todaysAppointments.length > 1 ? "s" : ""} scheduled`
-                      : "No appointments today"}
-                  </p>
+                  {/* Refresh Icon */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={getWeatherData}
+                    disabled={weatherLoading}
+                    className="h-8 w-8"
+                  >
+                    <RefreshCcw
+                      className={`h-4 w-4 ${weatherLoading ? "animate-spin" : ""}`}
+                    />
+                  </Button>
                 </div>
-                {hasAppointmentsToday && (
-                  <div className="text-sm font-semibold text-blue-600">
-                    {todaysAppointments.length}
+
+                {/* Weather Content Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Left Column - Today's Weather */}
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-500">Today is</p>
+                    {weatherLoading ? (
+                      <div className="animate-pulse bg-gray-200 rounded h-7 w-24"></div>
+                    ) : (
+                      <h2 className="text-3xl font-bold text-orange-500 tracking-tight">
+                        {capitalizeFirst(weather.condition)}
+                      </h2>
+                    )}
+
+                    <div className="space-y-1">
+                      {weatherLoading ? (
+                        <>
+                          <div className="animate-pulse bg-gray-200 rounded h-8 w-16"></div>
+                          <div className="animate-pulse bg-gray-200 rounded h-4 w-20"></div>
+                        </>
+                      ) : (
+                        <>
+                          <div
+                            className={`text-2xl font-bold ${getTemperatureColor(weather.temperature)}`}
+                          >
+                            {weather.temperature}°C
+                          </div>
+                          <p className="text-xs text-gray-600">
+                            Feels like{" "}
+                            {getTemperatureFeeling(
+                              weather.feelsLike || weather.temperature
+                            )}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column - 5 Day Forecast */}
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-medium text-gray-600 mb-2 tracking-[1.2]">
+                      5-Day Forecast
+                    </p>
+                    <div className="grid grid-cols-5 gap-2">
+                      {weatherLoading
+                        ? Array.from({ length: 5 }).map((_, index) => (
+                            <div key={index} className="text-center">
+                              <div className="animate-pulse bg-gray-200 rounded h-4 w-8 mx-auto mb-1"></div>
+                              <div className="animate-pulse bg-gray-200 rounded h-3 w-6 mx-auto mb-1"></div>
+                              <div className="animate-pulse bg-gray-200 rounded h-4 w-10 mx-auto"></div>
+                            </div>
+                          ))
+                        : forecast.slice(0, 5).map((day, index) => (
+                            <div
+                              key={index}
+                              className="text-center py-4 border border-none shadow-md rounded-sm"
+                            >
+                              <p className="text-md font-medium tracking-[1.1] text-gray-600 mb-1">
+                                {format(new Date(day.date), "EEE")}
+                              </p>
+                              <p className="text-xl text-orange-500 font-bold mb-1 tracking-[1.1]">
+                                {format(new Date(day.date), "d")}
+                              </p>
+                              <p className="text-xs font-medium text-gray-600 capitalize">
+                                {day.condition}
+                              </p>
+                            </div>
+                          ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Appointments Section */}
+            <Card className="bg-white rounded-sm border-none shadow-md">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <Calendar className="h-5 w-5 text-black" />
+                      Today's Appointments
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {hasAppointmentsToday
+                        ? `${todaysAppointments.length} appointment${todaysAppointments.length > 1 ? "s" : ""} scheduled`
+                        : "No appointments today"}
+                    </p>
+                  </div>
+                  {hasAppointmentsToday && (
+                    <div className="text-sm font-semibold text-blue-600">
+                      {todaysAppointments.length}
+                    </div>
+                  )}
+                </div>
+
+                {hasAppointmentsToday ? (
+                  <div className="space-y-3">
+                    {todaysAppointments.map((appointment) => (
+                      <Card
+                        key={appointment._id}
+                        className="border border-black"
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h3 className="text-lg font-semibold text-gray-900 truncate">
+                                  {appointment.design.name}
+                                </h3>
+                                <div
+                                  className={`text-xs px-2 py-1 rounded ${
+                                    appointment.status === "confirmed"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                  }`}
+                                >
+                                  {appointment.status}
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-3 w-3 text-black" />
+                                  <span className="font-medium text-gray-700">
+                                    {format(
+                                      parseISO(appointment.preferredDate),
+                                      "MMM d"
+                                    )}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <div className="h-3 w-3 flex items-center justify-center">
+                                    <div className="h-2 w-2 bg-black rounded-full"></div>
+                                  </div>
+                                  <span className="font-medium text-gray-700">
+                                    {appointment.preferredTime}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {getMeetingTypeIcon(appointment.meetingType)}
+                                  <span className="font-medium text-gray-700 capitalize">
+                                    {appointment.meetingType}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <h3 className="text-lg font-semibold text-gray-600 mb-1">
+                      No Appointments Today
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Enjoy your day! You're all caught up.
+                    </p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Completed Projects Section - MODIFIED */}
+            <div className="space-y-8">
+              {/* Section Header */}
+              <div className="flex items-center justify-between py-9 mt-10">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Recently Completed Projects
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Browse through our successfully delivered projects
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-black"
+                  onClick={fetchCompletedProjects}
+                  disabled={projectsLoading}
+                >
+                  {projectsLoading ? "Refreshing..." : "Refresh"}
+                </Button>
               </div>
 
-              {hasAppointmentsToday ? (
-                <div className="space-y-3">
-                  {todaysAppointments.map((appointment) => (
-                    <Card key={appointment._id} className="border border-black">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold text-gray-900 truncate">
-                                {appointment.design.name}
+              {projectsLoading ? (
+                <div className="space-y-8">
+                  {Array.from({ length: 2 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="border-0 shadow-md overflow-hidden"
+                    >
+                      <div className="animate-pulse">
+                        <div className="bg-gray-200 h-6 w-32 mb-4"></div>
+                        <div className="bg-gray-200 h-64 w-full"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : completedProjects.length > 0 ? (
+                <div className="space-y-10">
+                  {completedProjects.map((project) => {
+                    const mainImage =
+                      project.projectImages?.[0]?.url ||
+                      "/images/default-project.jpg";
+                    const statusUpdateTime = getStatusUpdateTime(project);
+
+                    return (
+                      <div
+                        key={project.project_id}
+                        className="border-0 shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+                      >
+                        {/* Project Header with Start Date */}
+                        <div className="p-6 pb-4 bg-white">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h3 className="text-xl font-bold text-gray-900">
+                                {project.name}
                               </h3>
-                              <div
-                                className={`text-xs px-2 py-1 rounded ${
-                                  appointment.status === "confirmed"
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                                }`}
-                              >
-                                {appointment.status}
+                              <div className="flex items-center gap-3 mt-2">
+                                <div className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-sm">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Completed
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Started:{" "}
+                                  {format(
+                                    new Date(project.startDate),
+                                    "MMM d, yyyy"
+                                  )}
+                                </div>
                               </div>
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-3 w-3 text-black" />
-                                <span className="font-medium text-gray-700">
-                                  {format(
-                                    parseISO(appointment.preferredDate),
-                                    "MMM d"
-                                  )}
-                                </span>
+                            <div className="text-right">
+                              <div className="flex items-center text-sm text-gray-500">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Completed on
                               </div>
-
-                              <div className="flex items-center gap-2">
-                                <div className="h-3 w-3 flex items-center justify-center">
-                                  <div className="h-2 w-2 bg-black rounded-full"></div>
-                                </div>
-                                <span className="font-medium text-gray-700">
-                                  {appointment.preferredTime}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                {getMeetingTypeIcon(appointment.meetingType)}
-                                <span className="font-medium text-gray-700 capitalize">
-                                  {appointment.meetingType}
-                                </span>
-                              </div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {statusUpdateTime}
+                              </p>
                             </div>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+
+                        {/* Project Image - Full width, no border radius */}
+                        <div className="relative">
+                          {project.projectImages &&
+                          project.projectImages.length > 0 ? (
+                            <Carousel
+                              className="w-full"
+                              opts={{
+                                loop: true,
+                                align: "start",
+                              }}
+                            >
+                              <CarouselContent>
+                                {project.projectImages.map((image, index) => (
+                                  <CarouselItem
+                                    key={index}
+                                    className="relative"
+                                  >
+                                    <div className="relative h-80 w-full">
+                                      <Image
+                                        src={image.url}
+                                        alt={
+                                          image.title ||
+                                          `Project image ${index + 1}`
+                                        }
+                                        fill
+                                        className="object-cover"
+                                        sizes="100vw"
+                                      />
+                                      {/* Image Overlay with Info */}
+                                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                                        <div className="text-white">
+                                          <p className="font-medium">
+                                            {image.title}
+                                          </p>
+                                          {image.description && (
+                                            <p className="text-sm text-white/80 mt-1">
+                                              {image.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </CarouselItem>
+                                ))}
+                              </CarouselContent>
+                              {project.projectImages.length > 1 && (
+                                <>
+                                  <CarouselPrevious className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white border-none shadow-lg">
+                                    <ChevronLeft className="h-4 w-4" />
+                                  </CarouselPrevious>
+                                  <CarouselNext className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white border-none shadow-lg">
+                                    <ChevronRight className="h-4 w-4" />
+                                  </CarouselNext>
+                                </>
+                              )}
+                            </Carousel>
+                          ) : (
+                            <div className="relative h-64 w-full bg-gray-100 flex items-center justify-center">
+                              <p className="text-gray-500">
+                                No images available
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                  <h3 className="text-lg font-semibold text-gray-600 mb-1">
-                    No Appointments Today
+                <div className="text-center py-12 border-0 shadow-md">
+                  <CheckCircle className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                    No Completed Projects Yet
                   </h3>
-                  <p className="text-sm text-gray-500">
-                    Enjoy your day! You're all caught up.
+                  <p className="text-sm text-gray-500 mb-4">
+                    Completed projects will appear here once they're finished.
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </section>
+            </div>
+          </div>
 
-        {/* Quick Actions */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-white border-black">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Calendar className="h-5 w-5 text-black" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">
-                My Appointments
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                View and manage scheduled meetings
-              </p>
-              <Button
-                variant="outline"
-                className="w-full text-sm py-2 border-black"
-              >
-                View Appointments
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Right Column: Calendar/Todays Appointment - Takes 1/3 */}
+          <div className="space-y-6">
+            {/* Calendar Card */}
+            <Card className="bg-white rounded-sm border-none shadow-md sticky top-[90px]">
+              <CardContent className="p-6">
+                <div className="text-center">
+                  {/* Current Date */}
+                  <div className="mb-6">
+                    <p className="text-sm text-gray-500">Today</p>
+                    {weatherLoading ? (
+                      <div className="animate-pulse bg-gray-200 rounded h-6 w-32 mx-auto"></div>
+                    ) : (
+                      <p className="text-xl font-bold text-gray-900">
+                        {currentDateDisplay}
+                      </p>
+                    )}
+                  </div>
 
-          <Card className="bg-white border-black">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Home className="h-5 w-5 text-black" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">
-                Design Gallery
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Explore home designs and inspirations
-              </p>
-              <Button
-                variant="outline"
-                className="w-full text-sm py-2 border-black"
-              >
-                Browse Designs
-              </Button>
-            </CardContent>
-          </Card>
+                  {/* Appointments Status */}
+                  <div className="mb-6">
+                    {weatherLoading ? (
+                      <div className="animate-pulse bg-gray-200 rounded h-6 w-24 mx-auto mb-2"></div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-3">
+                          {appointmentsStatusDisplay.icon}
+                          <p
+                            className={`text-lg font-semibold ${appointmentsStatusDisplay.color}`}
+                          >
+                            {appointmentsStatusDisplay.text}
+                          </p>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {appointmentsStatusDisplay.description}
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
-          <Card className="bg-white border-black">
-            <CardContent className="p-6 text-center">
-              <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <div className="h-5 w-5 bg-black rounded-full"></div>
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">
-                Project Status
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Track ongoing design projects
-              </p>
-              <Button
-                variant="outline"
-                className="w-full text-sm py-2 border-black"
-              >
-                Check Status
-              </Button>
-            </CardContent>
-          </Card>
-        </section>
+                  {/* Weather Advice */}
+                  <div className="pt-6 border-t border-gray-200">
+                    {weatherLoading ? (
+                      <div className="animate-pulse bg-gray-200 rounded h-4 w-32 mx-auto"></div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-md tracking-tight font-bold text-gray-700">
+                          {weatherAdvice.message}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
