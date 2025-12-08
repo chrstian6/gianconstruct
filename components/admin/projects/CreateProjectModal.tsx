@@ -166,7 +166,7 @@ const ProjectImagesSection = ({
             Click to upload images or drag and drop
           </p>
           <p className="text-xs text-muted-foreground/70 font-geist mt-2">
-            PNG, JPG, GIF up to 10MB each
+            PNG, JPG, GIF up to 50MB each
           </p>
         </label>
       </div>
@@ -289,35 +289,62 @@ export default function CreateProjectModal({
   const [showValidationDialog, setShowValidationDialog] = useState(false);
   const [projectImages, setProjectImages] = useState<ProjectImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Add state for calendar popovers
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-  // Fetch users and regions when modal opens
+  // Fetch regions when modal opens
   useEffect(() => {
     if (isOpen) {
-      fetchUsers();
       fetchRegions();
       setValidationErrors([]);
       setShowValidationDialog(false);
     }
   }, [isOpen]);
 
-  // Fetch users from server
-  const fetchUsers = async () => {
-    try {
-      const response = await getUsers();
-      if (response.success) {
-        setUsers(response.users || []);
-      } else {
-        toast.error(response.error || "Failed to fetch users");
+  // Search for users when search query changes (with debounce)
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (!searchQuery.trim()) {
+        setUsers([]);
+        return;
       }
-    } catch (error) {
-      toast.error("Failed to fetch users");
-      console.error("Error fetching users:", error);
-    }
-  };
+
+      setIsSearching(true);
+      try {
+        const response = await getUsers();
+        if (response.success) {
+          const query = searchQuery.toLowerCase().trim();
+          const filteredUsers = (response.users || []).filter(
+            (user) =>
+              user.firstName?.toLowerCase().includes(query) ||
+              user.lastName?.toLowerCase().includes(query) ||
+              user.email?.toLowerCase().includes(query) ||
+              user.contactNo?.toLowerCase().includes(query) ||
+              user.user_id?.toLowerCase().includes(query)
+          );
+          setUsers(filteredUsers);
+        } else {
+          toast.error(response.error || "Failed to search users");
+          setUsers([]);
+        }
+      } catch (error) {
+        toast.error("Failed to search users");
+        console.error("Error searching users:", error);
+        setUsers([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      searchUsers();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   // Fetch regions from select-philippines-address
   const fetchRegions = async () => {
@@ -405,21 +432,6 @@ export default function CreateProjectModal({
       fetchBarangays(selectedMunicipality);
     }
   }, [selectedMunicipality]);
-
-  // Fixed: Case-insensitive user search
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-
-    const query = searchQuery.toLowerCase().trim();
-    return users.filter(
-      (user) =>
-        user.firstName?.toLowerCase().includes(query) ||
-        user.lastName?.toLowerCase().includes(query) ||
-        user.email?.toLowerCase().includes(query) ||
-        user.contactNo?.toLowerCase().includes(query) ||
-        user.user_id?.toLowerCase().includes(query)
-    );
-  }, [users, searchQuery]);
 
   // Get selected user details
   const selectedUser = useMemo(() => {
@@ -814,20 +826,31 @@ export default function CreateProjectModal({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium text-foreground font-geist">
-                Available Users
+                Search Results
               </Label>
               <span className="text-xs text-muted-foreground font-geist">
-                {filteredUsers.length} found
+                {users.length} found
               </span>
             </div>
             <div className="border border-border rounded-lg max-h-80 overflow-y-auto">
-              {filteredUsers.length === 0 ? (
+              {isSearching ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground font-geist">
+                    Searching users...
+                  </p>
+                </div>
+              ) : searchQuery.trim() && users.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground font-geist">
-                  {searchQuery ? "No users found" : "No users available"}
+                  No users found for "{searchQuery}"
+                </div>
+              ) : !searchQuery.trim() ? (
+                <div className="p-8 text-center text-muted-foreground font-geist">
+                  Start typing to search for users
                 </div>
               ) : (
                 <div className="divide-y divide-border">
-                  {filteredUsers.map((user) => (
+                  {users.map((user) => (
                     <button
                       key={user.user_id}
                       onClick={() => handleUserSelect(user.user_id)}
@@ -868,7 +891,8 @@ export default function CreateProjectModal({
             </div>
             <p className="text-xs text-muted-foreground flex items-start gap-2 pt-2 font-geist">
               <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              Click on a user to assign them to the project
+              Start typing to search for users. Click on a user to assign them
+              to the project
             </p>
           </div>
         </div>
