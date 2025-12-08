@@ -1,4 +1,4 @@
-// lib/notification-services.ts - WITH PROJECT NOTIFICATION HELPER
+// lib/notification-services.ts - UPDATED WITH COMPANY EMAIL SUPPORT
 
 import dbConnect from "@/lib/db";
 import NotificationModel from "@/models/Notification";
@@ -350,6 +350,7 @@ class NotificationService {
         userId: notificationData.userId,
         userEmail: notificationData.userEmail,
         channels: notificationData.channels,
+        targetUserRoles: notificationData.targetUserRoles,
       });
 
       // Save notification to database
@@ -358,8 +359,8 @@ class NotificationService {
 
       console.log("✅ Notification saved successfully:", savedNotification._id);
 
-      // Send email notification if email channel is enabled and user email exists
-      if (channels.includes("email") && params.userEmail) {
+      // Send email notification if email channel is enabled
+      if (channels.includes("email")) {
         await this.sendEmailNotification(savedNotification);
       }
 
@@ -394,12 +395,8 @@ class NotificationService {
         channels: notification.channels,
         feature: notification.feature,
         type: notification.type,
+        targetUserRoles: notification.targetUserRoles,
       });
-
-      if (!notification.userEmail) {
-        console.log("❌ No user email found for notification, skipping email");
-        return;
-      }
 
       if (!notification.channels?.includes("email")) {
         console.log("❌ Email channel not enabled for this notification");
@@ -407,6 +404,27 @@ class NotificationService {
       }
 
       let emailResult: EmailTemplateResult | null = null;
+      let recipientEmail = notification.userEmail;
+
+      // Determine recipient email for admin notifications
+      if (notification.targetUserRoles?.includes("admin")) {
+        // Use COMPANY_EMAIL for admin notifications
+        recipientEmail = process.env.COMPANY_EMAIL;
+        console.log(
+          "🎯 Admin notification detected, using COMPANY_EMAIL:",
+          recipientEmail
+        );
+
+        if (!recipientEmail) {
+          console.error("❌ COMPANY_EMAIL not set in environment variables");
+          return;
+        }
+      } else if (!recipientEmail) {
+        console.log(
+          "❌ No recipient email found for notification, skipping email"
+        );
+        return;
+      }
 
       // Use specific email templates based on feature and type
       switch (notification.feature) {
@@ -436,16 +454,17 @@ class NotificationService {
         subject,
         title: data?.title,
         hasMessage: !!data?.message,
+        recipient: recipientEmail,
       });
 
       // Generate the email template
       const emailHtml = generateEmailTemplate(data);
 
-      console.log("📧 Sending email to:", notification.userEmail);
+      console.log("📧 Sending email to:", recipientEmail);
 
       // Send the email
       await sendEmail({
-        to: notification.userEmail,
+        to: recipientEmail,
         subject: subject || data?.title || notification.title,
         html: emailHtml,
       });
@@ -457,7 +476,7 @@ class NotificationService {
       });
 
       console.log(
-        `✅ Email notification sent successfully to ${notification.userEmail}`
+        `✅ Email notification sent successfully to ${recipientEmail}`
       );
     } catch (error) {
       console.error("❌ Error sending email notification:", error);
@@ -587,6 +606,8 @@ class NotificationService {
         projectMetadata: notification.projectMetadata,
         metadata: notification.metadata,
         userEmail: notification.userEmail,
+        targetUserRoles: notification.targetUserRoles,
+        isAdminNotification: notification.targetUserRoles?.includes("admin"),
       });
 
       // Use combined data from both projectMetadata and metadata with proper fallbacks
@@ -632,22 +653,51 @@ class NotificationService {
         project: mockProject,
         user: mockUser,
         notificationType: notification.type,
+        isAdminNotification: notification.targetUserRoles?.includes("admin"),
       });
 
       let template: EmailTemplateResult | null = null;
 
+      // Check if this is an admin notification
+      const isAdminNotification =
+        notification.targetUserRoles?.includes("admin");
+
       switch (notification.type) {
         case "project_created":
-          template = EmailTemplates.projectCreated(mockProject, mockUser);
+          if (notification.targetUserRoles?.includes("admin")) {
+            template = EmailTemplates.internalNewProject(mockProject, mockUser);
+          } else {
+            template = EmailTemplates.projectCreated(mockProject, mockUser);
+          }
           break;
 
         case "project_confirmed":
-          template = EmailTemplates.projectStatusUpdate(
-            mockProject,
-            mockUser,
-            "pending",
-            "active"
-          );
+          // Check if this is an admin notification (targetUserRoles includes 'admin')
+          if (notification.targetUserRoles?.includes("admin")) {
+            console.log(
+              "📧 Using projectConfirmedAdmin template for admin notification"
+            );
+            template = EmailTemplates.projectConfirmedAdmin(
+              mockProject,
+              mockUser,
+              combinedData.downpaymentAmount as number,
+              combinedData.remainingBalance as number,
+              combinedData.transactionId as string,
+              combinedData.paymentDeadline as string
+            );
+          } else {
+            console.log(
+              "📧 Using projectConfirmed template for client notification"
+            );
+            template = EmailTemplates.projectConfirmed(
+              mockProject,
+              mockUser,
+              combinedData.downpaymentAmount as number,
+              combinedData.remainingBalance as number,
+              combinedData.transactionId as string,
+              combinedData.paymentDeadline as string
+            );
+          }
           break;
 
         case "payment_received":
@@ -662,21 +712,35 @@ class NotificationService {
           break;
 
         case "project_completed":
-          template = EmailTemplates.projectStatusUpdate(
-            mockProject,
-            mockUser,
-            "active",
-            "completed"
-          );
+          if (notification.targetUserRoles?.includes("admin")) {
+            template = EmailTemplates.internalProjectCompleted(
+              mockProject,
+              mockUser
+            );
+          } else {
+            template = EmailTemplates.projectStatusUpdate(
+              mockProject,
+              mockUser,
+              "active",
+              "completed"
+            );
+          }
           break;
 
         case "project_cancelled":
-          template = EmailTemplates.projectStatusUpdate(
-            mockProject,
-            mockUser,
-            "active",
-            "cancelled"
-          );
+          if (notification.targetUserRoles?.includes("admin")) {
+            template = EmailTemplates.internalProjectCancelled(
+              mockProject,
+              mockUser
+            );
+          } else {
+            template = EmailTemplates.projectStatusUpdate(
+              mockProject,
+              mockUser,
+              "active",
+              "cancelled"
+            );
+          }
           break;
 
         case "photo_timeline_update":
@@ -792,7 +856,9 @@ class NotificationService {
 
       console.log(
         "✅ Project email template generated successfully for type:",
-        notification.type
+        notification.type,
+        "isAdmin:",
+        isAdminNotification
       );
       return template || this.getGenericEmailTemplate(notification);
     } catch (error) {
@@ -807,6 +873,9 @@ class NotificationService {
   private getGenericEmailTemplate(
     notification: NotificationDocument
   ): EmailTemplateResult {
+    // Check if this is an admin notification
+    const isAdminNotification = notification.targetUserRoles?.includes("admin");
+
     const details = `
 <div class="details-container">
   <div class="detail-row">
@@ -830,14 +899,27 @@ class NotificationService {
 </div>
   `;
 
+    const subject = isAdminNotification
+      ? `🔔 ${notification.title || "Admin Notification"}`
+      : notification.title || "Notification Update";
+
+    const message = isAdminNotification
+      ? `Dear Admin Team,<br><br>${notification.message || "You have received a new system notification."}`
+      : `Dear Valued Client,<br><br>${notification.message || "You have received a new notification."}`;
+
+    const nextSteps = isAdminNotification
+      ? "Please review this notification and take appropriate action."
+      : "Please log in to your account for more details and to take any necessary actions.";
+
     return {
-      subject: notification.title || "Notification Update",
+      subject,
       data: {
-        title: notification.title || "Notification",
-        message: `Dear Valued Client,<br><br>${notification.message || "You have received a new notification."}`,
+        title: isAdminNotification
+          ? `🔔 ${notification.title || "Admin Notification"}`
+          : notification.title || "Notification",
+        message,
         details,
-        nextSteps:
-          "Please log in to your account for more details and to take any necessary actions.",
+        nextSteps,
         showButton: !!notification.actionUrl,
         buttonText: notification.actionLabel || "View Details",
         buttonUrl: notification.actionUrl

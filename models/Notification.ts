@@ -9,6 +9,7 @@ export type NotificationType =
   | "appointment_rescheduled"
   | "appointment_completed"
   | "inquiry_submitted"
+  | "project_confirmed"
   | "project_created"
   | "project_updated"
   | "project_completed"
@@ -197,6 +198,7 @@ const NotificationSchema = new Schema<NotificationDocument>(
         "project_created",
         "project_updated",
         "project_completed",
+        "project_confirmed",
         "payment_received",
         "payment_failed",
         "document_ready",

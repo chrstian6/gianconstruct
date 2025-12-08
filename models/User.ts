@@ -10,7 +10,6 @@ export interface IUserMethods {
 
 // Combine Document and Methods interfaces
 export interface IUserDocument extends Document, IUserMethods {
-  _id: string;
   user_id: string;
   firstName: string;
   lastName: string;
@@ -23,6 +22,10 @@ export interface IUserDocument extends Document, IUserMethods {
   avatar?: string;
   otp?: string;
   otpExpires?: Date;
+  // Add Google-specific fields
+  googleId?: string;
+  googleAccessToken?: string;
+  googleRefreshToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +44,10 @@ const userSchema = new Schema<IUserDocument>(
     avatar: { type: String },
     otp: { type: String },
     otpExpires: { type: Date },
+    // Add Google-specific fields
+    googleId: { type: String, unique: true, sparse: true },
+    googleAccessToken: { type: String },
+    googleRefreshToken: { type: String },
   },
   {
     timestamps: true,

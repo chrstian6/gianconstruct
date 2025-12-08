@@ -64,6 +64,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import EditProjectModal from "@/components/admin/projects/EditProjectModal";
 
 // --- Types ---
 interface User {
@@ -110,6 +111,7 @@ export default function ProjectDetails({
 
   // Modal States
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
 
   // Edit Form State
   const [editedProject, setEditedProject] = useState({
@@ -125,6 +127,7 @@ export default function ProjectDetails({
   const [tasks, setTasks] = useState<Task[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [users, setUsers] = useState<User[]>([user].filter(Boolean) as User[]);
 
   // UI States
   const [activeTab, setActiveTab] = useState("timeline");
@@ -155,10 +158,15 @@ export default function ProjectDetails({
       setInternalLoading(false);
       fetchTasks();
       fetchDocuments();
+
+      // Set users array if user exists
+      if (user) {
+        setUsers([user]);
+      }
     } else if (project === null) {
       setInternalLoading(false);
     }
-  }, [project]);
+  }, [project, user]);
 
   const fetchTasks = async () => {
     if (!project) return;
@@ -310,6 +318,21 @@ export default function ProjectDetails({
     }
   };
 
+  // Handle project update from EditProjectModal
+  const handleProjectUpdate = (updatedProject: Project) => {
+    if (onUpdate) {
+      onUpdate(updatedProject);
+    }
+    setIsEditProjectModalOpen(false);
+  };
+
+  // Handle back to user selection (for EditProjectModal)
+  const handleBackToUserSelection = () => {
+    // In this context, we don't need to go back to user selection
+    // since we're editing an existing project
+    setIsEditProjectModalOpen(false);
+  };
+
   // --- Skeletons ---
   const GenericSkeleton = () => (
     <div className="space-y-6 animate-pulse max-w-[1600px] mx-auto p-6">
@@ -453,10 +476,10 @@ export default function ProjectDetails({
                   variant="outline"
                   size="sm"
                   className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
-                  onClick={() => setIsEditDialogOpen(true)}
+                  onClick={() => setIsEditProjectModalOpen(true)}
                 >
                   <Edit className="h-4 w-4 mr-2" />
-                  Edit Details
+                  Edit Project
                 </Button>
 
                 <Button
@@ -488,8 +511,10 @@ export default function ProjectDetails({
                     <DropdownMenuItem onClick={handleAddMilestoneClick}>
                       Add Milestone
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>
-                      Edit Details
+                    <DropdownMenuItem
+                      onClick={() => setIsEditProjectModalOpen(true)}
+                    >
+                      Edit Project
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleAddUpdateClick}>
                       New Update
@@ -791,7 +816,7 @@ export default function ProjectDetails({
         </div>
       </div>
 
-      {/* Edit Modal */}
+      {/* Edit Modal (Legacy - kept for compatibility) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[500px] bg-white font-geist border-zinc-200">
           <DialogHeader>
@@ -897,6 +922,18 @@ export default function ProjectDetails({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* New Edit Project Modal */}
+      {project && (
+        <EditProjectModal
+          open={isEditProjectModalOpen}
+          onOpenChange={setIsEditProjectModalOpen}
+          project={project}
+          users={users}
+          onUpdate={handleProjectUpdate}
+          onBackToUserSelection={handleBackToUserSelection}
+        />
+      )}
 
       {/* Add Timeline Update Modal */}
       {timelineProject && timelineProject.project_id === project.project_id && (
