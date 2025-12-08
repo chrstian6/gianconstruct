@@ -101,30 +101,71 @@ async function getUserDetails(userId: string) {
   }
 }
 
-// Upload image to Supabase
+// Upload image to Supabase with better error handling for large files
 async function uploadImageToSupabase(
   file: File,
   projectId: string,
   fileName: string
 ): Promise<string> {
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
+  try {
+    console.log(
+      `📤 Uploading file: ${fileName} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
+    );
 
-  const { data, error } = await supabase.storage
-    .from("project-images")
-    .upload(`${projectId}/${fileName}`, buffer, {
-      contentType: file.type,
+    // Check file size
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      throw new Error(
+        `File size ${(file.size / 1024 / 1024).toFixed(2)}MB exceeds 50MB limit`
+      );
+    }
+
+    // Convert to buffer in chunks to avoid memory issues
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    console.log(
+      `📊 Buffer created: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`
+    );
+
+    // Upload with timeout
+    const uploadPromise = supabase.storage
+      .from("project-images")
+      .upload(`${projectId}/${fileName}`, buffer, {
+        contentType: file.type,
+        upsert: false,
+      });
+
+    // Add timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Upload timeout after 30 seconds")),
+        30000
+      );
     });
 
-  if (error) {
-    throw new Error(`Failed to upload image: ${error.message}`);
+    const { data, error } = (await Promise.race([
+      uploadPromise,
+      timeoutPromise,
+    ])) as any;
+
+    if (error) {
+      console.error("Supabase upload error:", error);
+      throw new Error(`Failed to upload image: ${error.message}`);
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from("project-images")
+      .getPublicUrl(data.path);
+
+    console.log(
+      `✅ Upload successful: ${publicUrlData.publicUrl.substring(0, 50)}...`
+    );
+    return publicUrlData.publicUrl;
+  } catch (error) {
+    console.error("❌ Error in uploadImageToSupabase:", error);
+    throw error;
   }
-
-  const { data: publicUrlData } = supabase.storage
-    .from("project-images")
-    .getPublicUrl(data.path);
-
-  return publicUrlData.publicUrl;
 }
 
 // Zod schema for project creation
@@ -332,29 +373,65 @@ export async function getProjects(): Promise<ActionResponse> {
   }
 }
 
-// Create a new project
+// Create a new project - UPDATED VERSION WITH BETTER ERROR HANDLING
 export async function createProject(
   formData: FormData
 ): Promise<ActionResponse> {
-  await dbConnect();
+  console.log("🔄 Starting createProject function...");
+
   try {
+    await dbConnect();
+    console.log("✅ Database connected");
+
+    // Log all form data entries (without file content)
+    console.log("📋 FormData entries:");
+    let totalSize = 0;
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        console.log(
+          `📁 ${key}: ${value.name} (${(value.size / 1024 / 1024).toFixed(2)} MB)`
+        );
+        totalSize += value.size;
+      } else {
+        console.log(`📝 ${key}: ${value}`);
+      }
+    }
+    console.log(
+      `📊 Total form data size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`
+    );
+
+    // Extract form data
     const name = formData.get("name") as string;
-    const startDate = new Date(formData.get("startDate") as string);
-    const endDate = formData.get("endDate")
-      ? new Date(formData.get("endDate") as string)
-      : undefined;
+    console.log("📝 Project name:", name);
+
+    const startDateStr = formData.get("startDate") as string;
+    console.log("📅 Start date string:", startDateStr);
+    const startDate = new Date(startDateStr);
+    console.log("📅 Parsed start date:", startDate);
+
+    const endDateStr = formData.get("endDate") as string;
+    const endDate = endDateStr ? new Date(endDateStr) : undefined;
+    console.log("📅 End date:", endDate);
+
     const userId = formData.get("userId") as string;
-    const totalCost = formData.get("totalCost")
-      ? parseFloat(formData.get("totalCost") as string)
+    console.log("👤 User ID:", userId);
+
+    const totalCostStr = formData.get("totalCost") as string;
+    const totalCost = totalCostStr
+      ? parseFloat(totalCostStr.replace(/,/g, ""))
       : undefined;
+    console.log("💰 Total cost:", totalCost);
+
     const status = formData.get("status") as
       | "pending"
       | "active"
       | "completed"
       | "cancelled";
+    console.log("📊 Status:", status);
 
     // Generate incremental project ID
     const project_id = await generateProjectId();
+    console.log("🔢 Generated project ID:", project_id);
 
     // Extract location data
     const locationRegion = formData.get("location[region]") as string;
@@ -364,6 +441,14 @@ export async function createProject(
     ) as string;
     const locationBarangay = formData.get("location[barangay]") as string;
     const locationFullAddress = formData.get("location[fullAddress]") as string;
+
+    console.log("📍 Location data extracted:", {
+      region: locationRegion,
+      province: locationProvince,
+      municipality: locationMunicipality,
+      barangay: locationBarangay,
+      fullAddress: locationFullAddress,
+    });
 
     const location = {
       region: locationRegion,
@@ -380,6 +465,8 @@ export async function createProject(
     const imageDescriptions: string[] = [];
 
     // Collect all image data from formData
+    console.log("🖼️ Collecting image data...");
+    let imageCount = 0;
     for (const [key, value] of formData.entries()) {
       if (
         key.startsWith("projectImages[") &&
@@ -387,6 +474,10 @@ export async function createProject(
         value instanceof File
       ) {
         imageFiles.push(value);
+        imageCount++;
+        console.log(
+          `📁 Found image ${imageCount}: ${value.name} (${(value.size / 1024 / 1024).toFixed(2)} MB)`
+        );
       }
       if (key.startsWith("projectImages[") && key.includes("][title]")) {
         imageTitles.push(value as string);
@@ -396,72 +487,121 @@ export async function createProject(
       }
     }
 
+    console.log(`📊 Total images found: ${imageFiles.length}`);
+
     // Upload images and create projectImages array
     if (imageFiles.length > 0) {
+      console.log("☁️ Starting image uploads...");
       for (let i = 0; i < imageFiles.length; i++) {
-        const file = imageFiles[i];
-        const title = imageTitles[i] || `Image ${i + 1}`;
-        const description = imageDescriptions[i] || "";
+        try {
+          const file = imageFiles[i];
+          const title = imageTitles[i] || `Image ${i + 1}`;
+          const description = imageDescriptions[i] || "";
 
-        const fileName = `project-images/${Date.now()}_${file.name}`;
-        const imageUrl = await uploadImageToSupabase(
-          file,
-          project_id,
-          fileName
-        );
+          console.log(
+            `📤 Uploading image ${i + 1}/${imageFiles.length}: ${file.name}`
+          );
 
-        projectImages.push({
-          url: imageUrl,
-          title,
-          description,
-          uploadedAt: new Date(),
-        });
+          const fileName = `project-images/${project_id}/${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+          const imageUrl = await uploadImageToSupabase(
+            file,
+            project_id,
+            fileName
+          );
+
+          projectImages.push({
+            url: imageUrl,
+            title,
+            description,
+            uploadedAt: new Date(),
+          });
+
+          console.log(
+            `✅ Image ${i + 1} uploaded successfully: ${imageUrl.substring(0, 50)}...`
+          );
+        } catch (uploadError) {
+          console.error(`❌ Failed to upload image ${i + 1}:`, uploadError);
+          // Continue with other images
+          projectImages.push({
+            url: `placeholder-${i}`,
+            title: imageTitles[i] || `Image ${i + 1}`,
+            description: imageDescriptions[i] || "",
+            uploadedAt: new Date(),
+          });
+        }
       }
     }
 
+    // Prepare validation data
     const validationData = {
       project_id,
       name,
       startDate,
       endDate,
       userId,
-      totalCost,
+      totalCost: totalCost || 0,
       status: status || "pending",
       location,
       projectImages: projectImages.length > 0 ? projectImages : undefined,
     };
 
-    // Validate data before saving
-    ProjectCreateZodSchema.parse(validationData);
-    console.log("Validated data for creation:", validationData);
-
-    const project = await Project.create(validationData);
-
-    // Get user details for notification
-    const userDetails = await getUserDetails(userId);
-
-    // Create project creation notification
-    await createProjectNotification(
-      project,
-      userDetails,
-      "project_created",
-      "New Project Created",
-      `New project "${name}" has been created and is awaiting confirmation`,
-      {
-        previousStatus: null,
-        newStatus: "pending",
-      }
-    );
-
-    // Create automatic timeline entry for project creation
-    await Timeline.create({
-      project_id: project_id,
-      type: "project_created",
-      title: "Project Created",
-      description: `Project "${name}" has been created and is awaiting confirmation.`,
-      date: new Date(),
+    console.log("✅ Validation data prepared:", {
+      ...validationData,
+      projectImages: projectImages.length,
     });
 
+    // Validate data before saving
+    console.log("🔍 Validating with Zod schema...");
+    ProjectCreateZodSchema.parse(validationData);
+    console.log("✅ Zod validation passed");
+
+    // Create project in database
+    console.log("💾 Saving project to database...");
+    const project = await Project.create(validationData);
+    console.log("✅ Project saved to database, ID:", project._id);
+
+    // Get user details for notification
+    console.log("👤 Getting user details...");
+    const userDetails = await getUserDetails(userId);
+    console.log("✅ User details:", userDetails?.email);
+
+    // Create project creation notification
+    console.log("🔔 Creating notifications...");
+    try {
+      await createProjectNotification(
+        project,
+        userDetails,
+        "project_created",
+        "New Project Created",
+        `New project "${name}" has been created and is awaiting confirmation`,
+        {
+          previousStatus: null,
+          newStatus: "pending",
+        }
+      );
+      console.log("✅ Notification created");
+    } catch (notificationError) {
+      console.error("❌ Notification failed:", notificationError);
+      // Continue anyway
+    }
+
+    // Create automatic timeline entry for project creation
+    console.log("📅 Creating timeline entry...");
+    try {
+      await Timeline.create({
+        project_id: project_id,
+        type: "project_created",
+        title: "Project Created",
+        description: `Project "${name}" has been created and is awaiting confirmation.`,
+        date: new Date(),
+      });
+      console.log("✅ Timeline entry created");
+    } catch (timelineError) {
+      console.error("❌ Timeline entry failed:", timelineError);
+      // Continue anyway
+    }
+
+    // Prepare response
     const plainProject: ProjectType = ProjectZodSchema.parse({
       _id: project._id.toString(),
       project_id: project.project_id,
@@ -485,8 +625,20 @@ export async function createProject(
     });
 
     revalidatePath("/admin/admin-project");
+    console.log("🎉 Project creation completed successfully!");
     return { success: true, project: plainProject };
   } catch (error) {
+    console.error("❌ Error in createProject function:");
+    console.error("Error type:", typeof error);
+    console.error(
+      "Error message:",
+      error instanceof Error ? error.message : error
+    );
+    console.error(
+      "Error stack:",
+      error instanceof Error ? error.stack : "No stack"
+    );
+
     if (error instanceof z.ZodError) {
       console.error("Zod validation errors:", error.errors);
       return {
@@ -494,8 +646,11 @@ export async function createProject(
         error: formatZodErrors(error.errors),
       };
     }
-    console.error("Error creating project:", error);
-    return { success: false, error: "Failed to create project" };
+
+    return {
+      success: false,
+      error: `Failed to create project: ${error instanceof Error ? error.message : "Unknown error"}`,
+    };
   }
 }
 
@@ -1659,6 +1814,7 @@ export async function getUserProjectCounts(userId: string): Promise<{
     return { success: false, error: "Failed to fetch project counts" };
   }
 }
+
 export async function confirmProjectStart(
   projectId: string,
   downpaymentAmount: number
@@ -1694,7 +1850,7 @@ export async function confirmProjectStart(
       totalCost: project.totalCost,
     });
 
-    // Validate downpayment amount - more strict validation
+    // Validate downpayment amount
     if (
       !downpaymentAmount ||
       downpaymentAmount <= 0 ||
@@ -1740,16 +1896,16 @@ export async function confirmProjectStart(
 
     console.log("✅ Project updated successfully:", updatedProject.status);
 
-    // ✅ CREATE DOWNPAYMENT TRANSACTION ONLY
+    // ✅ CREATE DOWNPAYMENT TRANSACTION
     console.log("💰 Creating downpayment transaction...");
 
     const paymentDeadline = new Date(currentDate);
     paymentDeadline.setHours(paymentDeadline.getHours() + 48); // 48 hours from now
 
-    // Use the Transaction model with proper typing for static method
+    // Use the Transaction model
     const TransactionModel = Transaction as any;
 
-    // Generate transaction ID first to ensure it works
+    // Generate transaction ID
     let transactionId;
     try {
       transactionId = await TransactionModel.generateTransactionId();
@@ -1759,13 +1915,13 @@ export async function confirmProjectStart(
       return { success: false, error: "Failed to generate transaction ID" };
     }
 
-    // Create transaction data with proper validation
+    // Create transaction data
     const transactionData = {
       transaction_id: transactionId,
       project_id: projectId,
       user_id: project.userId,
-      amount: Number(downpaymentAmount), // Ensure it's a number
-      total_amount: Number(project.totalCost), // Ensure it's a number
+      amount: Number(downpaymentAmount),
+      total_amount: Number(project.totalCost),
       type: "downpayment",
       status: "pending",
       due_date: currentDate,
@@ -1775,7 +1931,7 @@ export async function confirmProjectStart(
 
     console.log("📋 Transaction data to create:", transactionData);
 
-    // Validate transaction data before creating
+    // Validate transaction data
     if (!transactionData.amount || transactionData.amount <= 0) {
       console.log("❌ Invalid transaction amount:", transactionData.amount);
       return { success: false, error: "Invalid transaction amount" };
@@ -1807,7 +1963,7 @@ export async function confirmProjectStart(
       deadline: downpaymentTransaction.payment_deadline,
     });
 
-    // Get user details for client notification
+    // Get user details for notifications
     const userDetails = await getUserDetails(project.userId);
     console.log("👤 User lookup:", {
       userId: project.userId,
@@ -1816,18 +1972,21 @@ export async function confirmProjectStart(
       name: userDetails?.fullName,
     });
 
-    // ✅ CREATE NOTIFICATION FOR ADMIN
-    console.log("📢 Creating admin notification for project confirmation...");
+    // ✅ CREATE NOTIFICATIONS - CORRECTED FLOW
+    console.log("📢 Creating notifications for project confirmation...");
 
+    // 1. FIRST: Create notification for ADMIN (targetUserRoles: ["admin"])
+    console.log("📧 Creating admin notification...");
     try {
       const adminNotificationResult =
         await notificationService.createNotification({
+          // No userId or userEmail - this goes to all admins
           targetUserRoles: ["admin"],
           feature: "projects",
           type: "project_confirmed",
           title: "Project Confirmed by Client",
           message: `Project "${project.name}" has been confirmed by ${userDetails?.fullName || "the client"} and is now active. Downpayment: ₱${downpaymentAmount.toLocaleString("en-PH")} (Remaining: ₱${remainingBalance.toLocaleString("en-PH")})`,
-          channels: ["in_app", "email"],
+          channels: ["in_app", "email"], // Admins get both in-app and email
           projectMetadata: {
             projectId: project.project_id,
             projectName: project.name,
@@ -1857,46 +2016,70 @@ export async function confirmProjectStart(
       } else {
         console.error("❌ Failed to create admin notification");
       }
-    } catch (notificationError) {
-      console.error("❌ Error creating admin notification:", notificationError);
-      // Don't fail the whole process if notification fails
+    } catch (adminNotificationError) {
+      console.error(
+        "❌ Error creating admin notification:",
+        adminNotificationError
+      );
+      // Continue anyway
     }
 
-    // ✅ CREATE NOTIFICATION FOR CLIENT
-    if (userDetails) {
-      console.log(
-        "📢 Creating client notification for project confirmation..."
-      );
-
+    // 2. SECOND: Create notification for CLIENT (the user who confirmed)
+    if (userDetails && userDetails.email) {
+      console.log("📧 Creating client notification...");
       try {
-        await createProjectNotification(
-          updatedProject.toObject(), // Convert to plain object
-          userDetails,
-          "project_confirmed",
-          "Project Confirmed Successfully",
-          `Your project "${project.name}" has been confirmed and is now active. Please pay the downpayment of ₱${downpaymentAmount.toLocaleString("en-PH")} within 48 hours (by ${paymentDeadline.toLocaleString()}). Remaining balance: ₱${remainingBalance.toLocaleString("en-PH")}`,
-          {
-            previousStatus: "pending",
-            newStatus: "active",
-            confirmedAt: currentDate.toISOString(),
-            downpaymentAmount: downpaymentAmount,
-            remainingBalance: remainingBalance,
-            transactionId: downpaymentTransaction.transaction_id,
-            paymentDeadline: paymentDeadline.toLocaleString(),
-          }
-        );
+        // Direct call to notificationService for client
+        const clientNotificationResult =
+          await notificationService.createNotification({
+            userId: project.userId,
+            userEmail: userDetails.email,
+            feature: "projects",
+            type: "project_confirmed",
+            title: "Project Confirmed Successfully",
+            message: `Your project "${project.name}" has been confirmed and is now active. Please pay the downpayment of ₱${downpaymentAmount.toLocaleString("en-PH")} within 48 hours (by ${paymentDeadline.toLocaleString()}). Remaining balance: ₱${remainingBalance.toLocaleString("en-PH")}`,
+            channels: ["in_app", "email"], // Client gets both in-app and email
+            projectMetadata: {
+              projectId: project.project_id,
+              projectName: project.name,
+              status: "active",
+              previousStatus: "pending",
+              startDate: currentDate.toISOString(),
+              confirmedAt: currentDate.toISOString(),
+              location: project.location?.fullAddress,
+              totalCost: project.totalCost,
+              downpaymentAmount: downpaymentAmount,
+              remainingBalance: remainingBalance,
+              clientName: userDetails.fullName,
+              clientEmail: userDetails.email,
+              clientId: project.userId,
+              transactionId: downpaymentTransaction.transaction_id,
+              paymentDeadline: paymentDeadline.toISOString(),
+            },
+            actionUrl: `/user/projects`, // Client goes to their projects page
+            actionLabel: "View My Projects",
+          });
+
+        if (clientNotificationResult) {
+          console.log(
+            "✅ Client notification created successfully:",
+            clientNotificationResult._id
+          );
+        } else {
+          console.error("❌ Failed to create client notification");
+        }
       } catch (clientNotificationError) {
         console.error(
           "❌ Error creating client notification:",
           clientNotificationError
         );
-        // Don't fail the whole process if notification fails
+        // Continue anyway
       }
     } else {
-      console.log("❌ User not found for client notification");
+      console.log("⚠️ User details not found, skipping client notification");
     }
 
     // Create project confirmed timeline entry
+    console.log("📅 Creating timeline entry...");
     try {
       await Timeline.create({
         project_id: projectId,
@@ -1917,6 +2100,7 @@ export async function confirmProjectStart(
       // Don't fail the whole process if timeline creation fails
     }
 
+    // Parse and return the updated project
     const plainProject: ProjectType = ProjectZodSchema.parse({
       _id: updatedProject._id.toString(),
       project_id: updatedProject.project_id,
@@ -1941,10 +2125,12 @@ export async function confirmProjectStart(
       updatedAt: updatedProject.updatedAt.toISOString(),
     });
 
+    // Revalidate all relevant paths
     revalidatePath("/user/projects");
     revalidatePath("/admin/admin-project");
     revalidatePath("/admin/notifications");
     revalidatePath("/admin/transactions");
+    revalidatePath("/user/userdashboard");
 
     console.log("✅ Project confirmation completed successfully");
 
@@ -2754,8 +2940,6 @@ export async function getCurrentUserActiveProjectsCount(): Promise<{
   }
 }
 
-// Add this function to your existing action/project.ts file
-// Add this function to your existing action/project.ts file
 export async function getCompletedProjects(): Promise<{
   success: boolean;
   data?: CompletedProject[];
@@ -2765,14 +2949,14 @@ export async function getCompletedProjects(): Promise<{
   try {
     console.log("📋 Fetching completed projects...");
 
-    // Fetch only completed projects with required fields
+    // Fetch only completed projects with required fields including location
     const completedProjects = await Project.find(
       { status: "completed" },
-      "project_id name projectImages startDate endDate"
+      "project_id name projectImages startDate endDate updatedAt location"
     )
-      .sort({ endDate: -1 }) // Most recently completed first
-      .limit(12) // Limit to 12 projects
-      .lean(); // Use lean() to get plain JavaScript objects
+      .sort({ updatedAt: -1 })
+      .limit(12)
+      .lean();
 
     console.log(`✅ Found ${completedProjects.length} completed projects`);
 
@@ -2789,12 +2973,43 @@ export async function getCompletedProjects(): Promise<{
         })
       );
 
+      // Handle location - extract just the string representation
+      let locationString = "Location not specified";
+      if (project.location) {
+        // If location is an object with fullAddress, use that
+        if (
+          typeof project.location === "object" &&
+          project.location.fullAddress
+        ) {
+          locationString = project.location.fullAddress;
+        }
+        // If location is a string, use it directly
+        else if (typeof project.location === "string") {
+          locationString = project.location;
+        }
+        // If it's an object with other properties, try to construct a string
+        else if (typeof project.location === "object") {
+          const parts = [];
+          if (project.location.barangay) parts.push(project.location.barangay);
+          if (project.location.municipality)
+            parts.push(project.location.municipality);
+          if (project.location.province) parts.push(project.location.province);
+          if (project.location.region) parts.push(project.location.region);
+          locationString = parts.join(", ") || "Location specified";
+        }
+      }
+
       return {
         project_id: project.project_id || "",
         name: project.name || "",
         projectImages: serializedProjectImages,
         startDate: project.startDate?.toISOString() || new Date().toISOString(),
         endDate: project.endDate?.toISOString() || new Date().toISOString(),
+        statusUpdatedAt:
+          project.updatedAt?.toISOString() ||
+          project.endDate?.toISOString() ||
+          new Date().toISOString(),
+        location: locationString, // Use the serialized string
       };
     });
 
