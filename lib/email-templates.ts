@@ -1190,4 +1190,403 @@ export const EmailTemplates = {
       },
     };
   },
+  // Add these new templates to your EmailTemplates object in lib/email-templates.ts
+
+  // ========== ADD THESE TEMPLATES TO THE EXISTING EmailTemplates OBJECT ==========
+
+  // Add these right after the paymentReceived template
+
+  projectConfirmed: (
+    project: any,
+    user: any,
+    downpaymentAmount: number,
+    remainingBalance: number,
+    transactionId: string,
+    paymentDeadline: string
+  ) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Transaction ID</div>
+    <div class="detail-value">${transactionId}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Total Project Cost</div>
+    <div class="detail-value">${formatCurrency(project.totalCost || 0)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Downpayment Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(downpaymentAmount)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Remaining Balance</div>
+    <div class="detail-value">${formatCurrency(remainingBalance)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Deadline</div>
+    <div class="detail-value"><strong>${new Date(
+      paymentDeadline
+    ).toLocaleDateString("en-PH", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Construction Site"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Current Status</div>
+    <div class="detail-value"><span style="color: #059669; font-weight: 600;">Active - Awaiting Downpayment</span></div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `Project Confirmed: ${project.name}`,
+      data: {
+        title: "Project Confirmed Successfully! 🎉",
+        message: `Dear ${user?.name || "Valued Client"},<br><br>Your project <strong>"${project.name}"</strong> has been successfully confirmed and is now active. Construction will begin shortly.<br><br>Here are your project confirmation details:`,
+        details,
+        nextSteps: `
+<strong>Next Steps:</strong><br>
+1. Please pay the downpayment of <strong>${formatCurrency(downpaymentAmount)}</strong> within 48 hours (by ${new Date(
+          paymentDeadline
+        ).toLocaleDateString("en-PH", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })})
+<br>2. Payments must be made in cash at our office
+<br>3. Office hours: Monday-Friday, 8:00 AM - 5:00 PM
+<br>4. Official receipts will be provided upon payment
+<br>5. Construction will commence after downpayment is received
+<br>6. You will receive regular progress updates via email and in-app notifications
+      `,
+        showButton: true,
+        buttonText: "View My Projects",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/user/projects`,
+      },
+    };
+  },
+
+  projectConfirmedAdmin: (
+    project: any,
+    client: any,
+    downpaymentAmount: number,
+    remainingBalance: number,
+    transactionId: string,
+    paymentDeadline: string
+  ) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Name</div>
+    <div class="detail-value">${client.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Email</div>
+    <div class="detail-value">${client.email}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Transaction ID</div>
+    <div class="detail-value">${transactionId}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Downpayment Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(downpaymentAmount)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Remaining Balance</div>
+    <div class="detail-value">${formatCurrency(remainingBalance)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Deadline</div>
+    <div class="detail-value"><strong>${new Date(
+      paymentDeadline
+    ).toLocaleDateString("en-PH", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Construction Site"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Current Status</div>
+    <div class="detail-value"><span style="color: #2563eb; font-weight: 600;">Active - Awaiting Downpayment</span></div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `🔔 Project Confirmed by Client: ${project.name}`,
+      data: {
+        title: "Project Confirmed - Awaiting Payment",
+        message: `Project <strong>"${project.name}"</strong> has been confirmed by <strong>${client.name}</strong> (${client.email}).<br><br>The project is now active and awaiting downpayment.`,
+        details,
+        nextSteps: `
+<strong>Action Required:</strong><br>
+1. Await client's downpayment payment (48-hour deadline)
+<br>2. Prepare project materials and schedule
+<br>3. Assign project team members
+<br>4. Schedule initial site visit
+<br>5. Prepare construction permits and documentation
+<br>6. Notify suppliers about upcoming material requirements
+      `,
+        showButton: true,
+        buttonText: "View Project Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/admin-project?project=${project.project_id}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  // Add internal project templates
+  internalNewProject: (project: any, client: any) => {
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Name</div>
+    <div class="detail-value">${client.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Email</div>
+    <div class="detail-value">${client.email}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Construction Site"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Estimated Budget</div>
+    <div class="detail-value">₱${(project.totalCost || 0).toLocaleString()}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Start Date</div>
+    <div class="detail-value">${new Date(project.startDate).toLocaleDateString(
+      "en-PH",
+      {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }
+    )}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Current Status</div>
+    <div class="detail-value"><span style="color: #f59e0b; font-weight: 600;">Pending Client Confirmation</span></div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `🏗️ New Project Created: ${project.name}`,
+      data: {
+        title: "New Project Created - Action Required",
+        message: `A new project has been created and requires your attention.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br><strong>Project:</strong> ${project.name}`,
+        details,
+        nextSteps: `
+<strong>Action Required:</strong><br>
+1. Prepare detailed project proposal and designs
+<br>2. Schedule initial project kickoff meeting
+<br>3. Assign project manager and team members
+<br>4. Estimate materials and resources needed
+<br>5. Set up project timeline and milestones
+      `,
+        showButton: true,
+        buttonText: "View Project Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/admin-project?project=${project.project_id}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  internalProjectCompleted: (project: any, client: any) => {
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Name</div>
+    <div class="detail-value">${client.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Construction Site"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Start Date</div>
+    <div class="detail-value">${new Date(project.startDate).toLocaleDateString(
+      "en-PH",
+      {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }
+    )}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Completion Date</div>
+    <div class="detail-value">${new Date().toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Total Value</div>
+    <div class="detail-value">₱${(project.totalCost || 0).toLocaleString()}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Status</div>
+    <div class="detail-value"><span style="color: #059669; font-weight: 600;">Completed</span></div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `✅ Project Completed: ${project.name}`,
+      data: {
+        title: "Project Successfully Completed",
+        message: `Project <strong>"${project.name}"</strong> has been successfully completed.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br>Total Project Value: <strong>₱${(project.totalCost || 0).toLocaleString()}</strong>`,
+        details,
+        nextSteps: `
+<strong>Final Steps Required:</strong><br>
+1. Schedule final walkthrough with client
+<br>2. Collect final payment (if any balance remains)
+<br>3. Provide completion certificate and warranty documents
+<br>4. Update project financial records
+<br>5. Archive project documentation
+<br>6. Request client testimonial or review
+      `,
+        showButton: true,
+        buttonText: "View Project Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/admin-project?project=${project.project_id}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  internalProjectCancelled: (project: any, client: any) => {
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Name</div>
+    <div class="detail-value">${client.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Client Email</div>
+    <div class="detail-value">${client.email}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Location</div>
+    <div class="detail-value">${project.location?.fullAddress || "Construction Site"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Cancellation Date</div>
+    <div class="detail-value">${new Date().toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Status</div>
+    <div class="detail-value"><span style="color: #dc2626; font-weight: 600;">Cancelled</span></div>
+  </div>
+</div>
+  `;
+
+    return {
+      subject: `🚫 Project Cancelled: ${project.name}`,
+      data: {
+        title: "Project Has Been Cancelled",
+        message: `Project <strong>"${project.name}"</strong> has been cancelled.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br>Please review the cancellation details below.`,
+        details,
+        nextSteps: `
+<strong>Action Required:</strong><br>
+1. Stop all work on this project immediately
+<br>2. Calculate any cancellation fees or refunds due
+<br>3. Notify all team members and suppliers
+<br>4. Return any unused materials
+<br>5. Update financial records
+<br>6. Archive project documentation
+<br>7. Follow up with client regarding final settlement
+      `,
+        showButton: true,
+        buttonText: "View Project Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/admin-project?project=${project.project_id}`,
+        isInternal: true,
+      },
+    };
+  },
 };

@@ -1814,6 +1814,7 @@ export async function getUserProjectCounts(userId: string): Promise<{
     return { success: false, error: "Failed to fetch project counts" };
   }
 }
+// Update your confirmProjectStart function in actions/project.ts
 
 export async function confirmProjectStart(
   projectId: string,
@@ -1902,7 +1903,7 @@ export async function confirmProjectStart(
     const paymentDeadline = new Date(currentDate);
     paymentDeadline.setHours(paymentDeadline.getHours() + 48); // 48 hours from now
 
-    // Use the Transaction model
+    // Use the Transaction model with proper typing for static method
     const TransactionModel = Transaction as any;
 
     // Generate transaction ID
@@ -1972,40 +1973,58 @@ export async function confirmProjectStart(
       name: userDetails?.fullName,
     });
 
-    // ✅ CREATE NOTIFICATIONS - CORRECTED FLOW
+    // ✅ CREATE NOTIFICATIONS - USING DIRECT notificationService.createNotification CALLS
     console.log("📢 Creating notifications for project confirmation...");
+
+    // Prepare common metadata for notifications
+    const notificationMetadata = {
+      projectId: project.project_id,
+      projectName: project.name,
+      status: "active",
+      previousStatus: "pending",
+      startDate: currentDate.toISOString(),
+      confirmedAt: currentDate.toISOString(),
+      location: project.location?.fullAddress || "Project Location",
+      totalCost: project.totalCost,
+      downpaymentAmount: downpaymentAmount,
+      remainingBalance: remainingBalance,
+      clientName: userDetails?.fullName || "Valued Client",
+      clientFirstName: userDetails?.firstName || "",
+      clientLastName: userDetails?.lastName || "",
+      clientEmail: userDetails?.email || "",
+      clientId: project.userId,
+      transactionId: downpaymentTransaction.transaction_id,
+      paymentDeadline: paymentDeadline.toISOString(),
+      formattedDownpaymentAmount: `₱${downpaymentAmount.toLocaleString("en-PH")}`,
+      formattedRemainingBalance: `₱${remainingBalance.toLocaleString("en-PH")}`,
+      formattedTotalCost: `₱${project.totalCost.toLocaleString("en-PH")}`,
+      paymentDeadlineFormatted: paymentDeadline.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
 
     // 1. FIRST: Create notification for ADMIN (targetUserRoles: ["admin"])
     console.log("📧 Creating admin notification...");
     try {
       const adminNotificationResult =
         await notificationService.createNotification({
-          // No userId or userEmail - this goes to all admins
+          // No userId or userEmail - this goes to all admins via COMPANY_EMAIL
           targetUserRoles: ["admin"],
           feature: "projects",
           type: "project_confirmed",
-          title: "Project Confirmed by Client",
+          title: `Project Confirmed: ${project.name}`,
           message: `Project "${project.name}" has been confirmed by ${userDetails?.fullName || "the client"} and is now active. Downpayment: ₱${downpaymentAmount.toLocaleString("en-PH")} (Remaining: ₱${remainingBalance.toLocaleString("en-PH")})`,
-          channels: ["in_app", "email"], // Admins get both in-app and email
-          projectMetadata: {
-            projectId: project.project_id,
-            projectName: project.name,
-            status: "active",
-            previousStatus: "pending",
-            startDate: currentDate.toISOString(),
-            confirmedAt: currentDate.toISOString(),
-            location: project.location?.fullAddress,
-            totalCost: project.totalCost,
-            downpaymentAmount: downpaymentAmount,
-            remainingBalance: remainingBalance,
-            clientName: userDetails?.fullName,
-            clientEmail: userDetails?.email,
-            clientId: project.userId,
-            transactionId: downpaymentTransaction.transaction_id,
-            paymentDeadline: paymentDeadline.toISOString(),
-          },
+          channels: ["in_app", "email"],
+          projectMetadata: notificationMetadata,
+          metadata: notificationMetadata,
+          relatedId: project.project_id,
           actionUrl: `/admin/admin-project?project=${project.project_id}`,
-          actionLabel: "View Project",
+          actionLabel: "View Project Details",
         });
 
       if (adminNotificationResult) {
@@ -2021,7 +2040,7 @@ export async function confirmProjectStart(
         "❌ Error creating admin notification:",
         adminNotificationError
       );
-      // Continue anyway
+      // Continue anyway - don't fail the whole process
     }
 
     // 2. SECOND: Create notification for CLIENT (the user who confirmed)
@@ -2035,27 +2054,13 @@ export async function confirmProjectStart(
             userEmail: userDetails.email,
             feature: "projects",
             type: "project_confirmed",
-            title: "Project Confirmed Successfully",
+            title: `Project Confirmed: ${project.name}`,
             message: `Your project "${project.name}" has been confirmed and is now active. Please pay the downpayment of ₱${downpaymentAmount.toLocaleString("en-PH")} within 48 hours (by ${paymentDeadline.toLocaleString()}). Remaining balance: ₱${remainingBalance.toLocaleString("en-PH")}`,
-            channels: ["in_app", "email"], // Client gets both in-app and email
-            projectMetadata: {
-              projectId: project.project_id,
-              projectName: project.name,
-              status: "active",
-              previousStatus: "pending",
-              startDate: currentDate.toISOString(),
-              confirmedAt: currentDate.toISOString(),
-              location: project.location?.fullAddress,
-              totalCost: project.totalCost,
-              downpaymentAmount: downpaymentAmount,
-              remainingBalance: remainingBalance,
-              clientName: userDetails.fullName,
-              clientEmail: userDetails.email,
-              clientId: project.userId,
-              transactionId: downpaymentTransaction.transaction_id,
-              paymentDeadline: paymentDeadline.toISOString(),
-            },
-            actionUrl: `/user/projects`, // Client goes to their projects page
+            channels: ["in_app", "email"],
+            projectMetadata: notificationMetadata,
+            metadata: notificationMetadata,
+            relatedId: project.project_id,
+            actionUrl: `/user/projects`,
             actionLabel: "View My Projects",
           });
 

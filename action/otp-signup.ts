@@ -80,7 +80,8 @@ interface ErrorResponse {
   [key: string]: string[] | undefined;
 }
 
-async function generateUserId(): Promise<string> {
+// Add this helper function to action/otp-signup.ts
+export async function generateUserId(): Promise<string> {
   await dbConnect();
 
   // Find the highest existing user_id with GC- prefix
