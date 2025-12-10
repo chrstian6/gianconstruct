@@ -1021,3 +1021,112 @@ export async function getAppointmentStats(): Promise<{
     };
   }
 }
+
+export async function cancelUserInquiry(
+  inquiryId: string
+): Promise<InquiryActionResponse> {
+  await dbConnect();
+
+  try {
+    const inquiry = await Inquiry.findById(inquiryId);
+    if (!inquiry) {
+      return { success: false, error: "Appointment not found" };
+    }
+
+    const user = await User.findOne({ email: inquiry.email });
+    const isGuest = !user || (user && user.role !== "user");
+    const userType: "guest" | "registered" = isGuest ? "guest" : "registered";
+
+    // Free up the timeslot
+    await Timeslot.findOneAndUpdate(
+      { date: inquiry.preferredDate, time: inquiry.preferredTime },
+      {
+        isAvailable: true,
+        inquiryId: null,
+        meetingType: null,
+        updatedAt: new Date().toISOString(),
+      }
+    );
+
+    const updatedInquiry = await Inquiry.findByIdAndUpdate(
+      inquiryId,
+      {
+        status: "cancelled",
+        cancellationReason: "Cancelled by user",
+      },
+      { new: true }
+    );
+
+    if (!updatedInquiry) {
+      return { success: false, error: "Failed to cancel appointment" };
+    }
+
+    const transformedInquiry = {
+      _id: updatedInquiry._id.toString(),
+      name: updatedInquiry.name,
+      email: updatedInquiry.email,
+      phone: updatedInquiry.phone,
+      message: updatedInquiry.message,
+      preferredDate: updatedInquiry.preferredDate,
+      preferredTime: updatedInquiry.preferredTime,
+      meetingType: updatedInquiry.meetingType as "phone" | "onsite" | "video",
+      design: {
+        id: updatedInquiry.design.id,
+        name: updatedInquiry.design.name,
+        price: (updatedInquiry.design as any).price,
+        square_meters: (updatedInquiry.design as any).square_meters,
+      },
+      submittedAt: updatedInquiry.submittedAt,
+      status: updatedInquiry.status as
+        | "pending"
+        | "confirmed"
+        | "cancelled"
+        | "rescheduled"
+        | "completed",
+      notes: (updatedInquiry as any).notes,
+      cancellationReason: (updatedInquiry as any).cancellationReason,
+      rescheduleNotes: (updatedInquiry as any).rescheduleNotes,
+      userType: userType,
+      userRole: user?.role || "guest",
+      user_id: inquiry.user_id,
+    };
+
+    // Send email notification
+    await sendAppointmentEmail("cancelled", transformedInquiry, {
+      reason: "Cancelled by user",
+    });
+
+    // Create notification
+    await createAppointmentNotification(
+      {
+        inquiryId: inquiry._id?.toString(),
+        appointmentId: inquiry._id?.toString(),
+        userId: inquiry.user_id,
+        userEmail: inquiry.email,
+        userName: inquiry.name,
+        userFirstName: inquiry.name.split(" ")[0],
+        userLastName: inquiry.name.split(" ").slice(1).join(" "),
+        designName: inquiry.design.name,
+        originalDate: inquiry.preferredDate,
+        originalTime: inquiry.preferredTime,
+        meetingType: inquiry.meetingType,
+        userType: userType,
+        reason: "Cancelled by user",
+      },
+      "appointment_cancelled",
+      "Appointment Cancelled",
+      `Your appointment for ${transformedInquiry.design.name} has been cancelled`
+    );
+
+    revalidatePath("/user/appointments");
+    revalidatePath("/admin/appointments");
+
+    return {
+      success: true,
+      inquiry: transformedInquiry,
+    };
+  } catch (error) {
+    console.error("Error cancelling inquiry from user side:", error);
+    return { success: false, error: "Failed to cancel appointment" };
+  }
+}

@@ -4,19 +4,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { format, parseISO } from "date-fns";
 import { Inquiry } from "@/types/inquiry";
-import { cancelInquiry } from "@/action/appointments";
+import { cancelUserInquiry } from "@/action/appointments";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+import ConfirmationModal from "@/components/ConfirmationModal";
 
 interface AppointmentCardProps {
   inquiry: Inquiry;
@@ -25,8 +16,7 @@ interface AppointmentCardProps {
 
 export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
   const [isCancelling, setIsCancelling] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const getStatusConfig = (status: Inquiry["status"]) => {
     const config = {
@@ -52,7 +42,7 @@ export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
         variant: "destructive" as const,
         label: "Cancelled",
         color: "text-red-600",
-        bgColor: "bg-gray-50",
+        bgColor: "bg-red-50",
         borderColor: "border-red-200",
         textColor: "text-red-800",
         icon: "❌",
@@ -61,7 +51,7 @@ export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
         variant: "outline" as const,
         label: "Rescheduled",
         color: "text-blue-600",
-        bgColor: "bg-gray-50",
+        bgColor: "bg-blue-50",
         borderColor: "border-blue-200",
         textColor: "text-blue-800",
         icon: "🔄",
@@ -69,7 +59,7 @@ export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
       completed: {
         variant: "default" as const,
         label: "Completed",
-        color: "text-green-500",
+        color: "text-gray-600",
         bgColor: "bg-gray-50",
         borderColor: "border-gray-200",
         textColor: "text-gray-800",
@@ -106,17 +96,11 @@ export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
   };
 
   const handleCancelAppointment = async () => {
-    if (!cancelReason.trim()) {
-      alert("Please provide a reason for cancellation.");
-      return;
-    }
-
     setIsCancelling(true);
     try {
-      const result = await cancelInquiry(inquiry._id, cancelReason);
+      const result = await cancelUserInquiry(inquiry._id);
       if (result.success) {
-        setShowCancelDialog(false);
-        setCancelReason("");
+        setShowCancelModal(false);
         // Call the onCancel callback if provided
         if (onCancel) {
           onCancel();
@@ -247,78 +231,15 @@ export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
 
           {/* Cancel Appointment Button (only for confirmed appointments) */}
           {inquiry.status === "confirmed" && (
-            <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full mt-3 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                >
-                  Cancel Appointment
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Cancel Appointment</DialogTitle>
-                  <DialogDescription>
-                    Are you sure you want to cancel this appointment? This
-                    action cannot be undone.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="bg-gray-50 p-3 rounded-md">
-                    <p className="text-sm font-medium">Appointment Details:</p>
-                    <p className="text-sm mt-1">
-                      {getMeetingTypeLabel(inquiry.meetingType)} -{" "}
-                      {inquiry.design.name}
-                    </p>
-                    <p className="text-sm">
-                      {dateInfo.fullDate} at {formattedTime}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="cancel-reason"
-                      className="text-sm font-medium"
-                    >
-                      Reason for Cancellation *
-                    </label>
-                    <Textarea
-                      id="cancel-reason"
-                      placeholder="Please provide a reason for cancellation..."
-                      value={cancelReason}
-                      onChange={(e) => setCancelReason(e.target.value)}
-                      className="min-h-[100px]"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowCancelDialog(false);
-                      setCancelReason("");
-                    }}
-                    disabled={isCancelling}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={handleCancelAppointment}
-                    disabled={isCancelling || !cancelReason.trim()}
-                  >
-                    {isCancelling ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Cancelling...
-                      </>
-                    ) : (
-                      "Cancel Appointment"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <div className="mt-3">
+              <Button
+                variant="outline"
+                className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                onClick={() => setShowCancelModal(true)}
+              >
+                Cancel Appointment
+              </Button>
+            </div>
           )}
 
           {/* Footer */}
@@ -334,6 +255,18 @@ export function AppointmentCard({ inquiry, onCancel }: AppointmentCardProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showCancelModal}
+        onConfirm={handleCancelAppointment}
+        onCancel={() => setShowCancelModal(false)}
+        title="Cancel Appointment"
+        description="Are you sure you want to cancel this appointment? This action cannot be undone."
+        confirmText={isCancelling ? "Cancelling..." : "Yes, Cancel"}
+        cancelText="No, Keep Appointment"
+        variant="destructive"
+      />
     </>
   );
 }
