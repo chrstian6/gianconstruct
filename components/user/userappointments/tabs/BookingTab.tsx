@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Design } from "@/types/design";
 import { Inquiry } from "@/types/inquiry";
-import { Search, ChevronLeft } from "lucide-react";
+import { Search, ChevronLeft, X } from "lucide-react";
 import { DesignSearchCard } from "@/components/user/userappointments/DesignSearchCard";
 import { BookingForm } from "@/components/user/userappointments/BookingForm";
 import { BookingStatusAlert } from "@/components/user/userappointments/BookingStatusAlert";
@@ -46,29 +46,29 @@ export function BookingTab({
       variant="ghost"
       size="sm"
       onClick={onBackToDesigns}
-      className="lg:hidden mb-4 flex items-center gap-2"
+      className="lg:hidden mb-2 sm:mb-4 flex items-center gap-1 sm:gap-2 text-sm"
     >
-      <ChevronLeft className="h-4 w-4" />
+      <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
       Back to Designs
     </Button>
   );
 
   return (
-    <ScrollArea className="h-full px-4 lg:px-6 py-4">
+    <ScrollArea className="h-full px-2 sm:px-4 lg:px-6 py-2 sm:py-4">
       {!user ? (
-        <div className="p-4 lg:p-8">
+        <div className="p-3 sm:p-4 lg:p-8">
           <NotFound
             title="Sign in required"
             description="Please sign in to book a new appointment."
           />
         </div>
       ) : selectedDesign ? (
-        <div className="space-y-4 lg:space-y-6">
+        <div className="space-y-3 sm:space-y-4 lg:space-y-6">
           {/* Mobile Back Button - Only shows on mobile when in booking form */}
           <MobileBackButton />
 
           {/* Main content with responsive padding */}
-          <div className="p-4 lg:p-6">
+          <div className="p-2 sm:p-4 lg:p-6">
             <BookingForm
               selectedDesign={selectedDesign}
               user={user}
@@ -79,14 +79,14 @@ export function BookingTab({
           </div>
         </div>
       ) : (
-        <div className="space-y-4 lg:space-y-6">
-          <div className="mb-4 lg:mb-6">
-            <h3 className="font-semibold text-gray-900 mb-3 lg:mb-4 text-lg lg:text-xl">
+        <div className="space-y-3 sm:space-y-4 lg:space-y-6">
+          <div className="mb-3 sm:mb-4 lg:mb-6">
+            <h3 className="font-semibold text-gray-900 mb-2 sm:mb-3 lg:mb-4 text-base sm:text-lg lg:text-xl">
               Book New Consultation
             </h3>
 
             {/* Booking Status Alert with responsive margin */}
-            <div className="mb-4 lg:mb-6">
+            <div className="mb-3 sm:mb-4 lg:mb-6">
               <BookingStatusAlert
                 hasActiveAppointments={hasActiveAppointments}
                 completedOrCancelledAppointments={
@@ -96,39 +96,27 @@ export function BookingTab({
             </div>
 
             {/* Search Bar with responsive styling */}
-            <div className="relative mb-4 lg:mb-6">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="relative mb-3 sm:mb-4 lg:mb-6">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
               <Input
                 type="text"
-                placeholder="Search designs by name, category, or description..."
+                placeholder="Search designs..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="pl-10 text-sm lg:text-base"
+                className="pl-8 sm:pl-10 text-xs sm:text-sm lg:text-base h-9 sm:h-10 lg:h-11"
               />
               {searchQuery && (
                 <button
                   onClick={() => onSearchChange("")}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
+                  className="absolute right-2 sm:right-3 top-1/2 transform -translate-y-1/2 p-0.5 sm:p-1 hover:bg-gray-100 rounded-full"
                   aria-label="Clear search"
                 >
-                  <svg
-                    className="h-3 w-3 lg:h-4 lg:w-4 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
+                  <X className="h-3 w-3 sm:h-3 sm:w-3 lg:h-4 lg:w-4 text-gray-500" />
                 </button>
               )}
             </div>
 
-            <p className="text-sm text-gray-600 mb-4 lg:mb-6 leading-relaxed">
+            <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 lg:mb-6 leading-relaxed">
               {hasActiveAppointments
                 ? "You currently have an active appointment. Please wait for it to be completed or cancelled before booking a new consultation."
                 : "Browse our design catalog and book a consultation for your favorite design. Appointments are available on weekdays (Monday-Friday) only."}
@@ -137,15 +125,15 @@ export function BookingTab({
 
           {/* Loading State */}
           {loadingDesigns ? (
-            <div className="space-y-3 lg:space-y-4">
+            <div className="space-y-2 sm:space-y-3 lg:space-y-4">
               {Array.from({ length: 3 }).map((_, index) => (
                 <AppointmentCardSkeleton key={index} />
               ))}
             </div>
           ) : filteredDesigns.length > 0 ? (
-            <div className="space-y-4 lg:space-y-6">
+            <div className="space-y-3 sm:space-y-4 lg:space-y-6">
               {/* Results count with responsive text */}
-              <p className="text-sm lg:text-base text-gray-500">
+              <p className="text-xs sm:text-sm lg:text-base text-gray-500">
                 Found {filteredDesigns.length} design
                 {filteredDesigns.length !== 1 ? "s" : ""}
                 {searchQuery && (
@@ -154,12 +142,13 @@ export function BookingTab({
               </p>
 
               {/* Designs grid/list with responsive layout */}
-              <div className="space-y-3 lg:space-y-4">
+              <div className="space-y-2 sm:space-y-3 lg:space-y-4">
                 {filteredDesigns.map((design) => (
                   <div
                     key={design.design_id}
                     className={cn(
-                      "transition-transform duration-200 hover:scale-[1.01]",
+                      "transition-transform duration-200",
+                      "hover:scale-[1.005] sm:hover:scale-[1.01]",
                       hasActiveAppointments && "opacity-60 cursor-not-allowed"
                     )}
                   >
@@ -178,7 +167,7 @@ export function BookingTab({
               </div>
             </div>
           ) : (
-            <div className="p-4 lg:p-8">
+            <div className="p-3 sm:p-4 lg:p-8">
               <NotFound
                 title="No designs found"
                 description={
