@@ -1,4 +1,4 @@
-// models/Notification.ts
+// models/Notification.ts - UPDATED WITH notificationType FIELD
 import mongoose, { Schema, Document, Types } from "mongoose";
 
 // Simplified role types based on your User model
@@ -19,7 +19,15 @@ export type NotificationType =
   | "document_ready"
   | "milestone_reached"
   | "system_alert"
-  | "general_message";
+  | "general_message"
+  | "invoice_sent"
+  | "invoice paid"
+  // Add PDC notification types
+  | "pdc_created"
+  | "pdc_issued"
+  | "pdc_cancelled"
+  | "pdc_status_updated"
+  | "pdc_stats_summary";
 
 export type NotificationPriority = "low" | "medium" | "high" | "urgent";
 export type NotificationChannel = "in_app" | "email" | "push" | "sms";
@@ -100,6 +108,35 @@ export interface SystemMetadata {
   actionRequired?: boolean;
 }
 
+// PDC Metadata interface
+export interface PDCMetadata {
+  pdcId?: string;
+  checkNumber?: string;
+  supplier?: string;
+  amount?: number;
+  checkDate?: string;
+  formattedAmount?: string;
+  formattedDate?: string;
+  itemCount?: number;
+  daysUntilCheck?: number;
+  status?: string;
+  oldStatus?: string;
+  newStatus?: string;
+  issuedAt?: string;
+  cancelledAt?: string;
+  action?: string;
+
+  // Statistics properties
+  totalPDCs?: number;
+  totalAmount?: number;
+  issuedPDCs?: number;
+  issuedAmount?: number;
+  pendingPDCs?: number;
+  pendingAmount?: number;
+  cancelledPDCs?: number;
+  cancelledAmount?: number;
+}
+
 // Main notification document interface
 export interface NotificationDocument extends Document, BaseNotification {
   userId?: string;
@@ -113,12 +150,16 @@ export interface NotificationDocument extends Document, BaseNotification {
     | "documents"
     | "system"
     | "general"
-    | "invoices";
+    | "invoices"
+    | "pdc";
   relatedId?: string;
 
   // Role-based access control
-  allowedRoles?: UserRole[]; // Roles that can see this notification
-  createdByRole?: UserRole; // Role of the user who created the notification
+  allowedRoles?: UserRole[];
+  createdByRole?: UserRole;
+
+  // Add notificationType field
+  notificationType?: "admin" | "user";
 
   // Notification channels
   channels: NotificationChannel[];
@@ -130,6 +171,7 @@ export interface NotificationDocument extends Document, BaseNotification {
   paymentMetadata?: PaymentMetadata;
   documentMetadata?: DocumentMetadata;
   systemMetadata?: SystemMetadata;
+  pdcMetadata?: PDCMetadata;
 
   // Action
   actionUrl?: string;
@@ -183,6 +225,7 @@ const NotificationSchema = new Schema<NotificationDocument>(
         "system",
         "general",
         "invoices",
+        "pdc",
       ],
       index: true,
     },
@@ -207,6 +250,13 @@ const NotificationSchema = new Schema<NotificationDocument>(
         "system_alert",
         "general_message",
         "invoice_sent",
+        "invoice paid",
+        // Add PDC types
+        "pdc_created",
+        "pdc_issued",
+        "pdc_cancelled",
+        "pdc_status_updated",
+        "pdc_stats_summary",
       ],
       index: true,
     },
@@ -245,6 +295,14 @@ const NotificationSchema = new Schema<NotificationDocument>(
       type: String,
       enum: ["admin", "user"],
       required: false,
+    },
+
+    // ADD notificationType field - THIS IS MISSING!
+    notificationType: {
+      type: String,
+      enum: ["admin", "user"],
+      default: "user",
+      index: true,
     },
 
     // Notification channels
@@ -316,6 +374,33 @@ const NotificationSchema = new Schema<NotificationDocument>(
       severity: { type: String },
       actionRequired: { type: Boolean },
     },
+    pdcMetadata: {
+      pdcId: { type: String },
+      checkNumber: { type: String },
+      supplier: { type: String },
+      amount: { type: Number },
+      checkDate: { type: String },
+      formattedAmount: { type: String },
+      formattedDate: { type: String },
+      itemCount: { type: Number },
+      daysUntilCheck: { type: Number },
+      status: { type: String },
+      oldStatus: { type: String },
+      newStatus: { type: String },
+      issuedAt: { type: String },
+      cancelledAt: { type: String },
+      action: { type: String },
+
+      // Statistics properties
+      totalPDCs: { type: Number },
+      totalAmount: { type: Number },
+      issuedPDCs: { type: Number },
+      issuedAmount: { type: Number },
+      pendingPDCs: { type: Number },
+      pendingAmount: { type: Number },
+      cancelledPDCs: { type: Number },
+      cancelledAmount: { type: Number },
+    },
     metadata: {
       type: Schema.Types.Mixed,
       default: {},
@@ -361,6 +446,16 @@ NotificationSchema.index({ feature: 1, type: 1, createdAt: -1 });
 NotificationSchema.index({ isRead: 1, createdAt: -1 });
 NotificationSchema.index({ priority: 1, createdAt: -1 });
 NotificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+// NEW INDEXES for notificationType
+NotificationSchema.index({ notificationType: 1, createdAt: -1 });
+NotificationSchema.index({ notificationType: 1, userId: 1, createdAt: -1 });
+NotificationSchema.index({ notificationType: 1, userEmail: 1, createdAt: -1 });
+NotificationSchema.index({
+  notificationType: 1,
+  targetUserRoles: 1,
+  createdAt: -1,
+});
 
 // Helper function for time ago
 function getTimeAgo(date: Date): string {

@@ -2,6 +2,15 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 
+// Define valid roles
+export const USER_ROLES = {
+  USER: "user",
+  PROJECT_MANAGER: "project_manager", // Added project manager
+  ADMIN: "admin",
+} as const;
+
+export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
+
 // Define the methods interface
 export interface IUserMethods {
   hashPassword(password: string): Promise<void>;
@@ -17,7 +26,7 @@ export interface IUserDocument extends Document, IUserMethods {
   contactNo?: string;
   email: string;
   password: string;
-  role: string;
+  role: UserRole;
   verified: boolean;
   avatar?: string;
   otp?: string;
@@ -39,7 +48,11 @@ const userSchema = new Schema<IUserDocument>(
     contactNo: { type: String, unique: true, sparse: true },
     email: { type: String, required: true, unique: true },
     password: { type: String },
-    role: { type: String, default: "user" },
+    role: {
+      type: String,
+      enum: Object.values(USER_ROLES),
+      default: USER_ROLES.USER,
+    },
     verified: { type: Boolean, default: false },
     avatar: { type: String },
     otp: { type: String },

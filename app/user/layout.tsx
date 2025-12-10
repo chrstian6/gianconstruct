@@ -3,10 +3,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import AppSidebar from "@/components/user/Sidebar";
+import { MobileBottomNav } from "@/components/user/mobile/MobileBottomNav";
 import { UserNavbar } from "@/components/user/UserNavbar";
 import { AppointmentsSheet } from "@/components/user/AppointmentsSheet";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAuthStore } from "@/lib/stores";
+import { ProjectsCountProvider } from "@/components/user/mobile/ProjectsCountContext";
 
 export default function UserLayout({
   children,
@@ -19,7 +21,7 @@ export default function UserLayout({
   // Memoize the UserNavbar to prevent re-renders
   const memoizedUserNavbar = useMemo(() => {
     return <UserNavbar onAppointmentsClick={() => setAppointmentsOpen(true)} />;
-  }, []); // Empty dependency array - only create once
+  }, []);
 
   // Initialize auth store
   useEffect(() => {
@@ -29,18 +31,25 @@ export default function UserLayout({
   }, [initialize, initialized]);
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        {memoizedUserNavbar}
-        <main className="flex-1">{children}</main>
-      </SidebarInset>
+    <ProjectsCountProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          {memoizedUserNavbar}
+          <main className="flex-1 pb-16 lg:pb-0">{children}</main>
 
-      {/* Appointments Sheet */}
-      <AppointmentsSheet
-        open={appointmentsOpen}
-        onOpenChange={setAppointmentsOpen}
-      />
-    </SidebarProvider>
+          {/* Mobile Bottom Navigation */}
+          <MobileBottomNav
+            onAppointmentsClick={() => setAppointmentsOpen(true)}
+          />
+        </SidebarInset>
+
+        {/* Appointments Sheet */}
+        <AppointmentsSheet
+          open={appointmentsOpen}
+          onOpenChange={setAppointmentsOpen}
+        />
+      </SidebarProvider>
+    </ProjectsCountProvider>
   );
 }

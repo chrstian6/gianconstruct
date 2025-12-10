@@ -1,3 +1,4 @@
+// components/user/Sidebar.tsx
 "use client";
 
 import * as React from "react";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { getCurrentUserActiveProjectsCount } from "@/action/project";
+import { useProjectsCount } from "@/components/user/mobile/ProjectsCountContext";
 
 // This is sample data.
 const data = {
@@ -92,14 +94,14 @@ export default function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
-  const [activeProjectsCount, setActiveProjectsCount] = React.useState(0);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [lastRefreshed, setLastRefreshed] = React.useState<Date | null>(null);
   const pathname = usePathname();
 
-  // Fetch active projects count
+  // Use the context for projects count
+  const { activeProjectsCount, isLoading, refreshCount } = useProjectsCount();
+
+  // Fetch active projects count - now using context
   const fetchActiveProjectsCount = React.useCallback(async () => {
-    setIsLoading(true);
     try {
       console.log("🔄 Fetching active projects count...");
 
@@ -107,31 +109,35 @@ export default function AppSidebar({
 
       if (result.success && result.count !== undefined) {
         console.log("✅ Active projects count:", result.count);
-        setActiveProjectsCount(result.count);
       } else {
-        console.log("❌ Failed to get count, defaulting to 0");
-        setActiveProjectsCount(0);
+        console.log("❌ Failed to get count");
       }
     } catch (error) {
       console.error("❌ Error fetching active projects count:", error);
-      setActiveProjectsCount(0);
     } finally {
-      setIsLoading(false);
       setLastRefreshed(new Date());
     }
   }, []);
 
-  // Initial fetch and setup auto-refresh
+  // Initial fetch and setup auto-refresh using context refresh
   React.useEffect(() => {
+    // Initial refresh using context
+    refreshCount();
+
+    // Also run the local function to maintain lastRefreshed state
     fetchActiveProjectsCount();
 
     // Set up interval to refresh count every 30 seconds
-    const intervalId = setInterval(fetchActiveProjectsCount, 30000);
+    const intervalId = setInterval(() => {
+      refreshCount();
+      fetchActiveProjectsCount();
+    }, 30000);
 
     // Refresh when the page becomes visible again
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         console.log("👀 Page visible, refreshing count...");
+        refreshCount();
         fetchActiveProjectsCount();
       }
     };
@@ -142,7 +148,7 @@ export default function AppSidebar({
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchActiveProjectsCount]);
+  }, [refreshCount, fetchActiveProjectsCount]);
 
   // Function to check if a menu item is active
   const isActive = (url: string) => {
@@ -166,6 +172,13 @@ export default function AppSidebar({
       minute: "2-digit",
     });
   }, [lastRefreshed]);
+
+  // Manual refresh handler
+  const handleManualRefresh = async () => {
+    await refreshCount();
+    await fetchActiveProjectsCount();
+    console.log("🔄 Manually refreshed projects count");
+  };
 
   return (
     <>
@@ -272,7 +285,16 @@ export default function AppSidebar({
                 <span>Loading...</span>
               </div>
             ) : lastRefreshed ? (
-              <span>Updated {formatLastRefreshed()}</span>
+              <div className="flex flex-col items-center gap-1">
+                <span>Updated {formatLastRefreshed()}</span>
+                <button
+                  onClick={handleManualRefresh}
+                  className="text-xs hover:underline hover:text-foreground transition-colors"
+                  title="Refresh projects count"
+                >
+                  Refresh
+                </button>
+              </div>
             ) : null}
           </div>
         </SidebarFooter>

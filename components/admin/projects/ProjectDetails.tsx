@@ -24,6 +24,8 @@ import {
   MoreHorizontal,
   Loader2,
   Target,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Project, Task } from "@/types/project";
 import { updateProject } from "@/action/project";
@@ -132,6 +134,9 @@ export default function ProjectDetails({
   // UI States
   const [activeTab, setActiveTab] = useState("timeline");
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
+  const [tabScrollPosition, setTabScrollPosition] = useState(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   // Document State
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -140,6 +145,8 @@ export default function ProjectDetails({
 
   // Store
   const { setIsAddTimelineUpdateOpen, timelineProject } = useModalStore();
+
+  const tabsRef = React.useRef<HTMLDivElement>(null);
 
   const isLoading = externalLoading || internalLoading;
 
@@ -167,6 +174,44 @@ export default function ProjectDetails({
       setInternalLoading(false);
     }
   }, [project, user]);
+
+  // Update scroll buttons visibility
+  useEffect(() => {
+    const updateScrollButtons = () => {
+      if (tabsRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = tabsRef.current;
+        setCanScrollLeft(scrollLeft > 0);
+        setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
+      }
+    };
+
+    updateScrollButtons();
+    window.addEventListener("resize", updateScrollButtons);
+
+    // Update after tabs render
+    const timeoutId = setTimeout(updateScrollButtons, 100);
+
+    return () => {
+      window.removeEventListener("resize", updateScrollButtons);
+      clearTimeout(timeoutId);
+    };
+  }, [activeTab]);
+
+  const scrollTabs = (direction: "left" | "right") => {
+    if (tabsRef.current) {
+      const scrollAmount = 200; // Adjust scroll amount as needed
+      const newPosition =
+        direction === "left"
+          ? tabScrollPosition - scrollAmount
+          : tabScrollPosition + scrollAmount;
+
+      tabsRef.current.scrollTo({
+        left: newPosition,
+        behavior: "smooth",
+      });
+      setTabScrollPosition(newPosition);
+    }
+  };
 
   const fetchTasks = async () => {
     if (!project) return;
@@ -335,24 +380,24 @@ export default function ProjectDetails({
 
   // --- Skeletons ---
   const GenericSkeleton = () => (
-    <div className="space-y-6 animate-pulse max-w-[1600px] mx-auto p-6">
-      <div className="h-40 bg-zinc-100 rounded-xl mb-6" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="h-32 bg-zinc-100 rounded-xl" />
-        <div className="h-32 bg-zinc-100 rounded-xl" />
-        <div className="h-32 bg-zinc-100 rounded-xl" />
+    <div className="space-y-6 animate-pulse max-w-[1600px] mx-auto p-4 md:p-6">
+      <div className="h-32 md:h-40 bg-zinc-100 rounded-xl mb-6" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="h-28 md:h-32 bg-zinc-100 rounded-xl" />
+        <div className="h-28 md:h-32 bg-zinc-100 rounded-xl" />
+        <div className="h-28 md:h-32 bg-zinc-100 rounded-xl" />
       </div>
     </div>
   );
 
   if (project === null) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 gap-4 font-geist">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 gap-4 font-geist p-4">
         <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 mb-2">
             Project Not Found
           </h2>
-          <p className="text-zinc-500">
+          <p className="text-zinc-500 text-sm md:text-base">
             The project you're looking for doesn't exist or has been deleted.
           </p>
         </div>
@@ -371,7 +416,7 @@ export default function ProjectDetails({
     return (
       <div className="flex items-center justify-center min-h-screen bg-zinc-50 font-geist">
         <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 mb-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 mb-2">
             Loading...
           </h2>
         </div>
@@ -422,111 +467,143 @@ export default function ProjectDetails({
     { id: "gallery", label: "Gallery", icon: Images },
   ];
 
+  // Mobile actions dropdown items
+  const mobileActions = [
+    {
+      label: "Upload Document",
+      icon: Upload,
+      onClick: () => document.getElementById("document-upload")?.click(),
+    },
+    {
+      label: "Add Milestone",
+      icon: Plus,
+      onClick: handleAddMilestoneClick,
+    },
+    {
+      label: "Edit Project",
+      icon: Edit,
+      onClick: () => setIsEditProjectModalOpen(true),
+    },
+    {
+      label: "New Update",
+      icon: Plus,
+      onClick: handleAddUpdateClick,
+    },
+  ];
+
   return (
     <div className="flex flex-col min-h-screen font-geist bg-zinc-50">
+      {/* Hidden File Input */}
+      <Input
+        type="file"
+        id="document-upload"
+        className="hidden"
+        onChange={handleFileUpload}
+        disabled={isUploading}
+      />
+
       {/* Static, Clean Header Section */}
       <div className="w-full bg-white border-b border-zinc-200">
         <div className="max-w-[1600px] mx-auto">
           {/* Top Row: Navigation & Actions */}
-          <div className="flex items-center justify-between px-6 pt-6 pb-4">
-            <Button
-              variant="ghost"
-              onClick={handleBack}
-              className="pl-0 hover:bg-transparent text-zinc-500 hover:text-zinc-900 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Projects
-            </Button>
+          <div className="flex items-center justify-between px-4 md:px-6 pt-4 md:pt-6 pb-3 md:pb-4">
+            {/* Mobile Back Button and Title */}
+            <div className="flex items-center gap-3 md:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleBack}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex flex-col">
+                <h1 className="text-lg font-bold text-zinc-900 line-clamp-1 max-w-[180px]">
+                  {project.name}
+                </h1>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-xs font-medium px-2 py-0.5 rounded-full border w-fit mt-1",
+                    statusConfig[status].className
+                  )}
+                >
+                  {statusConfig[status].label}
+                </Badge>
+              </div>
+            </div>
 
-            <div className="flex items-center gap-3">
-              {/* Hidden File Input */}
-              <Input
-                type="file"
-                id="document-upload"
-                className="hidden"
-                onChange={handleFileUpload}
+            {/* Desktop Actions */}
+            <div className="hidden md:flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                onClick={() =>
+                  document.getElementById("document-upload")?.click()
+                }
                 disabled={isUploading}
-              />
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Document
+              </Button>
 
-              <div className="hidden md:flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
-                  onClick={() =>
-                    document.getElementById("document-upload")?.click()
-                  }
-                  disabled={isUploading}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Document
-                </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                onClick={handleAddMilestoneClick}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Milestone
+              </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
-                  onClick={handleAddMilestoneClick}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Milestone
-                </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                onClick={() => setIsEditProjectModalOpen(true)}
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Project
+              </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
-                  onClick={() => setIsEditProjectModalOpen(true)}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Project
-                </Button>
+              <Button
+                size="sm"
+                className="h-9 bg-zinc-900 text-white hover:bg-zinc-800 shadow-none"
+                onClick={handleAddUpdateClick}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Update
+              </Button>
+            </div>
 
-                <Button
-                  size="sm"
-                  className="h-9 bg-zinc-900 text-white hover:bg-zinc-800 shadow-none"
-                  onClick={handleAddUpdateClick}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Update
-                </Button>
-              </div>
-
-              {/* Mobile Menu */}
-              <div className="md:hidden">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-9 w-9">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+            {/* Mobile Actions Menu */}
+            <div className="md:hidden flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-8 w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {mobileActions.map((action, index) => (
                     <DropdownMenuItem
-                      onClick={() =>
-                        document.getElementById("document-upload")?.click()
-                      }
+                      key={index}
+                      onClick={action.onClick}
+                      className="flex items-center gap-2"
                     >
-                      Upload Document
+                      <action.icon className="h-4 w-4" />
+                      {action.label}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleAddMilestoneClick}>
-                      Add Milestone
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setIsEditProjectModalOpen(true)}
-                    >
-                      Edit Project
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleAddUpdateClick}>
-                      New Update
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
-          {/* Title Row */}
-          <div className="px-6 pb-8">
+          {/* Desktop Title Row */}
+          <div className="hidden md:block px-6 pb-8">
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-3xl font-bold tracking-tight text-zinc-900">
                 {project.name}
@@ -605,48 +682,149 @@ export default function ProjectDetails({
             </div>
           </div>
 
-          {/* Tabs Navigation */}
-          <div className="px-6 flex items-center gap-8 overflow-x-auto scrollbar-hide">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "flex items-center gap-2 pb-3 text-sm font-medium transition-all relative whitespace-nowrap",
-                    isActive
-                      ? "text-zinc-900"
-                      : "text-zinc-500 hover:text-zinc-700"
-                  )}
-                >
-                  <Icon
+          {/* Mobile Information Grid */}
+          <div className="md:hidden px-4 pb-4">
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-100">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Project ID
+                </span>
+                <div className="flex items-center gap-1 font-mono text-xs text-zinc-700 truncate">
+                  <Hash className="h-3 w-3 text-zinc-400 flex-shrink-0" />
+                  <span title={project.project_id} className="truncate">
+                    {project.project_id.substring(0, 8)}...
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Budget
+                </span>
+                <div className="flex items-center gap-1 text-xs font-medium text-zinc-900">
+                  <DollarSign className="h-3 w-3 text-zinc-400" />
+                  {project.totalCost
+                    ? `₱${project.totalCost.toLocaleString()}`
+                    : "TBD"}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Start Date
+                </span>
+                <div className="flex items-center gap-1 text-xs font-medium text-zinc-900">
+                  <Calendar className="h-3 w-3 text-zinc-400" />
+                  {formatDate(project.startDate)}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Est. End
+                </span>
+                <div className="flex items-center gap-1 text-xs font-medium text-zinc-900">
+                  <Clock className="h-3 w-3 text-zinc-400" />
+                  {project.endDate ? formatDate(project.endDate) : "TBD"}
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Location Row */}
+            <div className="mt-4 pt-4 border-t border-zinc-100">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">
+                  Location
+                </span>
+                <div className="flex items-start gap-1.5 text-xs font-medium text-zinc-900">
+                  <MapPin className="h-3 w-3 text-zinc-400 mt-0.5 flex-shrink-0" />
+                  <span className="line-clamp-2">
+                    {project.location?.fullAddress || "No address"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs Navigation with Scroll Buttons */}
+          <div className="relative px-4 md:px-6">
+            {/* Left Scroll Button (Mobile only) */}
+            {canScrollLeft && (
+              <button
+                onClick={() => scrollTabs("left")}
+                className="md:hidden absolute left-0 top-0 bottom-0 z-10 w-8 bg-gradient-to-r from-white to-transparent flex items-center justify-center"
+              >
+                <ChevronLeft className="h-4 w-4 text-zinc-600" />
+              </button>
+            )}
+
+            {/* Right Scroll Button (Mobile only) */}
+            {canScrollRight && (
+              <button
+                onClick={() => scrollTabs("right")}
+                className="md:hidden absolute right-0 top-0 bottom-0 z-10 w-8 bg-gradient-to-l from-white to-transparent flex items-center justify-center"
+              >
+                <ChevronRight className="h-4 w-4 text-zinc-600" />
+              </button>
+            )}
+
+            {/* Tabs Container */}
+            <div
+              ref={tabsRef}
+              className="flex items-center gap-2 md:gap-8 overflow-x-auto scrollbar-hide py-2 px-1 md:px-0"
+              onScroll={(e) => {
+                const element = e.currentTarget;
+                setTabScrollPosition(element.scrollLeft);
+                setCanScrollLeft(element.scrollLeft > 0);
+                setCanScrollRight(
+                  element.scrollLeft <
+                    element.scrollWidth - element.clientWidth - 10
+                );
+              }}
+            >
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "h-4 w-4",
-                      isActive ? "text-zinc-900" : "text-zinc-400"
+                      "flex items-center gap-2 pb-3 text-sm font-medium transition-all relative whitespace-nowrap flex-shrink-0",
+                      "px-3 md:px-0",
+                      isActive
+                        ? "text-zinc-900"
+                        : "text-zinc-500 hover:text-zinc-700"
                     )}
-                  />
-                  {tab.label}
-                  {isActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-900 rounded-t-full" />
-                  )}
-                </button>
-              );
-            })}
+                  >
+                    <Icon
+                      className={cn(
+                        "h-4 w-4",
+                        isActive ? "text-zinc-900" : "text-zinc-400"
+                      )}
+                    />
+                    <span className="hidden md:inline">{tab.label}</span>
+                    <span className="md:hidden text-xs">{tab.label}</span>
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-zinc-900 rounded-t-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 max-w-[1600px] mx-auto w-full p-6 md:p-8">
+      <div className="flex-1 max-w-[1600px] mx-auto w-full p-4 md:p-6 lg:p-8">
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {isLoading ? (
             <GenericSkeleton />
           ) : (
             <>
               {activeTab === "timeline" && (
-                <div className="space-y-6">
+                <div className="space-y-4 md:space-y-6">
                   <ProjectTimeline
                     project={project}
                     key={timelineRefreshKey}
@@ -657,12 +835,12 @@ export default function ProjectDetails({
 
               {activeTab === "milestones" && (
                 <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
-                  <CardHeader className="border-b border-zinc-100 pb-4">
-                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                  <CardHeader className="border-b border-zinc-100 pb-3 md:pb-4">
+                    <CardTitle className="text-base md:text-lg font-semibold text-zinc-900">
                       Project Milestones
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6" data-milestone-tab>
+                  <CardContent className="p-4 md:p-6" data-milestone-tab>
                     <MilestonesTab projectId={project.project_id} />
                   </CardContent>
                 </Card>
@@ -670,12 +848,12 @@ export default function ProjectDetails({
 
               {activeTab === "proposed-design" && (
                 <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
-                  <CardHeader className="border-b border-zinc-100 pb-4">
-                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                  <CardHeader className="border-b border-zinc-100 pb-3 md:pb-4">
+                    <CardTitle className="text-base md:text-lg font-semibold text-zinc-900">
                       Proposed Design
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     <ProposedDesignTab project={project} />
                   </CardContent>
                 </Card>
@@ -683,12 +861,12 @@ export default function ProjectDetails({
 
               {activeTab === "client" && (
                 <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
-                  <CardHeader className="border-b border-zinc-100 pb-4">
-                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                  <CardHeader className="border-b border-zinc-100 pb-3 md:pb-4">
+                    <CardTitle className="text-base md:text-lg font-semibold text-zinc-900">
                       Client Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     {user ? (
                       <ClientInformation user={user} />
                     ) : (
@@ -703,23 +881,23 @@ export default function ProjectDetails({
 
               {activeTab === "details" && (
                 <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
-                  <CardHeader className="border-b border-zinc-100 pb-4">
-                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                  <CardHeader className="border-b border-zinc-100 pb-3 md:pb-4">
+                    <CardTitle className="text-base md:text-lg font-semibold text-zinc-900">
                       Project Specifications
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div className="space-y-6">
+                  <CardContent className="p-4 md:p-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+                      <div className="space-y-4 md:space-y-6">
                         <h3 className="text-sm font-medium text-zinc-900 uppercase tracking-wide">
                           General Info
                         </h3>
-                        <div className="space-y-4">
+                        <div className="space-y-3 md:space-y-4">
                           <div className="flex justify-between py-2 border-b border-zinc-100">
                             <span className="text-sm text-zinc-500">
                               Project ID
                             </span>
-                            <span className="text-sm font-medium font-mono text-zinc-900">
+                            <span className="text-sm font-medium font-mono text-zinc-900 truncate max-w-[120px] md:max-w-none">
                               {project.project_id}
                             </span>
                           </div>
@@ -733,12 +911,12 @@ export default function ProjectDetails({
                           </div>
                         </div>
                       </div>
-                      <div className="space-y-6">
+                      <div className="space-y-4 md:space-y-6">
                         <h3 className="text-sm font-medium text-zinc-900 uppercase tracking-wide">
                           Location Info
                         </h3>
                         {project.location ? (
-                          <div className="space-y-4">
+                          <div className="space-y-3 md:space-y-4">
                             <div className="flex justify-between py-2 border-b border-zinc-100">
                               <span className="text-sm text-zinc-500">
                                 Region
@@ -777,16 +955,18 @@ export default function ProjectDetails({
 
               {activeTab === "documents" && (
                 <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
-                  <CardHeader className="border-b border-zinc-100 pb-4">
-                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                  <CardHeader className="border-b border-zinc-100 pb-3 md:pb-4">
+                    <CardTitle className="text-base md:text-lg font-semibold text-zinc-900">
                       Documents
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     {documentsLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mr-2" />
-                        <p className="text-zinc-500">Loading documents...</p>
+                      <div className="flex items-center justify-center py-6 md:py-8">
+                        <Loader2 className="h-5 w-5 md:h-6 md:w-6 animate-spin text-zinc-400 mr-2" />
+                        <p className="text-zinc-500 text-sm md:text-base">
+                          Loading documents...
+                        </p>
                       </div>
                     ) : (
                       <Documents
@@ -801,12 +981,12 @@ export default function ProjectDetails({
 
               {activeTab === "gallery" && (
                 <Card className="border-zinc-200 shadow-none rounded-xl bg-white">
-                  <CardHeader className="border-b border-zinc-100 pb-4">
-                    <CardTitle className="text-lg font-semibold text-zinc-900">
+                  <CardHeader className="border-b border-zinc-100 pb-3 md:pb-4">
+                    <CardTitle className="text-base md:text-lg font-semibold text-zinc-900">
                       Project Gallery
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     <Gallery projectId={project.project_id} />
                   </CardContent>
                 </Card>
@@ -814,6 +994,36 @@ export default function ProjectDetails({
             </>
           )}
         </div>
+      </div>
+
+      {/* Floating Action Button for Mobile */}
+      <div className="md:hidden fixed bottom-6 right-6 z-50">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              className="h-12 w-12 rounded-full bg-zinc-900 text-white shadow-lg hover:bg-zinc-800"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="end"
+            className="mb-2 w-48 bg-white"
+          >
+            {mobileActions.map((action, index) => (
+              <DropdownMenuItem
+                key={index}
+                onClick={action.onClick}
+                className="flex items-center gap-2 py-3"
+              >
+                <action.icon className="h-4 w-4" />
+                {action.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Edit Modal (Legacy - kept for compatibility) */}
@@ -841,7 +1051,7 @@ export default function ProjectDetails({
                 className="border-zinc-200 focus:ring-zinc-900"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="status" className="text-zinc-700 font-medium">
                   Status

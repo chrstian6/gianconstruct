@@ -2,7 +2,7 @@
 "use server";
 
 import dbConnect from "../lib/db";
-import User, { IUserDocument } from "../models/User";
+import User, { IUserDocument, USER_ROLES, UserRole } from "../models/User";
 import { sendEmail } from "../lib/nodemailer";
 import { generateEmailTemplate } from "../lib/email-templates";
 
@@ -153,6 +153,20 @@ export async function updateUser(userId: string, userData: UpdateUserData) {
   }
 }
 
+// Helper function to format role for display
+export async function formatRoleForDisplay(role: UserRole): Promise<string> {
+  switch (role) {
+    case USER_ROLES.ADMIN:
+      return "Administrator";
+    case USER_ROLES.PROJECT_MANAGER:
+      return "Project Manager";
+    case USER_ROLES.USER:
+      return "User";
+    default:
+      return role;
+  }
+}
+
 // Updated createUser function that matches otp-signup.ts and includes password in email
 export async function createUser(userData: {
   firstName: string;
@@ -161,7 +175,7 @@ export async function createUser(userData: {
   contactNo?: string;
   address: string;
   password: string;
-  role?: string;
+  role?: UserRole;
 }) {
   try {
     await dbConnect();
@@ -176,14 +190,15 @@ export async function createUser(userData: {
         : undefined,
       address: cleanAddress(userData.address),
       password: userData.password,
-      role: userData.role || "user",
+      role: userData.role || USER_ROLES.USER,
     };
 
-    // Validate role
-    if (!["user", "admin"].includes(cleanedData.role)) {
+    // Validate role against enum values
+    const validRoles = Object.values(USER_ROLES);
+    if (!validRoles.includes(cleanedData.role as UserRole)) {
       return {
         success: false,
-        error: "Invalid role specified. Must be 'user' or 'admin'",
+        error: `Invalid role specified. Must be one of: ${validRoles.join(", ")}`,
       };
     }
 
@@ -247,7 +262,7 @@ export async function createUser(userData: {
     await user.save();
 
     console.log(
-      `Admin created user in gianconstruct.users: ${user.email} with user_id: ${user.user_id}`
+      `Admin created user in gianconstruct.users: ${user.email} with user_id: ${user.user_id}, role: ${user.role}`
     );
 
     // Send welcome email to the user WITH temporary password
@@ -284,7 +299,7 @@ export async function createUser(userData: {
           </div>
           <div class="detail-row">
             <div class="detail-label">Account Type</div>
-            <div class="detail-value">${user.role === "admin" ? "Administrator" : "User"}</div>
+            <div class="detail-value">${formatRoleForDisplay(user.role as UserRole)}</div>
           </div>
           <div class="detail-row">
             <div class="detail-label">Account Status</div>
@@ -407,6 +422,61 @@ export async function createUser(userData: {
     return {
       success: false,
       error: error.message || "Failed to create user",
+    };
+  }
+}
+
+// Helper function to get all valid roles (make it async)
+export async function getValidUserRoles(): Promise<string[]> {
+  return Object.values(USER_ROLES);
+}
+
+// Helper function to format role for display (make it async)
+export async function formatRoleDisplay(role: string): Promise<string> {
+  return formatRoleForDisplay(role as UserRole);
+}
+
+// NEW FUNCTION: Check if email is available
+export async function checkEmailAvailability(email: string): Promise<{
+  available: boolean;
+  error?: string;
+  email: string;
+}> {
+  try {
+    await dbConnect();
+
+    if (!email) {
+      return {
+        available: false,
+        error: "Email is required",
+        email,
+      };
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return {
+        available: false,
+        error: "Invalid email format",
+        email,
+      };
+    }
+
+    const existingUser = await User.findOne({
+      email: email.toLowerCase().trim(),
+    });
+
+    return {
+      available: !existingUser,
+      email,
+    };
+  } catch (error: any) {
+    console.error("Error checking email availability:", error);
+    return {
+      available: false,
+      error: error.message || "Error checking email availability",
+      email,
     };
   }
 }

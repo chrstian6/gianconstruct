@@ -1,4 +1,4 @@
-// lib/redis.ts - Update the interfaces
+// lib/redis.ts - UPDATED FOR MIDDLEWARE COMPATIBILITY
 "use server";
 
 import { Redis } from "@upstash/redis";
@@ -27,7 +27,6 @@ interface VerificationData {
   otpExpires?: number;
 }
 
-// Add new interface for password change verification
 interface PasswordChangeVerificationData {
   userId: string;
   email: string;
@@ -50,17 +49,69 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN as string,
 });
 
+export async function verifySessionFromRequest(
+  sessionId: string
+): Promise<SessionData | null> {
+  try {
+    console.log("Middleware: Verifying session ID:", sessionId);
+
+    if (!sessionId) {
+      console.log("Middleware: No sessionId provided");
+      return null;
+    }
+
+    const sessionData = await redis.get(`session:${sessionId}`);
+
+    console.log("Middleware: Redis response for session:", {
+      hasData: !!sessionData,
+      type: typeof sessionData,
+    });
+
+    if (!sessionData) {
+      console.log("Middleware: No session found in Redis");
+      return null;
+    }
+
+    // Parse session data
+    let parsedData: SessionData;
+    if (typeof sessionData === "string") {
+      try {
+        parsedData = JSON.parse(sessionData) as SessionData;
+      } catch (parseError) {
+        console.error("Middleware: Error parsing session data:", parseError);
+        return null;
+      }
+    } else {
+      parsedData = sessionData as SessionData;
+    }
+
+    console.log("Middleware: Successfully verified session for:", {
+      email: parsedData.email,
+      role: parsedData.role,
+      user_id: parsedData.userId,
+    });
+
+    return parsedData;
+  } catch (error) {
+    console.error("Middleware: Error verifying session:", error);
+    return null;
+  }
+}
+
+// Keep existing verifySession for server components/actions
 export async function verifySession(): Promise<SessionData | null> {
   try {
     const sessionId = (await cookies()).get("sessionId")?.value;
+    console.log("Server: Session ID from cookies:", sessionId);
+
     if (!sessionId) {
-      console.log("No sessionId cookie found");
+      console.log("Server: No sessionId cookie found");
       return null;
     }
 
     const sessionData = await redis.get(`session:${sessionId}`);
     if (!sessionData) {
-      console.log("No session found for sessionId:", sessionId);
+      console.log("Server: No session found for sessionId:", sessionId);
       (await cookies()).delete("sessionId");
       return null;
     }
@@ -70,24 +121,46 @@ export async function verifySession(): Promise<SessionData | null> {
     }
     return sessionData as SessionData;
   } catch (error) {
-    console.error("Error verifying session in Upstash Redis:", error);
+    console.error("Server: Error verifying session in Upstash Redis:", error);
     return null;
   }
 }
 
+// Keep all existing functions unchanged...
 export async function getSession(
   sessionId: string
 ): Promise<SessionData | null> {
   try {
     const sessionData = await redis.get(`session:${sessionId}`);
-    if (!sessionData) return null;
-    if (typeof sessionData === "string") {
-      return JSON.parse(sessionData) as SessionData;
+
+    console.log(
+      "Retrieved session data from Redis for ID:",
+      sessionId,
+      sessionData
+    );
+
+    if (!sessionData) {
+      console.log("No session data found in Redis");
+      return null;
     }
-    return sessionData as SessionData;
+
+    if (typeof sessionData === "object" && sessionData !== null) {
+      return sessionData as SessionData;
+    }
+
+    if (typeof sessionData === "string") {
+      try {
+        return JSON.parse(sessionData) as SessionData;
+      } catch (parseError) {
+        console.error("Error parsing session data:", parseError);
+        return null;
+      }
+    }
+
+    return null;
   } catch (error) {
     console.error("Error getting session from Upstash Redis:", error);
-    throw new Error("Failed to get session");
+    return null;
   }
 }
 
@@ -136,7 +209,6 @@ export async function getVerificationToken(
     if (typeof verificationData === "string") {
       const parsedData = JSON.parse(verificationData);
 
-      // Determine the type based on the data structure
       if (parsedData.type === "password-change") {
         return parsedData as PasswordChangeVerificationData;
       } else {
@@ -144,7 +216,6 @@ export async function getVerificationToken(
       }
     }
 
-    // Handle non-string case (shouldn't happen with our implementation)
     const data = verificationData as any;
     if (data.type === "password-change") {
       return data as PasswordChangeVerificationData;
@@ -172,11 +243,10 @@ export async function deleteVerificationToken(token: string): Promise<void> {
   }
 }
 
-// Helper function to specifically set password change verification data
 export async function setPasswordChangeVerification(
   token: string,
   data: Omit<PasswordChangeVerificationData, "type">,
-  ttl: number = 1 * 60 * 60 // 1 hour for password change
+  ttl: number = 1 * 60 * 60
 ): Promise<void> {
   try {
     const passwordChangeData: PasswordChangeVerificationData = {
@@ -195,7 +265,6 @@ export async function setPasswordChangeVerification(
   }
 }
 
-// Helper function to specifically get password change verification data
 export async function getPasswordChangeVerification(
   token: string
 ): Promise<PasswordChangeVerificationData | null> {

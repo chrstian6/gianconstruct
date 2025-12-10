@@ -1,7 +1,6 @@
-// components/user/UserNavbar.tsx - UPDATED TO HANDLE MISSING notificationType
 "use client";
-import React from "react";
-import { useState, useEffect, useCallback } from "react";
+
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Breadcrumb,
@@ -31,6 +30,10 @@ import {
   Menu,
   X,
   User,
+  Settings,
+  LogOut,
+  Search,
+  Building,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -47,6 +50,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
 import {
   getNotifications,
   markNotificationAsRead,
@@ -55,13 +59,16 @@ import {
 import { useAuthStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
-interface UserNavbarProps {
+interface MobileNavbarProps {
   breadcrumbItems?: {
     label: string;
     href?: string;
     isCurrent?: boolean;
   }[];
   onAppointmentsClick?: () => void;
+  onSearchClick?: () => void;
+  showSearch?: boolean;
+  showMenu?: boolean;
 }
 
 // Proper Notification interface that matches the backend response
@@ -88,9 +95,9 @@ interface Notification {
   actionUrl?: string;
   actionLabel?: string;
   notificationType?: "admin" | "user";
-  targetUserRoles?: string[]; // Add this field
+  targetUserRoles?: string[];
 
-  // Feature-specific metadata (make optional)
+  // Feature-specific metadata
   appointmentMetadata?: {
     inquiryId?: string;
     appointmentId?: string;
@@ -126,28 +133,34 @@ interface Notification {
 // Cache for notifications
 const notificationCache = new Map();
 
-export function UserNavbar({
+export function MobileNavbar({
   breadcrumbItems = [],
   onAppointmentsClick,
-}: UserNavbarProps) {
+  onSearchClick,
+  showSearch = true,
+  showMenu = true,
+}: MobileNavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [mobileNotificationsOpen, setMobileNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [markingAsRead, setMarkingAsRead] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Get user data from auth store
   const { user, clearUser } = useAuthStore();
   const userId = user?.user_id;
   const userEmail = user?.email;
   const userRole = "user" as const;
+  const userName = user?.firstName
+    ? `${user.firstName} ${user.lastName || ""}`.trim()
+    : user?.email?.split("@")[0] || "User";
 
-  // Fetch user notifications with caching - UPDATED TO HANDLE MISSING notificationType
+  // Fetch user notifications with caching
   const fetchNotifications = useCallback(
     async (forceRefresh = false) => {
       if (!userId || !userEmail) {
@@ -171,7 +184,7 @@ export function UserNavbar({
       }
 
       // Set appropriate loading state
-      if (notificationsOpen || mobileNotificationsOpen) {
+      if (notificationsOpen) {
         setLoading(true);
       } else {
         setBackgroundLoading(true);
@@ -184,13 +197,10 @@ export function UserNavbar({
           userRole,
         });
 
-        // IMPORTANT: Don't filter by notificationType since it might be missing
-        // Fetch ALL notifications and filter client-side
         const result = await getNotifications({
-          currentUserRole: userRole, // "user"
-          currentUserId: userId, // user's ID
-          currentUserEmail: userEmail, // user's email
-          // NOTE: NOT passing notificationType parameter
+          currentUserRole: userRole,
+          currentUserId: userId,
+          currentUserEmail: userEmail,
           page: 1,
           limit: 100,
         });
@@ -206,23 +216,6 @@ export function UserNavbar({
             "✅ USER Notifications fetched successfully:",
             result.notifications.length
           );
-
-          // Debug: Log notification types
-          if (result.notifications.length > 0) {
-            console.log(
-              "📝 All notifications received (including admin):",
-              result.notifications.map((n: any) => ({
-                id: n._id?.toString().slice(-6),
-                type: n.type,
-                notificationType: n.notificationType,
-                userId: n.userId,
-                userEmail: n.userEmail?.slice(0, 20),
-                targetUserRoles: n.targetUserRoles,
-                title: n.title,
-                isAdmin: n.targetUserRoles?.includes("admin"),
-              }))
-            );
-          }
 
           // Type guard to ensure notifications match our interface
           const allNotifications: Notification[] = result.notifications.map(
@@ -249,22 +242,17 @@ export function UserNavbar({
             })
           );
 
-          // CRITICAL: Filter to show only user notifications (client-side filtering)
+          // Filter to show only user notifications (client-side filtering)
           const userNotifications = allNotifications.filter((n) => {
-            // Determine if this is a user notification:
-            // 1. If notificationType is "user"
             if (n.notificationType === "user") {
               return true;
             }
 
-            // 2. If notificationType is "admin" → skip (admin notifications)
             if (n.notificationType === "admin") {
               console.log("🚫 Skipping admin notification:", n._id, n.title);
               return false;
             }
 
-            // 3. If notificationType is missing, check other criteria:
-            //    a. Has userId and matches current user
             if (n.userId && n.userId === userId) {
               console.log(
                 "✅ Found user notification by userId:",
@@ -274,7 +262,6 @@ export function UserNavbar({
               return true;
             }
 
-            //    b. Has userEmail and matches current user
             if (n.userEmail && n.userEmail === userEmail) {
               console.log(
                 "✅ Found user notification by userEmail:",
@@ -284,7 +271,6 @@ export function UserNavbar({
               return true;
             }
 
-            //    c. Has targetUserRoles that includes "admin" → skip
             if (n.targetUserRoles && n.targetUserRoles.includes("admin")) {
               console.log(
                 "🚫 Skipping admin-targeted notification:",
@@ -294,8 +280,6 @@ export function UserNavbar({
               return false;
             }
 
-            // 4. Default: If no notificationType and no clear admin/user designation,
-            //    assume it's for the current user if it has userEmail or userId
             if (!n.notificationType && (n.userId || n.userEmail)) {
               console.log(
                 "⚠️ Notification missing notificationType, checking user match:",
@@ -324,28 +308,12 @@ export function UserNavbar({
 
           // Sort notifications: unread first, then by date (newest first)
           userNotifications.sort((a, b) => {
-            // First sort by read status (unread first)
             if (!a.isRead && b.isRead) return -1;
             if (a.isRead && !b.isRead) return 1;
-
-            // Then sort by date (newest first)
             return (
               new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
           });
-
-          console.log(
-            "📝 Processed USER notifications:",
-            userNotifications.map((n) => ({
-              id: n._id.slice(-6),
-              type: n.type,
-              feature: n.feature,
-              notificationType: n.notificationType || "unknown",
-              targetUserRoles: n.targetUserRoles,
-              isRead: n.isRead,
-              title: n.title?.slice(0, 30),
-            }))
-          );
 
           setNotifications(userNotifications);
 
@@ -368,7 +336,7 @@ export function UserNavbar({
         setBackgroundLoading(false);
       }
     },
-    [userId, userEmail, notificationsOpen, mobileNotificationsOpen]
+    [userId, userEmail, notificationsOpen]
   );
 
   // Mark notification as read
@@ -383,7 +351,6 @@ export function UserNavbar({
         userEmail,
       });
 
-      // Call the action with proper parameters
       const result = await markNotificationAsRead(
         notificationId,
         userRole,
@@ -394,13 +361,11 @@ export function UserNavbar({
       if (result.success) {
         console.log("✅ USER Notification marked as read successfully");
 
-        // Update local state and cache
         const updatedNotifications = notifications.map((n) =>
           n._id === notificationId ? { ...n, isRead: true } : n
         );
         setNotifications(updatedNotifications);
 
-        // Update cache
         const cacheKey = `user_notifications_${userId}`;
         if (notificationCache.has(cacheKey)) {
           notificationCache.set(cacheKey, {
@@ -434,7 +399,6 @@ export function UserNavbar({
         userEmail,
       });
 
-      // Call the action with proper parameters
       const result = await markAllNotificationsAsRead(
         userId,
         userRole,
@@ -444,14 +408,12 @@ export function UserNavbar({
       if (result.success) {
         console.log("✅ All USER notifications marked as read successfully");
 
-        // Update local state and cache
         const updatedNotifications = notifications.map((n) => ({
           ...n,
           isRead: true,
         }));
         setNotifications(updatedNotifications);
 
-        // Update cache
         const cacheKey = `user_notifications_${userId}`;
         if (notificationCache.has(cacheKey)) {
           notificationCache.set(cacheKey, {
@@ -493,18 +455,17 @@ export function UserNavbar({
         fetchNotifications();
       },
       5 * 60 * 1000
-    ); // Refresh every 5 minutes
+    );
 
     return () => clearInterval(interval);
   }, [userId, userEmail, fetchNotifications]);
 
-  // Fetch when dropdown opens (with potential cache)
+  // Fetch when dropdown opens
   useEffect(() => {
-    if ((notificationsOpen || mobileNotificationsOpen) && userId && userEmail) {
+    if (notificationsOpen && userId && userEmail) {
       console.log(
         "📂 USER Notification dropdown opened, fetching notifications"
       );
-      // Use cached data immediately, then refresh in background
       const cacheKey = `user_notifications_${userId}`;
       if (notificationCache.has(cacheKey)) {
         const cached = notificationCache.get(cacheKey);
@@ -512,18 +473,11 @@ export function UserNavbar({
       }
       fetchNotifications();
     }
-  }, [
-    notificationsOpen,
-    mobileNotificationsOpen,
-    userId,
-    userEmail,
-    fetchNotifications,
-  ]);
+  }, [notificationsOpen, userId, userEmail, fetchNotifications]);
 
   // Clear cache when user changes
   useEffect(() => {
     if (userId) {
-      // Clear cache for previous user if any
       const allKeys = Array.from(notificationCache.keys());
       allKeys.forEach((key) => {
         if (!key.includes(userId)) {
@@ -584,11 +538,10 @@ export function UserNavbar({
     return items;
   };
 
-  // Get notification icon based on feature and type (monochromatic - orange theme)
+  // Get notification icon based on feature and type
   const getNotificationIcon = (notification: Notification) => {
     const iconClass = "h-4 w-4";
 
-    // All icons use orange color family for consistency
     switch (notification.feature) {
       case "appointments":
         return <Calendar className={cn(iconClass, "text-amber-600")} />;
@@ -611,7 +564,7 @@ export function UserNavbar({
     }
   };
 
-  // Get meeting type icon (monochromatic)
+  // Get meeting type icon
   const getMeetingTypeIcon = (meetingType?: string) => {
     if (!meetingType) return null;
 
@@ -629,10 +582,7 @@ export function UserNavbar({
   };
 
   // Handle notification item click
-  const handleNotificationItemClick = (
-    notification: Notification,
-    isMobile = false
-  ) => {
+  const handleNotificationItemClick = (notification: Notification) => {
     console.log("🖱️ USER Notification clicked:", {
       id: notification._id,
       type: notification.type,
@@ -640,30 +590,25 @@ export function UserNavbar({
       notificationType: notification.notificationType,
       targetUserRoles: notification.targetUserRoles,
       isRead: notification.isRead,
-      isMobile,
     });
 
     if (!notification.isRead) {
       handleNotificationClick(notification._id);
     }
 
-    // Close the appropriate dropdown
-    if (isMobile) {
-      setMobileNotificationsOpen(false);
-    } else {
-      setNotificationsOpen(false);
-    }
-
-    // Handle notification action if available
     if (notification.actionUrl) {
       console.log("📍 Navigating to action URL:", notification.actionUrl);
       router.push(notification.actionUrl);
     } else {
-      // Default navigation based on feature
       switch (notification.feature) {
         case "appointments":
           console.log("📅 Navigating to appointments");
-          router.push("/user/userdashboard?tab=appointments");
+          // Open appointments section
+          if (onAppointmentsClick) {
+            onAppointmentsClick();
+          } else {
+            router.push("/user/userdashboard?tab=appointments");
+          }
           break;
         case "projects":
           console.log("🏗️ Navigating to projects");
@@ -685,247 +630,220 @@ export function UserNavbar({
           router.push("/user/userdashboard");
       }
     }
+
+    setNotificationsOpen(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await clearUser();
+      router.push("/authentication-login");
+      setTimeout(() => {
+        router.refresh();
+      }, 100);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  const handleSearch = () => {
+    if (onSearchClick) {
+      onSearchClick();
+    } else if (searchQuery.trim()) {
+      router.push(`/user/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
+  const handleDefaultAppointmentsClick = () => {
+    if (onAppointmentsClick) {
+      onAppointmentsClick();
+    } else {
+      router.push("/user/userdashboard?tab=appointments");
+    }
   };
 
   const breadcrumbs = generateBreadcrumbItems();
 
-  // Handle mobile navigation
-  const handleMobileNavItemClick = (path: string) => {
-    router.push(path);
-    setMobileMenuOpen(false);
-  };
+  // Mobile menu content
+  const MobileMenu = () => (
+    <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-zinc-200 transform transition-transform duration-300 ease-in-out lg:hidden">
+      <div className="flex flex-col h-full">
+        {/* Header */}
+        <div className="p-6 border-b border-zinc-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-amber-600 flex items-center justify-center text-white font-semibold">
+                {userName.charAt(0)}
+              </div>
+              <div>
+                <p className="font-medium text-zinc-900">{userName}</p>
+                <p className="text-sm text-zinc-500">Customer</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="p-2 hover:bg-zinc-100 rounded-lg"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
 
-  // Handle logout
-  const handleLogout = async () => {
-    await clearUser();
-    router.push("/authentication-login");
-  };
+        {/* Navigation */}
+        <div className="flex-1 p-4 overflow-y-auto">
+          <nav className="space-y-1">
+            <button
+              onClick={() => {
+                router.push("/user/userdashboard");
+                setIsMobileMenuOpen(false);
+              }}
+              className={cn(
+                "flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors",
+                pathname === "/user/userdashboard"
+                  ? "bg-amber-50 text-amber-600 border border-amber-200"
+                  : "hover:bg-zinc-50 text-zinc-700"
+              )}
+            >
+              <Home className="h-5 w-5" />
+              <span className="font-medium">Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => {
+                router.push("/user/catalog");
+                setIsMobileMenuOpen(false);
+              }}
+              className={cn(
+                "flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors",
+                pathname.includes("/catalog")
+                  ? "bg-amber-50 text-amber-600 border border-amber-200"
+                  : "hover:bg-zinc-50 text-zinc-700"
+              )}
+            >
+              <Search className="h-5 w-5" />
+              <span className="font-medium">Explore Catalog</span>
+            </button>
+
+            <button
+              onClick={() => {
+                router.push("/user/projects/active");
+                setIsMobileMenuOpen(false);
+              }}
+              className={cn(
+                "flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors",
+                pathname.includes("/projects")
+                  ? "bg-amber-50 text-amber-600 border border-amber-200"
+                  : "hover:bg-zinc-50 text-zinc-700"
+              )}
+            >
+              <Building className="h-5 w-5" />
+              <span className="font-medium">My Projects</span>
+            </button>
+
+            <button
+              onClick={() => {
+                router.push("/user/transaction");
+                setIsMobileMenuOpen(false);
+              }}
+              className={cn(
+                "flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors",
+                pathname.includes("/transaction")
+                  ? "bg-amber-50 text-amber-600 border border-amber-200"
+                  : "hover:bg-zinc-50 text-zinc-700"
+              )}
+            >
+              <DollarSign className="h-5 w-5" />
+              <span className="font-medium">Transactions</span>
+            </button>
+
+            <button
+              onClick={() => {
+                handleDefaultAppointmentsClick();
+                setIsMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors hover:bg-zinc-50 text-zinc-700"
+            >
+              <Calendar className="h-5 w-5" />
+              <span className="font-medium">Appointments</span>
+            </button>
+
+            <button
+              onClick={() => {
+                router.push("/user/documents");
+                setIsMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors hover:bg-zinc-50 text-zinc-700"
+            >
+              <FileText className="h-5 w-5" />
+              <span className="font-medium">Documents</span>
+            </button>
+
+            <button
+              onClick={() => {
+                router.push("/user/messages");
+                setIsMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors hover:bg-zinc-50 text-zinc-700"
+            >
+              <MessageSquare className="h-5 w-5" />
+              <span className="font-medium">Messages</span>
+            </button>
+
+            <button
+              onClick={() => {
+                router.push("/user/settings");
+                setIsMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-3 w-full p-3 rounded-lg text-left transition-colors hover:bg-zinc-50 text-zinc-700"
+            >
+              <Settings className="h-5 w-5" />
+              <span className="font-medium">Settings</span>
+            </button>
+          </nav>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-zinc-100">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full p-3 rounded-lg text-left text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+            <span className="font-medium">Logout</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
-      {/* Mobile Top Navigation Bar */}
-      <div className="lg:hidden sticky top-0 z-50 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-between p-4">
-          {/* Left: Menu Button and Title */}
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="font-bold text-lg text-gray-900">
-                User Dashboard
-              </h1>
-              <p className="text-xs text-gray-500">Manage your projects</p>
-            </div>
-          </div>
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
 
-          {/* Right: Notifications and User Menu */}
-          <div className="flex items-center gap-2">
-            {/* Mobile Notifications Dropdown */}
-            <DropdownMenu
-              open={mobileNotificationsOpen}
-              onOpenChange={setMobileNotificationsOpen}
+      <MobileMenu />
+
+      {/* Main Navigation Bar */}
+      <nav className="flex items-center sticky border-b border-zinc-200 top-0 justify-between h-16 px-4 lg:px-6 bg-white z-30">
+        {/* Left side - Menu button and Breadcrumb */}
+        <div className="flex items-center gap-2">
+          {showMenu && (
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 hover:bg-zinc-100 rounded-lg lg:hidden"
             >
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="relative p-2 hover:bg-transparent"
-                  disabled={backgroundLoading}
-                >
-                  <div className="relative">
-                    <Bell className="h-5 w-5 text-gray-700" />
-                    {userId && unreadCount > 0 && (
-                      <Badge className="absolute -top-1 -right-1 h-4 w-4 min-w-0 p-0 flex items-center justify-center rounded-full bg-amber-500 border border-white text-[9px] font-bold text-white">
-                        {unreadCount > 9 ? "9+" : unreadCount}
-                      </Badge>
-                    )}
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-screen max-w-sm max-h-[70vh] overflow-hidden rounded-none border border-gray-200 shadow-lg"
-                sideOffset={8}
-              >
-                {/* Header */}
-                <div className="p-4 border-b border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-base text-gray-900">
-                        Notifications
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {userId && userEmail
-                          ? `${unreadCount} unread`
-                          : "Please log in"}
-                      </p>
-                    </div>
-                    {userId && unreadCount > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleMarkAllAsRead}
-                        className="h-7 text-xs text-gray-600 hover:text-gray-900"
-                        disabled={loading}
-                      >
-                        <CheckCheck className="h-3 w-3 mr-1.5" />
-                        Mark all
-                      </Button>
-                    )}
-                  </div>
-                </div>
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
 
-                {/* Notifications List */}
-                <div className="max-h-[50vh] overflow-y-auto">
-                  {!userId || !userEmail ? (
-                    <div className="p-6 text-center">
-                      <Bell className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-gray-600">
-                        Please Log In
-                      </p>
-                    </div>
-                  ) : loading ? (
-                    <div className="p-8 text-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-amber-500 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">Loading...</p>
-                    </div>
-                  ) : notifications.length > 0 ? (
-                    <div className="divide-y divide-gray-100">
-                      {notifications.slice(0, 10).map((notification) => (
-                        <DropdownMenuItem
-                          key={notification._id}
-                          className={cn(
-                            "p-3 cursor-pointer",
-                            !notification.isRead && "bg-gray-50"
-                          )}
-                          onClick={() =>
-                            handleNotificationItemClick(notification, true)
-                          }
-                          disabled={markingAsRead === notification._id}
-                        >
-                          <div className="flex items-start gap-3 w-full">
-                            <div
-                              className={cn(
-                                "flex-shrink-0 w-8 h-8 flex items-center justify-center",
-                                !notification.isRead
-                                  ? "bg-amber-50 border border-amber-100"
-                                  : "bg-gray-50 border border-gray-100"
-                              )}
-                            >
-                              {getNotificationIcon(notification)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2 mb-1">
-                                <span
-                                  className={cn(
-                                    "text-sm font-medium line-clamp-1",
-                                    !notification.isRead
-                                      ? "text-gray-900"
-                                      : "text-gray-600"
-                                  )}
-                                >
-                                  {notification.title}
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                  {notification.timeAgo}
-                                </span>
-                              </div>
-                              <p
-                                className={cn(
-                                  "text-xs line-clamp-2",
-                                  !notification.isRead
-                                    ? "text-gray-700"
-                                    : "text-gray-500"
-                                )}
-                              >
-                                {notification.message}
-                              </p>
-                            </div>
-                            {!notification.isRead && (
-                              <div className="flex-shrink-0 mt-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              </div>
-                            )}
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-6 text-center">
-                      <Bell className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-gray-600">
-                        No notifications
-                      </p>
-                    </div>
-                  )}
-                </div>
+          <SidebarTrigger className="hidden lg:inline-flex mr-4" />
 
-                {/* Footer */}
-                {userId && notifications.length > 0 && (
-                  <div className="border-t border-gray-100 p-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-center text-sm"
-                      onClick={() => fetchNotifications(true)}
-                      disabled={loading}
-                    >
-                      {loading ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
-                      ) : (
-                        <Bell className="h-3.5 w-3.5 mr-2" />
-                      )}
-                      Refresh
-                    </Button>
-                  </div>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* User Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-1 hover:bg-gray-100 rounded-full">
-                  <div className="h-8 w-8 rounded-full bg-orange-500 flex items-center justify-center text-white font-semibold">
-                    {user?.firstName?.charAt(0) || "U"}
-                  </div>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => router.push("/user/profile")}
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={() => router.push("/user/settings")}
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="cursor-pointer text-red-600"
-                  onClick={handleLogout}
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </div>
-
-      {/* Desktop Navigation Bar (Original) - Hidden on Mobile */}
-      <nav className="hidden lg:flex items-center sticky border-b top-0 justify-between h-16 px-6 bg-background z-40">
-        {/* Breadcrumb */}
-        <div className="flex items-center">
-          <SidebarTrigger className="mr-4" />
-          <Breadcrumb>
+          <Breadcrumb className="hidden lg:block">
             <BreadcrumbList>
               {breadcrumbs.map((item, index) => (
                 <React.Fragment key={index}>
@@ -943,11 +861,73 @@ export function UserNavbar({
               ))}
             </BreadcrumbList>
           </Breadcrumb>
+
+          {/* Mobile title */}
+          <div className="lg:hidden">
+            <h1 className="font-bold text-lg text-zinc-900">
+              {breadcrumbs[breadcrumbs.length - 1]?.label ||
+                "Gian Construction"}
+            </h1>
+            <p className="text-xs text-zinc-500 truncate">Customer Dashboard</p>
+          </div>
         </div>
 
+        {/* Center - Search (desktop) */}
+        {showSearch && (
+          <div className="hidden lg:flex flex-1 max-w-md mx-4">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              <Input
+                placeholder="Search projects, appointments..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="pl-10 pr-10"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-100 rounded-full"
+                >
+                  <X className="h-3 w-3 text-zinc-500" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Right Side Actions */}
-        <div className="flex items-center gap-3">
-          {/* Desktop Notifications Dropdown */}
+        <div className="flex items-center gap-2">
+          {/* Mobile Search Button */}
+          {showSearch && (
+            <button
+              onClick={
+                onSearchClick ||
+                (() => {
+                  // Default search behavior
+                  router.push("/user/search");
+                })
+              }
+              className="p-2 hover:bg-zinc-100 rounded-lg lg:hidden"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Appointments Button - Desktop */}
+          {onAppointmentsClick && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDefaultAppointmentsClick}
+              className="hidden lg:flex items-center gap-2 border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50"
+            >
+              <Calendar className="h-4 w-4" />
+              <span>Appointments</span>
+            </Button>
+          )}
+
+          {/* Notifications Dropdown */}
           <DropdownMenu
             open={notificationsOpen}
             onOpenChange={setNotificationsOpen}
@@ -959,18 +939,15 @@ export function UserNavbar({
                 className="relative p-2 hover:bg-transparent"
                 disabled={backgroundLoading}
               >
-                {/* Bell Icon with Orange Theme */}
                 <div className="relative">
-                  <Bell className="h-5 w-5 text-gray-700 hover:text-amber-600 transition-colors" />
+                  <Bell className="h-5 w-5 text-zinc-700 hover:text-amber-600 transition-colors" />
 
-                  {/* Unread Count Badge - Orange Theme */}
                   {userId && unreadCount > 0 && (
                     <Badge className="absolute -top-2 -right-2 h-5 w-5 min-w-0 p-0 flex items-center justify-center rounded-full bg-amber-500 border-2 border-background text-[10px] font-bold text-white shadow-sm">
                       {unreadCount > 9 ? "9+" : unreadCount}
                     </Badge>
                   )}
 
-                  {/* Background Loading Indicator */}
                   {backgroundLoading && (
                     <div className="absolute -bottom-1 -right-1">
                       <div className="h-2 w-2 bg-amber-500 rounded-full animate-ping" />
@@ -981,16 +958,16 @@ export function UserNavbar({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-96 max-h-[80vh] overflow-hidden rounded-none border border-gray-200 shadow-lg"
+              className="w-96 max-h-[80vh] overflow-hidden rounded-none border border-zinc-200 shadow-lg"
             >
-              {/* Header - Clean Minimalist */}
-              <div className="p-4 border-b border-gray-100">
+              {/* Header */}
+              <div className="p-4 border-b border-zinc-100">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-base text-gray-900">
+                    <h3 className="font-semibold text-base text-zinc-900">
                       Your Notifications
                     </h3>
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-sm text-zinc-500 mt-0.5">
                       {userId && userEmail
                         ? `${notifications.length} total • ${unreadCount} unread`
                         : "Please log in to view notifications"}
@@ -1002,7 +979,7 @@ export function UserNavbar({
                       variant="ghost"
                       size="sm"
                       onClick={handleMarkAllAsRead}
-                      className="h-7 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      className="h-7 text-xs text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
                       disabled={loading}
                     >
                       <CheckCheck className="h-3 w-3 mr-1.5" />
@@ -1012,15 +989,15 @@ export function UserNavbar({
                 </div>
               </div>
 
-              {/* Notifications List - Clean Facebook-like Design */}
+              {/* Notifications List */}
               <div className="max-h-96 overflow-y-auto">
                 {!userId || !userEmail ? (
                   <div className="flex flex-col items-center justify-center p-8 text-center">
-                    <Bell className="h-12 w-12 text-gray-300 mb-3" />
-                    <p className="text-sm font-medium text-gray-600 mb-1">
+                    <Bell className="h-12 w-12 text-zinc-300 mb-3" />
+                    <p className="text-sm font-medium text-zinc-600 mb-1">
                       Please Log In
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-zinc-500">
                       Notifications are available for registered users with
                       active accounts.
                     </p>
@@ -1028,38 +1005,38 @@ export function UserNavbar({
                 ) : loading ? (
                   <div className="flex flex-col items-center justify-center p-8">
                     <Loader2 className="h-8 w-8 animate-spin text-amber-500 mb-2" />
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-zinc-500">
                       Loading your notifications...
                     </p>
                   </div>
                 ) : notifications.length > 0 ? (
-                  <div className="divide-y divide-gray-100">
+                  <div className="divide-y divide-zinc-100">
                     {notifications.map((notification) => (
                       <DropdownMenuItem
                         key={notification._id}
                         className={cn(
-                          "p-4 cursor-pointer transition-colors focus:bg-gray-50 focus:text-gray-900",
-                          !notification.isRead && "bg-gray-50"
+                          "p-4 cursor-pointer transition-colors focus:bg-zinc-50 focus:text-zinc-900",
+                          !notification.isRead && "bg-zinc-50"
                         )}
                         onClick={() =>
-                          handleNotificationItemClick(notification, false)
+                          handleNotificationItemClick(notification)
                         }
                         disabled={markingAsRead === notification._id}
                       >
                         <div className="flex items-start gap-3 w-full">
-                          {/* Icon Container - Square, No Border Radius */}
+                          {/* Icon Container */}
                           <div
                             className={cn(
                               "flex-shrink-0 w-10 h-10 flex items-center justify-center",
                               !notification.isRead
                                 ? "bg-amber-50 border border-amber-100"
-                                : "bg-gray-50 border border-gray-100"
+                                : "bg-zinc-50 border border-zinc-100"
                             )}
                           >
                             {getNotificationIcon(notification)}
                           </div>
 
-                          {/* Content - Clean Minimalist */}
+                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             {/* Title Row */}
                             <div className="flex items-start justify-between gap-2 mb-1">
@@ -1067,8 +1044,8 @@ export function UserNavbar({
                                 className={cn(
                                   "text-sm font-semibold line-clamp-1",
                                   !notification.isRead
-                                    ? "text-gray-900"
-                                    : "text-gray-600"
+                                    ? "text-zinc-900"
+                                    : "text-zinc-600"
                                 )}
                               >
                                 {notification.title}
@@ -1077,7 +1054,7 @@ export function UserNavbar({
                                 {markingAsRead === notification._id && (
                                   <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
                                 )}
-                                <span className="text-xs text-gray-400 flex items-center gap-0.5">
+                                <span className="text-xs text-zinc-400 flex items-center gap-0.5">
                                   <Clock className="h-3 w-3" />
                                   {notification.timeAgo}
                                 </span>
@@ -1089,18 +1066,18 @@ export function UserNavbar({
                               className={cn(
                                 "text-sm leading-relaxed line-clamp-2 mb-2",
                                 !notification.isRead
-                                  ? "text-gray-700"
-                                  : "text-gray-500"
+                                  ? "text-zinc-700"
+                                  : "text-zinc-500"
                               )}
                             >
                               {notification.message}
                             </p>
 
-                            {/* Metadata Tags - Minimalist */}
+                            {/* Metadata Tags */}
                             <div className="flex items-center gap-2">
                               {(notification.notificationType ||
                                 notification.targetUserRoles) && (
-                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600">
+                                <span className="text-xs px-2 py-0.5 bg-zinc-100 text-zinc-600">
                                   {notification.notificationType === "admin"
                                     ? "Admin"
                                     : notification.targetUserRoles?.includes(
@@ -1112,7 +1089,7 @@ export function UserNavbar({
                               )}
                               {notification.appointmentMetadata
                                 ?.meetingType && (
-                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                <div className="flex items-center gap-1 text-xs text-zinc-500">
                                   {getMeetingTypeIcon(
                                     notification.appointmentMetadata.meetingType
                                   )}
@@ -1125,12 +1102,12 @@ export function UserNavbar({
                                 </div>
                               )}
                               {notification.projectMetadata?.projectName && (
-                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600">
+                                <span className="text-xs px-2 py-0.5 bg-zinc-100 text-zinc-600">
                                   {notification.projectMetadata.projectName}
                                 </span>
                               )}
                               {notification.paymentMetadata?.amount && (
-                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600">
+                                <span className="text-xs px-2 py-0.5 bg-zinc-100 text-zinc-600">
                                   ₱
                                   {notification.paymentMetadata.amount.toLocaleString()}
                                 </span>
@@ -1138,7 +1115,7 @@ export function UserNavbar({
                             </div>
                           </div>
 
-                          {/* Unread Indicator - Minimal Dot */}
+                          {/* Unread Indicator */}
                           {!notification.isRead && (
                             <div className="flex-shrink-0 mt-1.5">
                               <div className="w-2 h-2 rounded-full bg-amber-500" />
@@ -1150,11 +1127,11 @@ export function UserNavbar({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center p-8 text-center">
-                    <Bell className="h-12 w-12 text-gray-300 mb-3" />
-                    <p className="text-sm font-medium text-gray-600 mb-1">
+                    <Bell className="h-12 w-12 text-zinc-300 mb-3" />
+                    <p className="text-sm font-medium text-zinc-600 mb-1">
                       No notifications yet
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-zinc-500">
                       You're all caught up! New updates about your appointments
                       and projects will appear here.
                     </p>
@@ -1164,11 +1141,11 @@ export function UserNavbar({
 
               {/* Footer - Refresh Button */}
               {userId && notifications.length > 0 && (
-                <div className="border-t border-gray-100 p-2">
+                <div className="border-t border-zinc-100 p-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full justify-center text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    className="w-full justify-center text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
                     onClick={() => fetchNotifications(true)}
                     disabled={loading || backgroundLoading}
                   >
@@ -1184,16 +1161,48 @@ export function UserNavbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Appointments Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAppointmentsClick}
-            className="flex items-center gap-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-          >
-            <Calendar className="h-4 w-4" />
-            <span>Appointments</span>
-          </Button>
+          {/* User Profile Dropdown - Desktop */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="hidden lg:flex items-center gap-3 p-2 hover:bg-zinc-100 rounded-lg">
+                <div className="h-8 w-8 rounded-full bg-amber-600 flex items-center justify-center text-white font-semibold">
+                  {userName.charAt(0)}
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-zinc-900">
+                    {userName}
+                  </p>
+                  <p className="text-xs text-zinc-500">Customer</p>
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => router.push("/user/profile")}
+              >
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => router.push("/user/settings")}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer text-red-600"
+                onClick={handleLogout}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </nav>
     </>

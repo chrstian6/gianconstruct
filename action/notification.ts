@@ -19,10 +19,7 @@ export async function getNotifications(
 }
 
 export async function markNotificationAsRead(
-  notificationId: string,
-  currentUserRole: string,
-  currentUserId?: string
-) {
+notificationId: string, currentUserRole: string, currentUserId?: string, userEmail?: string) {
   return await notificationService.markAsRead(
     notificationId,
     currentUserRole,

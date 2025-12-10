@@ -10,14 +10,21 @@ export async function GET() {
     const cookieStore = await cookies();
     const sessionId = cookieStore.get("sessionId")?.value;
 
+    console.log("Session ID from cookie:", sessionId);
+
     if (!sessionId) {
       console.log("No sessionId cookie found");
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
     const sessionData = await getSession(sessionId);
+
+    console.log("Session data from Redis:", sessionData);
+
     if (!sessionData) {
       console.log("No session found for sessionId:", sessionId);
+      // Clear invalid cookie
+      cookieStore.delete("sessionId");
       return NextResponse.json({ user: null }, { status: 401 });
     }
 

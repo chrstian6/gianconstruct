@@ -4,6 +4,7 @@
 import { nanoid } from "nanoid";
 import { setSession, deleteSession, verifySession } from "../lib/redis";
 import User from "../models/User";
+import { cookies } from "next/headers";
 
 export async function manageSession(
   userId: string,
@@ -31,7 +32,10 @@ export async function manageSession(
       role: user.role,
       createdAt: new Date().toISOString(),
     };
+
+    // Store session in Redis
     await setSession(sessionId, sessionData);
+
     return { sessionId, sessionData };
   } catch (error: any) {
     console.error("Session management error:", error);
@@ -47,6 +51,7 @@ export async function endSession(sessionId: string) {
     throw new Error("Failed to end session");
   }
 }
+
 export async function getSession() {
   try {
     const session = await verifySession();
@@ -62,10 +67,28 @@ export async function getSession() {
 
 export async function getUserId() {
   try {
-    const session = await verifySession();
+    const session = await getSession();
     return session?.userId || null;
   } catch (error) {
     console.error("Error getting user ID:", error);
     return null;
   }
+}
+
+// New function to set session cookie
+export async function setSessionCookie(sessionId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set("session", sessionId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 24 * 60 * 60, // 24 hours
+  });
+}
+
+// New function to clear session cookie
+export async function clearSessionCookie() {
+  const cookieStore = await cookies();
+  cookieStore.delete("session");
 }

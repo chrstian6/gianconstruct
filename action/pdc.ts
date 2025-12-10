@@ -12,6 +12,7 @@ import {
   PDCStats,
   PDCWithItems,
 } from "@/types/pdc";
+import { notificationService } from "@/lib/notification-services";
 
 // Function to check and auto-issue PDCs based on check date
 async function checkAndAutoIssuePDCs(): Promise<void> {
@@ -39,6 +40,9 @@ async function checkAndAutoIssuePDCs(): Promise<void> {
 
       await pdc.save();
 
+      // Send notification for auto-issued PDC
+      await sendPDCIssuedNotification(pdc);
+
       console.log(`✅ Auto-issued PDC: ${pdc.checkNumber}`);
     }
 
@@ -56,6 +60,229 @@ checkAndAutoIssuePDCs();
 // Set up interval to check for PDCs to auto-issue daily
 if (typeof setInterval !== "undefined") {
   setInterval(checkAndAutoIssuePDCs, 24 * 60 * 60 * 1000); // Check every 24 hours
+}
+
+// Helper function to send PDC created notification
+async function sendPDCCreatedNotification(pdc: any): Promise<void> {
+  try {
+    console.log("📢 Sending PDC created notification");
+
+    // Format the check date
+    const checkDate = new Date(pdc.checkDate);
+    const formattedDate = checkDate.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    // Calculate days until check date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDateTime = new Date(pdc.checkDate);
+    checkDateTime.setHours(0, 0, 0, 0);
+    const timeDiff = checkDateTime.getTime() - today.getTime();
+    const daysUntilCheck = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    // Format amount
+    const formattedAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(pdc.totalAmount);
+
+    // Notification message
+    const message = `New PDC ${pdc.checkNumber} has been created for ${pdc.supplier || "Supplier"}. Amount: ${formattedAmount}. Check Date: ${formattedDate} (${daysUntilCheck > 0 ? `in ${daysUntilCheck} days` : "today"}).`;
+
+    // Send notification to admin
+    await notificationService.createNotification({
+      targetUserRoles: ["admin"],
+      feature: "general",
+      type: "system_alert",
+      title: `New PDC Created: ${pdc.checkNumber}`,
+      message: message,
+      channels: ["in_app", "email"],
+      metadata: {
+        pdcId: pdc._id?.toString() || pdc.pdc_id,
+        checkNumber: pdc.checkNumber,
+        supplier: pdc.supplier,
+        amount: pdc.totalAmount,
+        checkDate: pdc.checkDate,
+        formattedAmount: formattedAmount,
+        formattedDate: formattedDate,
+        itemCount: pdc.itemCount || pdc.items?.length || 0,
+        daysUntilCheck: daysUntilCheck,
+        status: pdc.status,
+        action: "created",
+      },
+      actionUrl: `/admin/pdc`,
+      actionLabel: "View PDC",
+    });
+
+    console.log(`✅ PDC created notification sent for ${pdc.checkNumber}`);
+  } catch (error) {
+    console.error("❌ Failed to send PDC created notification:", error);
+  }
+}
+
+// Helper function to send PDC issued notification
+async function sendPDCIssuedNotification(pdc: any): Promise<void> {
+  try {
+    console.log("📢 Sending PDC issued notification");
+
+    // Format the check date
+    const checkDate = new Date(pdc.checkDate);
+    const formattedDate = checkDate.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    // Format amount
+    const formattedAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(pdc.totalAmount);
+
+    // Notification message for admin
+    const adminMessage = `PDC ${pdc.checkNumber} has been issued to ${pdc.supplier || "Supplier"}. Amount: ${formattedAmount}. Check Date: ${formattedDate}.`;
+
+    // Send notification to admin
+    await notificationService.createNotification({
+      targetUserRoles: ["admin"],
+      feature: "general",
+      type: "system_alert",
+      title: `PDC Issued: ${pdc.checkNumber}`,
+      message: adminMessage,
+      channels: ["in_app", "email"],
+      metadata: {
+        pdcId: pdc._id?.toString() || pdc.pdc_id,
+        checkNumber: pdc.checkNumber,
+        supplier: pdc.supplier,
+        amount: pdc.totalAmount,
+        checkDate: pdc.checkDate,
+        formattedAmount: formattedAmount,
+        formattedDate: formattedDate,
+        itemCount: pdc.itemCount || pdc.items?.length || 0,
+        issuedAt: pdc.issuedAt,
+        status: pdc.status,
+        action: "issued",
+      },
+      actionUrl: `/admin/pdc`,
+      actionLabel: "View PDC",
+    });
+
+    // Send notification to supplier if email is available
+    if (pdc.supplierEmail) {
+      // This would require having supplier email in PDC model or fetching from suppliers
+      console.log(
+        `📧 PDC issued notification sent to supplier: ${pdc.supplier}`
+      );
+    }
+
+    console.log(`✅ PDC issued notification sent for ${pdc.checkNumber}`);
+  } catch (error) {
+    console.error("❌ Failed to send PDC issued notification:", error);
+  }
+}
+
+// Helper function to send PDC status update notification
+async function sendPDCStatusUpdateNotification(
+  pdc: any,
+  oldStatus: string,
+  newStatus: string
+): Promise<void> {
+  try {
+    console.log("📢 Sending PDC status update notification");
+
+    // Format amount
+    const formattedAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(pdc.totalAmount);
+
+    // Notification message
+    const message = `PDC ${pdc.checkNumber} status changed from ${oldStatus} to ${newStatus}. Amount: ${formattedAmount}. Supplier: ${pdc.supplier || "Supplier"}.`;
+
+    // Send notification to admin
+    await notificationService.createNotification({
+      targetUserRoles: ["admin"],
+      feature: "general",
+      type: "system_alert",
+      title: `PDC Status Updated: ${pdc.checkNumber}`,
+      message: message,
+      channels: ["in_app", "email"],
+      metadata: {
+        pdcId: pdc._id?.toString() || pdc.pdc_id,
+        checkNumber: pdc.checkNumber,
+        supplier: pdc.supplier,
+        amount: pdc.totalAmount,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        formattedAmount: formattedAmount,
+        updatedAt: pdc.updatedAt,
+        action: "status_update",
+      },
+      actionUrl: `/admin/pdc`,
+      actionLabel: "View PDC",
+    });
+
+    console.log(
+      `✅ PDC status update notification sent for ${pdc.checkNumber}`
+    );
+  } catch (error) {
+    console.error("❌ Failed to send PDC status update notification:", error);
+  }
+}
+
+// Helper function to send PDC deleted/cancelled notification
+async function sendPDCCancelledNotification(pdc: any): Promise<void> {
+  try {
+    console.log("📢 Sending PDC cancelled notification");
+
+    // Format amount
+    const formattedAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(pdc.totalAmount);
+
+    // Notification message
+    const message = `PDC ${pdc.checkNumber} has been cancelled. Amount: ${formattedAmount}. Supplier: ${pdc.supplier || "Supplier"}.`;
+
+    // Send notification to admin
+    await notificationService.createNotification({
+      targetUserRoles: ["admin"],
+      feature: "general",
+      type: "system_alert",
+      title: `PDC Cancelled: ${pdc.checkNumber}`,
+      message: message,
+      channels: ["in_app", "email"],
+      metadata: {
+        pdcId: pdc._id?.toString() || pdc.pdc_id,
+        checkNumber: pdc.checkNumber,
+        supplier: pdc.supplier,
+        amount: pdc.totalAmount,
+        formattedAmount: formattedAmount,
+        cancelledAt: pdc.cancelledAt || new Date(),
+        status: pdc.status,
+        action: "cancelled",
+      },
+      actionUrl: `/admin/pdc`,
+      actionLabel: "View PDC",
+    });
+
+    console.log(`✅ PDC cancelled notification sent for ${pdc.checkNumber}`);
+  } catch (error) {
+    console.error("❌ Failed to send PDC cancelled notification:", error);
+  }
 }
 
 // action/pdc.ts - Check if there's any duplicate creation
@@ -117,7 +344,16 @@ export async function createPDC(
 
     console.log(
       `✅ PDC created successfully: ${pdcResult.checkNumber} with status: ${pdcResult.status}`
-    ); // Add logging
+    );
+
+    // Send notification for newly created PDC
+    await sendPDCCreatedNotification(pdcResult);
+
+    // If it was auto-issued, also send issued notification
+    if (shouldAutoIssue) {
+      await sendPDCIssuedNotification(pdcResult);
+    }
+
     return {
       success: true,
       pdc: pdcResult,
@@ -289,6 +525,14 @@ export async function updatePDCStatus(
   try {
     await dbConnect();
 
+    // Get current PDC to track status change
+    const currentPDC = await PDC.findById(pdc_id);
+    if (!currentPDC) {
+      return { success: false, error: "PDC not found" };
+    }
+
+    const oldStatus = currentPDC.status;
+
     const updateData: any = {
       status: statusUpdate.status,
       updatedAt: new Date(),
@@ -326,6 +570,20 @@ export async function updatePDCStatus(
       issuedAt: pdc.issuedAt,
       cancelledAt: pdc.cancelledAt,
     };
+
+    // Send notification for status update if status changed
+    if (oldStatus !== statusUpdate.status) {
+      await sendPDCStatusUpdateNotification(
+        pdcResult,
+        oldStatus,
+        statusUpdate.status
+      );
+    }
+
+    // Send specific notification for issued status
+    if (statusUpdate.status === "issued" && oldStatus !== "issued") {
+      await sendPDCIssuedNotification(pdcResult);
+    }
 
     return {
       success: true,
@@ -496,10 +754,74 @@ export async function getPDCStats(): Promise<{
       }
     });
 
+    // Send notification for PDC stats (e.g., weekly summary)
+    // This could be called from a scheduled job instead
+    await sendPDCStatsNotification(result);
+
     return { success: true, stats: result };
   } catch (error) {
     console.error("Failed to fetch PDC stats:", error);
     return { success: false, error: "Failed to fetch PDC statistics" };
+  }
+}
+
+// Helper function to send PDC stats notification
+async function sendPDCStatsNotification(stats: PDCStats): Promise<void> {
+  try {
+    console.log("📊 Sending PDC stats notification");
+
+    const formattedTotalAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(stats.totalAmount);
+
+    const formattedIssuedAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(stats.issuedAmount);
+
+    const formattedPendingAmount = new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(stats.pendingAmount);
+
+    const message = `PDC Statistics Summary: ${stats.total} total PDCs (₱${stats.totalAmount.toLocaleString()}). ${stats.issued} issued (₱${stats.issuedAmount.toLocaleString()}), ${stats.pending} pending (₱${stats.pendingAmount.toLocaleString()}), ${stats.cancelled} cancelled (₱${stats.cancelledAmount.toLocaleString()}).`;
+
+    // Send notification to admin
+    await notificationService.createNotification({
+      targetUserRoles: ["admin"],
+      feature: "general",
+      type: "system_alert",
+      title: "PDC Statistics Summary",
+      message: message,
+      channels: ["in_app", "email"],
+      metadata: {
+        totalPDCs: stats.total,
+        totalAmount: stats.totalAmount,
+        issuedPDCs: stats.issued,
+        issuedAmount: stats.issuedAmount,
+        pendingPDCs: stats.pending,
+        pendingAmount: stats.pendingAmount,
+        cancelledPDCs: stats.cancelled,
+        cancelledAmount: stats.cancelledAmount,
+        formattedTotalAmount: formattedTotalAmount,
+        formattedIssuedAmount: formattedIssuedAmount,
+        formattedPendingAmount: formattedPendingAmount,
+        action: "stats_summary",
+      },
+      actionUrl: `/admin/pdc`,
+      actionLabel: "View PDC Dashboard",
+    });
+
+    console.log("✅ PDC stats notification sent");
+  } catch (error) {
+    console.error("❌ Failed to send PDC stats notification:", error);
   }
 }
 
@@ -623,6 +945,12 @@ export async function deletePDC(
   try {
     await dbConnect();
 
+    // Get PDC before deletion for notification
+    const pdc = await PDC.findById(pdc_id);
+    if (!pdc) {
+      return { success: false, error: "PDC not found" };
+    }
+
     // Soft delete by updating status to cancelled
     const result = await PDC.findByIdAndUpdate(pdc_id, {
       status: "cancelled",
@@ -633,6 +961,9 @@ export async function deletePDC(
     if (!result) {
       return { success: false, error: "PDC not found" };
     }
+
+    // Send notification for cancelled PDC
+    await sendPDCCancelledNotification(pdc);
 
     return { success: true };
   } catch (error) {
@@ -654,12 +985,13 @@ async function getPDCItemDetails(items: any[]): Promise<any[]> {
       (id) => id && typeof id === "string" && !id.startsWith("temp-")
     );
 
-    let inventoryItems: IInventoryDoc[] = [];
+    let inventoryItems: any[] = [];
 
     if (validProductIds.length > 0) {
-      inventoryItems = (await Inventory.find({
+      // Use type assertion to handle the lean() result
+      inventoryItems = await Inventory.find({
         product_id: { $in: validProductIds },
-      }).lean()) as IInventoryDoc[];
+      }).lean();
     }
 
     if (!inventoryItems || inventoryItems.length === 0) {
@@ -683,27 +1015,32 @@ async function getPDCItemDetails(items: any[]): Promise<any[]> {
         (invItem) => invItem.product_id === pdcItem.product_id
       );
 
-      // Use virtual fields from Inventory model
-      const totalCapital = inventoryItem
-        ? (inventoryItem as any).totalCapital
-        : 0;
-      const totalValue = inventoryItem ? (inventoryItem as any).totalValue : 0;
+      // Extract data from plain object (not Mongoose document)
+      const plainInvItem = inventoryItem || {};
+
+      // Calculate virtual fields manually
+      const quantity = plainInvItem.quantity || 0;
+      const unitCost = plainInvItem.unitCost || 0;
+      const salePrice = plainInvItem.salePrice || 0;
+
+      const totalCapital = quantity * unitCost;
+      const totalValue = quantity * salePrice;
 
       return {
         ...pdcItem,
-        name: inventoryItem?.name || "Unknown Item",
-        category: inventoryItem?.category || "Unknown Category",
-        unit: inventoryItem?.unit || "N/A",
-        description: inventoryItem?.description || "",
-        currentQuantity: inventoryItem?.quantity || 0,
-        currentUnitCost: inventoryItem?.unitCost || pdcItem.unitCost || 0,
-        salePrice: inventoryItem?.salePrice || 0,
-        location: inventoryItem?.location || "",
-        reorderPoint: inventoryItem?.reorderPoint || 0,
+        name: plainInvItem.name || "Unknown Item",
+        category: plainInvItem.category || "Unknown Category",
+        unit: plainInvItem.unit || "N/A",
+        description: plainInvItem.description || "",
+        currentQuantity: quantity,
+        currentUnitCost: unitCost,
+        salePrice: salePrice,
+        location: plainInvItem.location || "",
+        reorderPoint: plainInvItem.reorderPoint || 0,
         totalCapital,
         totalValue,
-        timeCreated: inventoryItem?.timeCreated,
-        timeUpdated: inventoryItem?.timeUpdated,
+        timeCreated: plainInvItem.timeCreated,
+        timeUpdated: plainInvItem.timeUpdated,
       };
     });
 

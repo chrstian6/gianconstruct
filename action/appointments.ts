@@ -1,4 +1,4 @@
-// actions/appointments.ts - UPDATED WITH DIRECT NOTIFICATION SERVICE
+// actions/appointments.ts - UPDATED WITH HELPER FUNCTIONS
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -8,7 +8,10 @@ import { Timeslot } from "@/models/Timeslots";
 import User from "@/models/User";
 import { sendEmail } from "@/lib/nodemailer";
 import { generateEmailTemplate, EmailTemplates } from "@/lib/email-templates";
-import { notificationService } from "@/lib/notification-services";
+import {
+  notificationService,
+  createAppointmentNotification,
+} from "@/lib/notification-services";
 import { InquiryActionResponse, InquiriesResponse } from "@/types/inquiry";
 import {
   TimeslotsResponse,
@@ -188,12 +191,36 @@ export async function sendNewInquiryNotification(inquiry: any) {
       subject: template.subject,
       html: generateEmailTemplate(template.data),
     });
+
+    // Also create notification for admin
+    await createAppointmentNotification(
+      {
+        inquiryId: inquiry._id,
+        userId: inquiry.user_id,
+        userEmail: inquiry.email,
+        userName: inquiry.name,
+        userFirstName: inquiry.name.split(" ")[0],
+        userLastName: inquiry.name.split(" ").slice(1).join(" "),
+        designName: inquiry.design.name,
+        originalDate: inquiry.preferredDate,
+        originalTime: inquiry.preferredTime,
+        meetingType: inquiry.meetingType,
+        userType: inquiry.userType || "guest",
+      },
+      "inquiry_submitted",
+      "New Consultation Inquiry",
+      `${inquiry.name} has submitted a new inquiry for ${inquiry.design.name}`,
+      {
+        phone: inquiry.phone,
+        message: inquiry.message,
+      }
+    );
   } catch (error) {
     console.error("Error sending new inquiry notification:", error);
   }
 }
 
-// Complete inquiry - UPDATED WITH DIRECT NOTIFICATION SERVICE
+// Complete inquiry - UPDATED WITH HELPER FUNCTION
 export async function completeInquiry(
   inquiryId: string
 ): Promise<InquiryActionResponse> {
@@ -249,49 +276,29 @@ export async function completeInquiry(
       user_id: inquiry.user_id,
     };
 
-    // UPDATED: Use direct notification service
+    // UPDATED: Use helper function for notifications
     await Promise.all([
       sendAppointmentEmail("completed", transformedInquiry),
-      // Create notification using direct service
-      (async () => {
-        try {
-          console.log("📝 Creating completion notification...");
-          const result = await notificationService.createNotification({
-            userId: inquiry.user_id,
-            userEmail: inquiry.email,
-            feature: "appointments",
-            type: "appointment_completed",
-            title: "Consultation Completed",
-            message: `Your consultation for ${transformedInquiry.design.name} has been completed. Thank you for choosing GianConstruct!`,
-            createdByRole: "admin",
-            channels: ["in_app", "email"],
-            relatedId: inquiry._id?.toString(),
-            appointmentMetadata: {
-              inquiryId: inquiry._id?.toString(),
-              appointmentId: inquiry._id?.toString(),
-              originalDate: inquiry.preferredDate,
-              originalTime: inquiry.preferredTime,
-              meetingType: inquiry.meetingType,
-            },
-            pushData: {
-              title: "Consultation Completed",
-              body: `Your consultation for ${transformedInquiry.design.name} has been completed`,
-              icon: "/icons/calendar-completed.png",
-            },
-          });
-
-          if (result && result._id) {
-            console.log("✅ Completion notification created:", result._id);
-          } else {
-            console.error("❌ Completion notification failed:", result);
-          }
-        } catch (notificationError) {
-          console.error(
-            "❌ Error creating completion notification:",
-            notificationError
-          );
-        }
-      })(),
+      // Create notification using helper function
+      createAppointmentNotification(
+        {
+          inquiryId: inquiry._id?.toString(),
+          appointmentId: inquiry._id?.toString(),
+          userId: inquiry.user_id,
+          userEmail: inquiry.email,
+          userName: inquiry.name,
+          userFirstName: inquiry.name.split(" ")[0],
+          userLastName: inquiry.name.split(" ").slice(1).join(" "),
+          designName: inquiry.design.name,
+          originalDate: inquiry.preferredDate,
+          originalTime: inquiry.preferredTime,
+          meetingType: inquiry.meetingType,
+          userType: userType,
+        },
+        "appointment_completed",
+        "Consultation Completed",
+        `Your consultation for ${transformedInquiry.design.name} has been completed. Thank you for choosing GianConstruct!`
+      ),
     ]);
 
     revalidatePath("/admin/appointments");
@@ -305,7 +312,7 @@ export async function completeInquiry(
   }
 }
 
-// Confirm inquiry and book timeslot - UPDATED WITH DIRECT NOTIFICATION SERVICE
+// Confirm inquiry and book timeslot - UPDATED WITH HELPER FUNCTION
 export async function confirmInquiry(
   inquiryId: string
 ): Promise<InquiryActionResponse> {
@@ -385,51 +392,29 @@ export async function confirmInquiry(
       user_id: inquiry.user_id,
     };
 
-    // UPDATED: Use direct notification service
+    // UPDATED: Use helper function for notifications
     await Promise.all([
       sendAppointmentEmail("confirmed", transformedInquiry),
-      // Create notification using direct service
-      (async () => {
-        try {
-          console.log("📝 Creating confirmation notification...");
-          const result = await notificationService.createNotification({
-            userId: inquiry.user_id,
-            userEmail: inquiry.email,
-            feature: "appointments",
-            type: "appointment_confirmed",
-            title: "Appointment Confirmed",
-            message: `Your appointment for ${transformedInquiry.design.name} has been confirmed for ${inquiry.preferredDate} at ${inquiry.preferredTime}`,
-            createdByRole: "admin",
-            channels: ["in_app", "email"],
-            relatedId: inquiry._id?.toString(),
-            appointmentMetadata: {
-              inquiryId: inquiry._id?.toString(),
-              appointmentId: inquiry._id?.toString(),
-              originalDate: inquiry.preferredDate,
-              originalTime: inquiry.preferredTime,
-              meetingType: inquiry.meetingType,
-            },
-            actionUrl: `/user/appointments`,
-            actionLabel: "View My Appointments",
-            pushData: {
-              title: "Appointment Confirmed",
-              body: `Your appointment for ${transformedInquiry.design.name} has been confirmed`,
-              icon: "/icons/calendar-check.png",
-            },
-          });
-
-          if (result && result._id) {
-            console.log("✅ Confirmation notification created:", result._id);
-          } else {
-            console.error("❌ Confirmation notification failed:", result);
-          }
-        } catch (notificationError) {
-          console.error(
-            "❌ Error creating confirmation notification:",
-            notificationError
-          );
-        }
-      })(),
+      // Create notification using helper function
+      createAppointmentNotification(
+        {
+          inquiryId: inquiry._id?.toString(),
+          appointmentId: inquiry._id?.toString(),
+          userId: inquiry.user_id,
+          userEmail: inquiry.email,
+          userName: inquiry.name,
+          userFirstName: inquiry.name.split(" ")[0],
+          userLastName: inquiry.name.split(" ").slice(1).join(" "),
+          designName: inquiry.design.name,
+          originalDate: inquiry.preferredDate,
+          originalTime: inquiry.preferredTime,
+          meetingType: inquiry.meetingType,
+          userType: userType,
+        },
+        "appointment_confirmed",
+        "Appointment Confirmed",
+        `Your appointment for ${transformedInquiry.design.name} has been confirmed for ${inquiry.preferredDate} at ${inquiry.preferredTime}`
+      ),
     ]);
 
     revalidatePath("/admin/appointments");
@@ -443,7 +428,7 @@ export async function confirmInquiry(
   }
 }
 
-// Cancel inquiry and free up timeslot - UPDATED WITH DIRECT NOTIFICATION SERVICE
+// Cancel inquiry and free up timeslot - UPDATED WITH HELPER FUNCTION
 export async function cancelInquiry(
   inquiryId: string,
   reason: string
@@ -514,50 +499,30 @@ export async function cancelInquiry(
       user_id: inquiry.user_id,
     };
 
-    // UPDATED: Use direct notification service
+    // UPDATED: Use helper function for notifications
     await Promise.all([
       sendAppointmentEmail("cancelled", transformedInquiry, { reason }),
-      // Create notification using direct service
-      (async () => {
-        try {
-          console.log("📝 Creating cancellation notification...");
-          const result = await notificationService.createNotification({
-            userId: inquiry.user_id,
-            userEmail: inquiry.email,
-            feature: "appointments",
-            type: "appointment_cancelled",
-            title: "Appointment Cancelled",
-            message: `Your appointment for ${transformedInquiry.design.name} has been cancelled${reason ? `: ${reason}` : ""}`,
-            createdByRole: "admin",
-            channels: ["in_app", "email"],
-            relatedId: inquiry._id?.toString(),
-            appointmentMetadata: {
-              inquiryId: inquiry._id?.toString(),
-              appointmentId: inquiry._id?.toString(),
-              originalDate: inquiry.preferredDate,
-              originalTime: inquiry.preferredTime,
-              reason,
-              meetingType: inquiry.meetingType,
-            },
-            pushData: {
-              title: "Appointment Cancelled",
-              body: `Your appointment for ${transformedInquiry.design.name} has been cancelled`,
-              icon: "/icons/calendar-cancel.png",
-            },
-          });
-
-          if (result && result._id) {
-            console.log("✅ Cancellation notification created:", result._id);
-          } else {
-            console.error("❌ Cancellation notification failed:", result);
-          }
-        } catch (notificationError) {
-          console.error(
-            "❌ Error creating cancellation notification:",
-            notificationError
-          );
-        }
-      })(),
+      // Create notification using helper function
+      createAppointmentNotification(
+        {
+          inquiryId: inquiry._id?.toString(),
+          appointmentId: inquiry._id?.toString(),
+          userId: inquiry.user_id,
+          userEmail: inquiry.email,
+          userName: inquiry.name,
+          userFirstName: inquiry.name.split(" ")[0],
+          userLastName: inquiry.name.split(" ").slice(1).join(" "),
+          designName: inquiry.design.name,
+          originalDate: inquiry.preferredDate,
+          originalTime: inquiry.preferredTime,
+          meetingType: inquiry.meetingType,
+          userType: userType,
+          reason: reason,
+        },
+        "appointment_cancelled",
+        "Appointment Cancelled",
+        `Your appointment for ${transformedInquiry.design.name} has been cancelled${reason ? `: ${reason}` : ""}`
+      ),
     ]);
 
     revalidatePath("/admin/appointments");
@@ -571,7 +536,7 @@ export async function cancelInquiry(
   }
 }
 
-// Reschedule inquiry and update timeslots - UPDATED WITH DIRECT NOTIFICATION SERVICE
+// Reschedule inquiry and update timeslots - UPDATED WITH HELPER FUNCTION
 export async function rescheduleInquiry(
   inquiryId: string,
   newDate: string,
@@ -675,58 +640,36 @@ export async function rescheduleInquiry(
       user_id: inquiry.user_id,
     };
 
-    // UPDATED: Use direct notification service
+    // UPDATED: Use helper function for notifications
     await Promise.all([
       sendAppointmentEmail("rescheduled", transformedInquiry, {
         newDate,
         newTime,
         notes,
       }),
-      // Create notification using direct service
-      (async () => {
-        try {
-          console.log("📝 Creating reschedule notification...");
-          const result = await notificationService.createNotification({
-            userId: inquiry.user_id,
-            userEmail: inquiry.email,
-            feature: "appointments",
-            type: "appointment_rescheduled",
-            title: "Appointment Rescheduled",
-            message: `Your appointment for ${transformedInquiry.design.name} has been rescheduled to ${newDate} at ${newTime}`,
-            createdByRole: "admin",
-            channels: ["in_app", "email"],
-            relatedId: inquiry._id?.toString(),
-            appointmentMetadata: {
-              inquiryId: inquiry._id?.toString(),
-              appointmentId: inquiry._id?.toString(),
-              originalDate: inquiry.preferredDate,
-              originalTime: inquiry.preferredTime,
-              newDate,
-              newTime,
-              notes,
-              meetingType: inquiry.meetingType,
-            },
-            actionUrl: `/user/appointments`,
-            actionLabel: "View Updated Appointment",
-            pushData: {
-              title: "Appointment Rescheduled",
-              body: `Your appointment for ${transformedInquiry.design.name} has been rescheduled`,
-              icon: "/icons/calendar-reschedule.png",
-            },
-          });
-
-          if (result && result._id) {
-            console.log("✅ Reschedule notification created:", result._id);
-          } else {
-            console.error("❌ Reschedule notification failed:", result);
-          }
-        } catch (notificationError) {
-          console.error(
-            "❌ Error creating reschedule notification:",
-            notificationError
-          );
-        }
-      })(),
+      // Create notification using helper function
+      createAppointmentNotification(
+        {
+          inquiryId: inquiry._id?.toString(),
+          appointmentId: inquiry._id?.toString(),
+          userId: inquiry.user_id,
+          userEmail: inquiry.email,
+          userName: inquiry.name,
+          userFirstName: inquiry.name.split(" ")[0],
+          userLastName: inquiry.name.split(" ").slice(1).join(" "),
+          designName: inquiry.design.name,
+          originalDate: inquiry.preferredDate,
+          originalTime: inquiry.preferredTime,
+          newDate: newDate,
+          newTime: newTime,
+          meetingType: inquiry.meetingType,
+          userType: userType,
+          notes: notes,
+        },
+        "appointment_rescheduled",
+        "Appointment Rescheduled",
+        `Your appointment for ${transformedInquiry.design.name} has been rescheduled to ${newDate} at ${newTime}`
+      ),
     ]);
 
     revalidatePath("/admin/appointments");

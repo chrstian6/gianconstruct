@@ -1,4 +1,4 @@
-// lib/stores.ts
+// lib/stores.ts - UPDATED WITH checkSession METHOD
 "use client";
 
 import { create } from "zustand";
@@ -147,6 +147,7 @@ interface AuthStore {
   setLoading: (loading: boolean) => void;
   clearUser: () => Promise<void>;
   initialize: () => Promise<void>;
+  checkSession: () => Promise<void>; // NEW METHOD ADDED
 }
 
 export const useModalStore = create<ModalStore>((set) => ({
@@ -370,13 +371,58 @@ export const useAuthStore = create<AuthStore>()(
                   }
                 : null,
               initialized: true,
+              loading: false,
             });
           } else {
-            set({ initialized: true });
+            set({ initialized: true, loading: false });
           }
         } catch (error) {
           console.error("Failed to initialize session:", error);
-          set({ initialized: true });
+          set({ initialized: true, loading: false });
+        }
+      },
+
+      // NEW METHOD: Check current session (used after redirects like Google OAuth)
+      checkSession: async () => {
+        try {
+          console.log("Checking current session...");
+
+          const response = await fetch("/api/auth/session", {
+            credentials: "include",
+            cache: "no-store", // Prevent caching for fresh session data
+          });
+
+          console.log("Session check response status:", response.status);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log("Session data received:", data);
+
+            if (data.user) {
+              set({
+                user: {
+                  user_id: data.user.user_id,
+                  firstName: data.user.name,
+                  lastName: data.user.lastName || "",
+                  contactNo: data.user.contactNo || "",
+                  email: data.user.email,
+                  role: data.user.role || "user",
+                  avatar: data.user.avatar || "",
+                },
+                loading: false,
+              });
+              console.log("Session updated for user:", data.user.email);
+            } else {
+              console.log("No user found in session");
+              set({ user: null, loading: false });
+            }
+          } else {
+            console.log("Session check failed with status:", response.status);
+            set({ user: null, loading: false });
+          }
+        } catch (error) {
+          console.error("Failed to check session:", error);
+          set({ user: null, loading: false });
         }
       },
     }),

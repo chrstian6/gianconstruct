@@ -117,174 +117,88 @@ export async function handleGoogleCallback(code: string, state?: string) {
       email: googleUser.email,
       id: googleUser.id,
       name: googleUser.name,
+      given_name: googleUser.given_name,
+      family_name: googleUser.family_name,
     });
 
     // Connect to database
     await dbConnect();
 
-    // FIRST: Check if user exists by Google ID (direct Google sign-in)
-    let user = await User.findOne({ googleId: googleUser.id });
+    const googleEmail = googleUser.email.toLowerCase();
+
+    // CRITICAL: ALWAYS CHECK BY EMAIL FIRST (case-insensitive)
+    let user = await User.findOne({
+      email: { $regex: new RegExp(`^${googleEmail}$`, "i") },
+    });
 
     if (user) {
-      console.log("User found by Google ID:", user.email);
+      console.log("✅ User found by email in database:", {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        user_id: user.user_id,
+      });
 
-      // Verify email matches (security check)
-      if (user.email.toLowerCase() !== googleUser.email.toLowerCase()) {
-        console.error(
-          "Email mismatch: User email",
-          user.email,
-          "vs Google email",
-          googleUser.email
-        );
-        return {
-          success: false,
-          error: "Email mismatch detected. Please contact support.",
-        };
-      }
-
-      // Update tokens
+      // IMPORTANT: Use database user's information, NOT Google's
+      // Only update Google-specific fields and tokens
+      user.googleId = googleUser.id;
       user.googleAccessToken = tokens.access_token;
       if (tokens.refresh_token) {
         user.googleRefreshToken = tokens.refresh_token;
       }
 
-      // Update avatar if new one is available
-      if (googleUser.picture) {
+      // Update avatar if new one is available and user doesn't have one
+      if (googleUser.picture && !user.avatar) {
         user.avatar = googleUser.picture;
       }
 
+      // Mark as verified if not already
+      if (!user.verified) {
+        user.verified = true;
+      }
+
       await user.save();
-      console.log("Existing Google user updated:", user.email);
+      console.log("✅ Existing user linked with Google:", user.email);
     } else {
-      // No user with this Google ID - check by email (case-insensitive)
-      const googleEmail = googleUser.email.toLowerCase();
-      user = await User.findOne({
-        email: { $regex: new RegExp(`^${googleEmail}$`, "i") },
+      // No user with this email exists - create new user
+      console.log("🆕 Creating new user from Google");
+
+      // Parse Google name to separate first and last name
+      let firstName = googleUser.given_name || "";
+      let lastName = googleUser.family_name || "";
+
+      // If Google provides full name only (no given_name/family_name)
+      if (!firstName && googleUser.name) {
+        const names = googleUser.name.trim().split(" ");
+        firstName = names[0] || "";
+        lastName = names.slice(1).join(" ") || "";
+      }
+
+      const userId = await generateUserId();
+
+      user = new User({
+        user_id: userId,
+        email: googleEmail,
+        firstName: firstName,
+        lastName: lastName,
+        verified: true,
+        googleId: googleUser.id,
+        googleAccessToken: tokens.access_token,
+        googleRefreshToken: tokens.refresh_token || undefined,
+        avatar: googleUser.picture,
+        role: "user",
       });
 
-      if (user) {
-        console.log("User found by email:", user.email);
-
-        // Verify email matches exactly (case-insensitive comparison)
-        if (user.email.toLowerCase() !== googleEmail) {
-          console.error(
-            "Email case mismatch: User email",
-            user.email,
-            "vs Google email",
-            googleEmail
-          );
-          // Normalize the email in database to lowercase
-          user.email = googleEmail;
-        }
-
-        // Check if user already has a different Google account linked
-        if (user.googleId && user.googleId !== googleUser.id) {
-          console.log("Different Google account for same email");
-          return {
-            success: false,
-            error: `This email is already associated with a different Google account. Please use your original Google account to sign in, or use email/password login.`,
-          };
-        }
-
-        // Check if user has password auth
-        const hasPassword = !!user.password;
-        const hasGoogle = !!user.googleId;
-
-        if (hasPassword && !hasGoogle) {
-          // User has password auth but no Google ID - link them
-          console.log("Linking Google account to existing email/password user");
-          user.googleId = googleUser.id;
-          user.googleAccessToken = tokens.access_token;
-          if (tokens.refresh_token) {
-            user.googleRefreshToken = tokens.refresh_token;
-          }
-
-          // Mark as verified if not already
-          if (!user.verified) {
-            user.verified = true;
-          }
-
-          // Update user info from Google if missing
-          if (!user.firstName && googleUser.given_name) {
-            user.firstName = googleUser.given_name;
-          }
-          if (!user.lastName && googleUser.family_name) {
-            user.lastName = googleUser.family_name;
-          }
-          if (!user.avatar && googleUser.picture) {
-            user.avatar = googleUser.picture;
-          }
-
-          await user.save();
-          console.log("Google account linked to existing user:", user.email);
-
-          // Send notification email about account linking
-          try {
-            console.log("Sending account linking notification to:", user.email);
-            // Add your email sending logic here
-          } catch (emailError) {
-            console.warn("Failed to send linking notification:", emailError);
-          }
-        } else if (!hasPassword && !hasGoogle) {
-          // User exists but has no auth method (shouldn't happen, but handle it)
-          console.log("User exists with no auth method - linking Google");
-          user.googleId = googleUser.id;
-          user.googleAccessToken = tokens.access_token;
-          if (tokens.refresh_token) {
-            user.googleRefreshToken = tokens.refresh_token;
-          }
-          user.verified = true;
-
-          // Update user info from Google
-          if (googleUser.given_name) user.firstName = googleUser.given_name;
-          if (googleUser.family_name) user.lastName = googleUser.family_name;
-          if (googleUser.picture) user.avatar = googleUser.picture;
-
-          await user.save();
-          console.log(
-            "Google account linked to user with no auth method:",
-            user.email
-          );
-        } else {
-          // Should not reach here, but handle gracefully
-          console.log("Unexpected user state - proceeding with login");
-        }
-      } else {
-        // Completely new user - create with Google
-        console.log("Creating new user with Google");
-        const userId = await generateUserId();
-
-        user = new User({
-          user_id: userId,
-          email: googleEmail, // Use normalized lowercase email
-          firstName:
-            googleUser.given_name || googleUser.name?.split(" ")[0] || "",
-          lastName:
-            googleUser.family_name ||
-            googleUser.name?.split(" ").slice(1).join(" ") ||
-            "",
-          verified: true,
-          googleId: googleUser.id,
-          googleAccessToken: tokens.access_token,
-          googleRefreshToken: tokens.refresh_token || undefined,
-          avatar: googleUser.picture,
-          role: "user",
-        });
-
-        await user.save();
-        console.log("New Google user created:", user.email);
-
-        // Send welcome email for new Google users
-        try {
-          console.log("Sending welcome email to new Google user:", user.email);
-          // Add your welcome email sending logic here
-        } catch (emailError) {
-          console.warn("Failed to send welcome email:", emailError);
-        }
-      }
+      await user.save();
+      console.log("✅ New Google user created:", {
+        email: user.email,
+        user_id: user.user_id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
     }
 
-    // Create session
+    // Create session using database user's information
     const session = await manageSession(
       user._id.toString(),
       user.email,
@@ -294,6 +208,13 @@ export async function handleGoogleCallback(code: string, state?: string) {
       user.contactNo || "",
       user.avatar || ""
     );
+
+    console.log("✅ Session created for:", {
+      email: user.email,
+      user_id: user.user_id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    });
 
     return {
       success: true,
@@ -305,11 +226,12 @@ export async function handleGoogleCallback(code: string, state?: string) {
         lastName: user.lastName,
         role: user.role,
         avatar: user.avatar,
+        contactNo: user.contactNo,
       },
       redirectUri: state || "/user/userdashboard",
     };
   } catch (error: any) {
-    console.error("Google callback error:", error);
+    console.error("❌ Google callback error:", error);
     return {
       success: false,
       error: error.message || "Authentication failed",

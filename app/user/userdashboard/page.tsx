@@ -32,6 +32,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Navigation,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores";
@@ -124,7 +125,7 @@ const WMO_WEATHER_CODES: {
 const CACHE_DURATION = 10 * 60 * 1000;
 const CACHE_KEY = "weather-dashboard-cache";
 
-// Interface for completed project (matches the one in action/project.ts)
+// Interface for completed project
 interface CompletedProject {
   project_id: string;
   name: string;
@@ -137,7 +138,7 @@ interface CompletedProject {
   startDate: string | Date;
   endDate: string | Date;
   statusUpdatedAt?: string | Date;
-  location?: string; // Now just a string, not an object
+  location?: string;
 }
 
 export default function UserDashboard() {
@@ -164,6 +165,10 @@ export default function UserDashboard() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGeolocationSupported, setIsGeolocationSupported] = useState(true);
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false);
+  const [hasLocationPermission, setHasLocationPermission] = useState<
+    boolean | null
+  >(null);
 
   const bannerPlugin = Autoplay({
     delay: 3000,
@@ -173,7 +178,37 @@ export default function UserDashboard() {
 
   // Check if geolocation is supported
   useEffect(() => {
-    setIsGeolocationSupported("geolocation" in navigator);
+    const isSupported = "geolocation" in navigator;
+    setIsGeolocationSupported(isSupported);
+
+    // Check if we already have permission or have requested it
+    if (isSupported) {
+      checkLocationPermission();
+    }
+  }, []);
+
+  // Check if we have location permission
+  const checkLocationPermission = useCallback(async () => {
+    try {
+      // Use the Permissions API if available
+      if ("permissions" in navigator) {
+        const permissionStatus = await navigator.permissions.query({
+          name: "geolocation",
+        });
+        setHasLocationPermission(permissionStatus.state === "granted");
+
+        permissionStatus.onchange = () => {
+          setHasLocationPermission(permissionStatus.state === "granted");
+          if (permissionStatus.state === "granted") {
+            getWeatherData();
+          }
+        };
+      }
+    } catch (error) {
+      console.log(
+        "Permissions API not available, will request location when needed"
+      );
+    }
   }, []);
 
   // Cache management functions
@@ -226,8 +261,8 @@ export default function UserDashboard() {
 
       // Check if cache is for current location
       if (
-        location.lat !== currentLocation.lat ||
-        location.lng !== currentLocation.lng
+        Math.abs(location.lat - currentLocation.lat) > 0.1 ||
+        Math.abs(location.lng - currentLocation.lng) > 0.1
       ) {
         return false;
       }
@@ -284,9 +319,15 @@ export default function UserDashboard() {
 
   useEffect(() => {
     fetchUserInquiries();
-    getWeatherData();
     fetchCompletedProjects();
   }, []);
+
+  // Initial weather load - only if we have permission
+  useEffect(() => {
+    if (hasLocationPermission === true || hasLocationPermission === null) {
+      getWeatherData();
+    }
+  }, [hasLocationPermission]);
 
   const getWeatherData = useCallback(async () => {
     setWeatherLoading(true);
@@ -298,18 +339,29 @@ export default function UserDashboard() {
         throw new Error("Geolocation is not supported by your browser");
       }
 
+      console.log("🌍 Requesting location permission...");
+      setIsRequestingLocation(true);
+
       const position = await new Promise<GeolocationPosition>(
         (resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
-            resolve,
+            (pos) => {
+              console.log("✅ Location permission granted");
+              setHasLocationPermission(true);
+              setIsRequestingLocation(false);
+              resolve(pos);
+            },
             (error) => {
-              console.error("Geolocation error:", error);
+              console.error("❌ Location permission denied:", error);
+              setHasLocationPermission(false);
+              setIsRequestingLocation(false);
+
               let errorMessage = "Unable to get your location";
 
               switch (error.code) {
                 case error.PERMISSION_DENIED:
                   errorMessage =
-                    "Location access denied. Please enable location services.";
+                    "Location access denied. Please enable location services in your browser settings.";
                   break;
                 case error.POSITION_UNAVAILABLE:
                   errorMessage = "Location information is unavailable.";
@@ -323,8 +375,8 @@ export default function UserDashboard() {
               reject(new Error(errorMessage));
             },
             {
-              timeout: 10000,
-              maximumAge: 60 * 60 * 1000,
+              timeout: 15000,
+              maximumAge: 5 * 60 * 1000, // 5 minutes
               enableHighAccuracy: true,
             }
           );
@@ -332,7 +384,7 @@ export default function UserDashboard() {
       );
 
       const { latitude, longitude } = position.coords;
-      console.log("Got location:", latitude, longitude);
+      console.log("📍 Got location:", latitude, longitude);
       setCurrentLocation({ lat: latitude, lng: longitude });
 
       // Check cache first
@@ -342,7 +394,7 @@ export default function UserDashboard() {
         isCacheValid(cache.current, cache.location) &&
         isCacheValid(cache.forecast, cache.location)
       ) {
-        console.log("Using cached weather data");
+        console.log("📦 Using cached weather data");
         setWeather(cache.current!.data);
         setForecast(cache.forecast!.data);
         setWeatherLoading(false);
@@ -356,39 +408,44 @@ export default function UserDashboard() {
       ]);
     } catch (error) {
       console.error("Error fetching weather:", error);
+      setWeatherLoading(false);
 
-      // Use a default location if geolocation fails (Manila coordinates)
-      const defaultLat = 14.5995;
-      const defaultLng = 120.9842;
+      // Only use fallback if location was denied
+      if (!hasLocationPermission) {
+        // Use a default location if geolocation fails (Manila coordinates)
+        const defaultLat = 14.5995;
+        const defaultLng = 120.9842;
 
-      setCurrentLocation({ lat: defaultLat, lng: defaultLng });
-      setWeather({
-        condition: "cloudy",
-        temperature: 28,
-        description: "Partly cloudy",
-        city: "Manila",
-        barangay: "Ermita",
-        feelsLike: 30,
-      });
+        setCurrentLocation({ lat: defaultLat, lng: defaultLng });
+        setWeather({
+          condition: "cloudy",
+          temperature: 28,
+          description: "Partly cloudy",
+          city: "Manila",
+          barangay: "Ermita",
+          feelsLike: 30,
+        });
 
-      // Try to get weather for default location
-      try {
-        await Promise.all([
-          getCurrentWeather(defaultLat, defaultLng),
-          getForecastData(defaultLat, defaultLng),
-        ]);
-      } catch (fallbackError) {
-        console.error("Fallback weather failed:", fallbackError);
-        generateFallbackForecast();
+        // Try to get weather for default location
+        try {
+          await Promise.all([
+            getCurrentWeather(defaultLat, defaultLng),
+            getForecastData(defaultLat, defaultLng),
+          ]);
+        } catch (fallbackError) {
+          console.error("Fallback weather failed:", fallbackError);
+          generateFallbackForecast();
+        }
       }
     } finally {
       setWeatherLoading(false);
     }
-  }, [getCache, isCacheValid, isGeolocationSupported]);
+  }, [getCache, isCacheValid, isGeolocationSupported, hasLocationPermission]);
 
   const getCurrentWeather = useCallback(
     async (lat: number, lng: number) => {
       try {
+        console.log("🌤️ Fetching weather for location:", lat, lng);
         const response = await fetch(`/api/weather?lat=${lat}&lng=${lng}`);
 
         if (response.ok) {
@@ -425,6 +482,7 @@ export default function UserDashboard() {
   const getForecastData = useCallback(
     async (lat: number, lng: number) => {
       try {
+        console.log("📅 Fetching forecast for location:", lat, lng);
         const forecastResponse = await fetch(
           `/api/weather?lat=${lat}&lng=${lng}&type=forecast`
         );
@@ -486,7 +544,6 @@ export default function UserDashboard() {
     }
   }, []);
 
-  // Enhanced function to handle both Open-Meteo and OpenWeatherMap data structures
   const processForecastData = useCallback((data: any): ForecastDay[] => {
     console.log("Processing forecast data structure:", data);
 
@@ -515,7 +572,6 @@ export default function UserDashboard() {
     return generateFallbackForecastData();
   }, []);
 
-  // Fixed Open-Meteo data processing - always returns next 5 days starting from tomorrow
   const processOpenMeteoData = useCallback((data: any): ForecastDay[] => {
     const forecasts: ForecastDay[] = [];
     const today = new Date().toISOString().split("T")[0]; // Current date in YYYY-MM-DD
@@ -583,7 +639,6 @@ export default function UserDashboard() {
     return forecasts;
   }, []);
 
-  // Fixed OpenWeatherMap data processing
   const processOpenWeatherMapData = useCallback((data: any): ForecastDay[] => {
     const dailyData: { [key: string]: any[] } = {};
     const forecasts: ForecastDay[] = [];
@@ -641,7 +696,6 @@ export default function UserDashboard() {
     return forecasts;
   }, []);
 
-  // Fixed transformed data processing
   const processTransformedData = useCallback((data: any): ForecastDay[] => {
     const forecasts: ForecastDay[] = [];
     const today = new Date().toISOString().split("T")[0];
@@ -717,14 +771,13 @@ export default function UserDashboard() {
     setForecast(forecastData);
   }, []);
 
-  // Fixed fallback forecast generation - always generates next 5 days from tomorrow
   const generateFallbackForecastData = useCallback((): ForecastDay[] => {
     const conditions = ["sunny", "cloudy", "rainy", "partly cloudy"];
     const forecastData: ForecastDay[] = [];
 
     // Always generate exactly 5 days starting from tomorrow
     for (let i = 1; i <= 6; i++) {
-      const date = addDays(new Date(), i); // Use date-fns for proper date handling
+      const date = addDays(new Date(), i);
       const randomCondition =
         conditions[Math.floor(Math.random() * conditions.length)];
 
@@ -890,28 +943,30 @@ export default function UserDashboard() {
     }
   }, []);
 
-  // Don't clear cache when component unmounts - cache persists
-  useEffect(() => {
-    return () => {
-      // Cache persists between component mounts/unmounts
-      // No cleanup needed - cache remains in localStorage
-    };
-  }, []);
+  // Manual location request function
+  const requestLocationManually = useCallback(() => {
+    console.log("🔄 Manually requesting location...");
+    setLocationError(null);
+    setWeatherLoading(true);
+    getWeatherData();
+  }, [getWeatherData]);
+
+  // Determine if we should show the location permission request
+  const showLocationRequest = useMemo(() => {
+    return (
+      hasLocationPermission === false ||
+      (locationError && locationError.includes("Location access denied"))
+    );
+  }, [hasLocationPermission, locationError]);
 
   return (
     <div className="min-h-screen">
       <div className="container mx-auto px-4 md:px-6 lg:px-10 py-6">
-        {" "}
-        {/* Reduced padding on mobile */}
         {/* Main Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6">
-          {" "}
-          {/* Reduced gap on mobile */}
-          {/* Left Column: Main Grid (Carousel, Weather, Completed Projects) - Takes 2/3 on desktop, full width on mobile */}
+          {/* Left Column: Main Grid (Carousel, Weather, Completed Projects) */}
           <div className="lg:col-span-2 space-y-4 md:space-y-6">
-            {" "}
-            {/* Reduced spacing on mobile */}
-            {/* Carousel Section - Removed Card wrapper */}
+            {/* Carousel Section */}
             <Carousel
               className="w-full"
               plugins={[bannerPlugin]}
@@ -944,8 +999,6 @@ export default function UserDashboard() {
 
                         {/* Content */}
                         <div className="relative z-10 h-full flex items-center p-4 md:p-6">
-                          {" "}
-                          {/* Reduced padding on mobile */}
                           <div className="max-w-2xl">
                             {/* Badge */}
                             <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium mb-3">
@@ -974,17 +1027,25 @@ export default function UserDashboard() {
                 })}
               </CarouselContent>
             </Carousel>
-            {/* Weather Section */}
+
+            {/* Weather Section with Location Permission Handling */}
             <Card className="bg-white rounded-sm border shadow-xs">
               <CardContent className="p-4 md:p-6">
-                {" "}
-                {/* Reduced padding on mobile */}
                 {/* Weather Header with Refresh Icon */}
                 <div className="flex justify-between items-start mb-4">
                   {/* Location at the top */}
                   <div>
-                    {weatherLoading ? (
+                    {weatherLoading || isRequestingLocation ? (
                       <div className="animate-pulse bg-gray-200 rounded h-5 w-32"></div>
+                    ) : showLocationRequest ? (
+                      <div>
+                        <p className="text-lg md:text-2xl font-semibold text-gray-900 tracking-tight">
+                          Location Access Required
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Allow location access to get local weather
+                        </p>
+                      </div>
                     ) : (
                       <>
                         <p className="text-lg md:text-2xl font-semibold text-gray-900 tracking-tight">
@@ -1003,97 +1064,140 @@ export default function UserDashboard() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={getWeatherData}
-                    disabled={weatherLoading}
+                    onClick={requestLocationManually}
+                    disabled={weatherLoading || isRequestingLocation}
                     className="h-8 w-8"
                   >
                     <RefreshCcw
-                      className={`h-4 w-4 ${weatherLoading ? "animate-spin" : ""}`}
+                      className={`h-4 w-4 ${
+                        weatherLoading || isRequestingLocation
+                          ? "animate-spin"
+                          : ""
+                      }`}
                     />
                   </Button>
                 </div>
-                {/* Weather Content Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Left Column - Today's Weather */}
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-500">Today is</p>
-                    {weatherLoading ? (
-                      <div className="animate-pulse bg-gray-200 rounded h-7 w-24"></div>
-                    ) : (
-                      <h2 className="text-2xl md:text-3xl font-bold text-orange-500 tracking-tight">
-                        {capitalizeFirst(weather.condition)}
-                      </h2>
-                    )}
 
-                    <div className="space-y-1">
-                      {weatherLoading ? (
-                        <>
-                          <div className="animate-pulse bg-gray-200 rounded h-8 w-16"></div>
-                          <div className="animate-pulse bg-gray-200 rounded h-4 w-20"></div>
-                        </>
-                      ) : (
-                        <>
-                          <div
-                            className={`text-xl md:text-2xl font-bold ${getTemperatureColor(weather.temperature)}`}
+                {/* Location Permission Request */}
+                {showLocationRequest && !weatherLoading && (
+                  <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <Navigation className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h3 className="font-medium text-yellow-800">
+                          Location Access Needed
+                        </h3>
+                        <p className="text-sm text-yellow-700 mt-1">
+                          To provide accurate local weather, please allow
+                          location access when prompted by your browser.
+                        </p>
+                        <div className="mt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-yellow-600 text-yellow-700 hover:bg-yellow-100"
+                            onClick={requestLocationManually}
+                            disabled={isRequestingLocation}
                           >
-                            {weather.temperature}°C
-                          </div>
-                          <p className="text-xs text-gray-600">
-                            Feels like{" "}
-                            {getTemperatureFeeling(
-                              weather.feelsLike || weather.temperature
+                            {isRequestingLocation ? (
+                              <>
+                                <RefreshCcw className="h-3 w-3 animate-spin mr-2" />
+                                Requesting...
+                              </>
+                            ) : (
+                              <>
+                                <Navigation className="h-3 w-3 mr-2" />
+                                Allow Location Access
+                              </>
                             )}
-                          </p>
-                        </>
-                      )}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  {/* Right Column - 5 Day Forecast */}
-                  <div className="md:col-span-2">
-                    <p className="text-sm font-medium text-gray-600 mb-2 tracking-[1.2]">
-                      5-Day Forecast
-                    </p>
-                    <div className="grid grid-cols-5 gap-1 md:gap-2">
-                      {" "}
-                      {/* Reduced gap on mobile */}
-                      {weatherLoading
-                        ? Array.from({ length: 5 }).map((_, index) => (
-                            <div key={index} className="text-center">
-                              <div className="animate-pulse bg-gray-200 rounded h-4 w-6 md:w-8 mx-auto mb-1"></div>
-                              <div className="animate-pulse bg-gray-200 rounded h-3 w-4 md:w-6 mx-auto mb-1"></div>
-                              <div className="animate-pulse bg-gray-200 rounded h-4 w-8 md:w-10 mx-auto"></div>
-                            </div>
-                          ))
-                        : forecast.slice(0, 5).map((day, index) => (
+                {/* Weather Content Grid */}
+                {!showLocationRequest && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Left Column - Today's Weather */}
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-500">Today is</p>
+                      {weatherLoading || isRequestingLocation ? (
+                        <div className="animate-pulse bg-gray-200 rounded h-7 w-24"></div>
+                      ) : (
+                        <h2 className="text-2xl md:text-3xl font-bold text-orange-500 tracking-tight">
+                          {capitalizeFirst(weather.condition)}
+                        </h2>
+                      )}
+
+                      <div className="space-y-1">
+                        {weatherLoading || isRequestingLocation ? (
+                          <>
+                            <div className="animate-pulse bg-gray-200 rounded h-8 w-16"></div>
+                            <div className="animate-pulse bg-gray-200 rounded h-4 w-20"></div>
+                          </>
+                        ) : (
+                          <>
                             <div
-                              key={index}
-                              className="text-center py-2 md:py-4 border border-none shadow-md rounded-sm"
+                              className={`text-xl md:text-2xl font-bold ${getTemperatureColor(
+                                weather.temperature
+                              )}`}
                             >
-                              <p className="text-xs md:text-md font-medium tracking-[1.1] text-gray-600 mb-1">
-                                {format(new Date(day.date), "EEE")}
-                              </p>
-                              <p className="text-lg md:text-xl text-orange-500 font-bold mb-1 tracking-[1.1]">
-                                {format(new Date(day.date), "d")}
-                              </p>
-                              <p className="text-xs font-medium text-gray-600 capitalize truncate px-1">
-                                {day.condition}
-                              </p>
+                              {weather.temperature}°C
                             </div>
-                          ))}
+                            <p className="text-xs text-gray-600">
+                              Feels like{" "}
+                              {getTemperatureFeeling(
+                                weather.feelsLike || weather.temperature
+                              )}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Column - 5 Day Forecast */}
+                    <div className="md:col-span-2">
+                      <p className="text-sm font-medium text-gray-600 mb-2 tracking-[1.2]">
+                        5-Day Forecast
+                      </p>
+                      <div className="grid grid-cols-5 gap-1 md:gap-2">
+                        {weatherLoading || isRequestingLocation
+                          ? Array.from({ length: 5 }).map((_, index) => (
+                              <div key={index} className="text-center">
+                                <div className="animate-pulse bg-gray-200 rounded h-4 w-6 md:w-8 mx-auto mb-1"></div>
+                                <div className="animate-pulse bg-gray-200 rounded h-3 w-4 md:w-6 mx-auto mb-1"></div>
+                                <div className="animate-pulse bg-gray-200 rounded h-4 w-8 md:w-10 mx-auto"></div>
+                              </div>
+                            ))
+                          : forecast.slice(0, 5).map((day, index) => (
+                              <div
+                                key={index}
+                                className="text-center py-2 md:py-4 border border-none shadow-md rounded-sm"
+                              >
+                                <p className="text-xs md:text-md font-medium tracking-[1.1] text-gray-600 mb-1">
+                                  {format(new Date(day.date), "EEE")}
+                                </p>
+                                <p className="text-lg md:text-xl text-orange-500 font-bold mb-1 tracking-[1.1]">
+                                  {format(new Date(day.date), "d")}
+                                </p>
+                                <p className="text-xs font-medium text-gray-600 capitalize truncate px-1">
+                                  {day.condition}
+                                </p>
+                              </div>
+                            ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
-            {/* Completed Projects Section - MODIFIED */}
+
+            {/* Completed Projects Section */}
             <div className="space-y-6 md:space-y-8">
-              {" "}
-              {/* Reduced spacing on mobile */}
               {/* Section Header */}
               <div className="flex items-center justify-between py-6 md:py-9 mt-6 md:mt-10">
-                {" "}
-                {/* Reduced padding on mobile */}
                 <div>
                   <h2 className="text-xl md:text-2xl font-bold text-gray-900">
                     Recently Completed Projects
@@ -1114,8 +1218,6 @@ export default function UserDashboard() {
               </div>
               {projectsLoading ? (
                 <div className="space-y-6 md:space-y-8">
-                  {" "}
-                  {/* Reduced spacing on mobile */}
                   {Array.from({ length: 2 }).map((_, index) => (
                     <div
                       key={index}
@@ -1130,8 +1232,6 @@ export default function UserDashboard() {
                 </div>
               ) : completedProjects.length > 0 ? (
                 <div className="space-y-6 md:space-y-10">
-                  {" "}
-                  {/* Reduced spacing on mobile */}
                   {completedProjects.map((project) => {
                     const mainImage =
                       project.projectImages?.[0]?.url ||
@@ -1147,8 +1247,6 @@ export default function UserDashboard() {
                       >
                         {/* Project Header with Start Date */}
                         <div className="p-4 md:p-6 pb-3 md:pb-4 bg-white">
-                          {" "}
-                          {/* Reduced padding on mobile */}
                           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3 md:gap-0">
                             {/* Left side: Project info */}
                             <div className="flex-1">
@@ -1271,20 +1369,17 @@ export default function UserDashboard() {
               )}
             </div>
           </div>
-          {/* Right Column: Calendar, Appointments, etc. - Takes 1/3 on desktop, hidden on mobile */}
+
+          {/* Right Column: Calendar, Appointments, etc. */}
           <div className="hidden lg:block space-y-4 md:space-y-6">
-            {" "}
-            {/* Added hidden lg:block */}
             {/* Calendar Card */}
             <Card className="bg-white rounded-sm border shadow-sm sticky top-[90px]">
               <CardContent className="p-4 md:p-6">
-                {" "}
-                {/* Reduced padding on mobile */}
                 <div className="text-center">
                   {/* Current Date */}
                   <div className="mb-4 md:mb-6">
                     <p className="text-xs md:text-sm text-gray-500">Today</p>
-                    {weatherLoading ? (
+                    {weatherLoading || isRequestingLocation ? (
                       <div className="animate-pulse bg-gray-200 rounded h-6 w-32 mx-auto"></div>
                     ) : (
                       <p className="text-lg md:text-xl font-bold text-gray-900">
@@ -1295,7 +1390,7 @@ export default function UserDashboard() {
 
                   {/* Appointments Status */}
                   <div className="mb-4 md:mb-6">
-                    {weatherLoading ? (
+                    {weatherLoading || isRequestingLocation ? (
                       <div className="animate-pulse bg-gray-200 rounded h-6 w-24 mx-auto mb-2"></div>
                     ) : (
                       <div className="space-y-3">
@@ -1316,7 +1411,9 @@ export default function UserDashboard() {
 
                   {/* Weather Advice */}
                   <div className="pt-4 md:pt-6 border-t border-gray-200">
-                    {weatherLoading ? (
+                    {weatherLoading ||
+                    isRequestingLocation ||
+                    showLocationRequest ? (
                       <div className="animate-pulse bg-gray-200 rounded h-4 w-32 mx-auto"></div>
                     ) : (
                       <div className="flex items-center justify-center gap-2">
@@ -1329,11 +1426,10 @@ export default function UserDashboard() {
                 </div>
               </CardContent>
             </Card>
-            {/* Appointments Section - MOVED HERE */}
+
+            {/* Appointments Section */}
             <Card className="bg-white rounded-sm border shadow-sm sticky top-[calc(90px+20rem)]">
               <CardContent className="p-4 md:p-6">
-                {" "}
-                {/* Reduced padding on mobile */}
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -1360,8 +1456,6 @@ export default function UserDashboard() {
                         className="border border-black"
                       >
                         <CardContent className="p-3 md:p-4">
-                          {" "}
-                          {/* Reduced padding on mobile */}
                           <div className="flex items-center justify-between">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-3 mb-2">
@@ -1380,8 +1474,6 @@ export default function UserDashboard() {
                               </div>
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                                {" "}
-                                {/* Adjusted for right column */}
                                 <div className="flex items-center gap-2">
                                   <Calendar className="h-3 w-3 text-black" />
                                   <span className="font-medium text-gray-700">
@@ -1414,8 +1506,6 @@ export default function UserDashboard() {
                   </div>
                 ) : (
                   <div className="text-center py-6 md:py-8">
-                    {" "}
-                    {/* Reduced padding on mobile */}
                     <Calendar className="h-10 w-10 md:h-12 md:w-12 text-gray-400 mx-auto mb-3" />
                     <h3 className="text-base md:text-lg font-semibold text-gray-600 mb-1">
                       No Appointments Today
