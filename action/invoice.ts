@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import dbConnect from "@/lib/db";
 import Transaction, { ITransaction } from "@/models/Transactions";
 import Project from "@/models/Project";
+import User from "@/models/User";
 
 interface SendInvoiceParams {
   transactionId: string;
@@ -221,6 +222,137 @@ function generateInvoiceEmail(data: InvoiceEmailData): string {
   });
 }
 
+// Function to generate payment confirmation email
+function generatePaymentConfirmationEmail(data: {
+  clientName: string;
+  projectName: string;
+  transactionId: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  referenceNumber?: string;
+  notes?: string;
+}): string {
+  const {
+    clientName,
+    projectName,
+    transactionId,
+    amount,
+    paymentDate,
+    paymentMethod,
+    referenceNumber,
+    notes,
+  } = data;
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return generateEmailTemplate({
+    title: `Payment Confirmation - ${projectName}`,
+    message: `Dear ${clientName},<br><br>This email confirms that your payment has been successfully processed and recorded. Thank you for your payment!`,
+    details: `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Confirmation Number</div>
+    <div class="detail-value">PAY-${transactionId.slice(-8).toUpperCase()}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project Name</div>
+    <div class="detail-value">${projectName}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Transaction ID</div>
+    <div class="detail-value">${transactionId}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount Paid</div>
+    <div class="detail-value"><strong>${formatCurrency(amount)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Date</div>
+    <div class="detail-value">${formatDate(paymentDate)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Payment Method</div>
+    <div class="detail-value">${paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}</div>
+  </div>
+  ${
+    referenceNumber
+      ? `
+  <div class="detail-row">
+    <div class="detail-label">Reference Number</div>
+    <div class="detail-value">${referenceNumber}</div>
+  </div>
+  `
+      : ""
+  }
+  ${
+    notes
+      ? `
+  <div class="detail-row">
+    <div class="detail-label">Notes</div>
+    <div class="detail-value">${notes}</div>
+  </div>
+  `
+      : ""
+  }
+  <div class="detail-row">
+    <div class="detail-label">Status</div>
+    <div class="detail-value"><span style="color: #10B981; font-weight: bold;">✓ PAID</span></div>
+  </div>
+</div>
+    `,
+    nextSteps: `
+<strong>Next Steps:</strong><br>
+1. Your payment has been recorded in our system<br>
+2. You can view all your transactions in your account dashboard<br>
+3. Contact our support team if you have any questions about this payment
+    `,
+    showButton: true,
+    buttonText: "View Transaction",
+    buttonUrl: `${process.env.NEXTAUTH_URL}/user/transactions`,
+  });
+}
+
+// Helper function to get user details
+async function getUserDetails(userId: string) {
+  try {
+    const user = await User.findOne({ user_id: userId });
+    if (!user) {
+      console.warn(`User not found for userId: ${userId}`);
+      return null;
+    }
+
+    return {
+      email: user.email,
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      fullName:
+        `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+        "Valued Client",
+    };
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    return null;
+  }
+}
+
 // Function to mark invoice as paid (to be called when payment is completed)
 export async function markInvoiceAsPaid(
   transactionId: string,
@@ -390,7 +522,7 @@ export async function updateTransactionPayment({
       };
     }
 
-    // Update project's payment progress
+    // Update project payment progress
     await updateProjectPaymentProgress(updatedTransaction.project_id);
 
     // Get project details for notifications
@@ -398,11 +530,55 @@ export async function updateTransactionPayment({
       project_id: updatedTransaction.project_id,
     });
 
-    // Create notification for admin
+    if (!project) {
+      return {
+        success: false,
+        error: "Project not found",
+      };
+    }
+
+    // Get user details for email and notifications
+    const userDetails = await getUserDetails(updatedTransaction.user_id);
+
+    // ========== SEND EMAIL NOTIFICATION TO CLIENT ==========
+    if (userDetails?.email && status === "paid") {
+      try {
+        const paymentConfirmationHtml = generatePaymentConfirmationEmail({
+          clientName: userDetails.fullName,
+          projectName: project.name,
+          transactionId: updatedTransaction.transaction_id,
+          amount: actualPaidAmount,
+          paymentDate: paidDate.toISOString(),
+          paymentMethod,
+          referenceNumber,
+          notes,
+        });
+
+        await sendEmail({
+          to: userDetails.email,
+          subject: `Payment Confirmation - ${project.name}`,
+          html: paymentConfirmationHtml,
+        });
+
+        console.log(
+          `✅ Payment confirmation email sent to ${userDetails.email}`
+        );
+      } catch (emailError) {
+        console.error(
+          "❌ Error sending payment confirmation email:",
+          emailError
+        );
+        // Don't fail the whole operation if email fails
+      }
+    }
+
+    // ========== CREATE IN-APP NOTIFICATIONS ==========
+
+    // 1. Create ADMIN notification
     const adminNotification = await notificationService.createNotification({
       targetUserRoles: ["admin"],
       feature: "invoices",
-      type: "payment_received", // Changed to valid type
+      type: "payment_received",
       title: "Payment Recorded",
       message: `Payment of ₱${actualPaidAmount.toLocaleString()} has been recorded for transaction ${transactionId}.`,
       channels: ["in_app"],
@@ -417,21 +593,56 @@ export async function updateTransactionPayment({
         referenceNumber,
         notes,
         recordedAt: new Date().toISOString(),
-        projectName: project?.name || "Unknown Project",
-        clientName: "Client", // Your model doesn't store client name directly
+        projectName: project.name,
+        clientName: userDetails?.fullName || "Client",
+        clientEmail: userDetails?.email || "No email",
         projectId: updatedTransaction.project_id,
       },
       relatedId: transactionId,
     });
 
-    // Create notification for client if we have user info
-    // Note: Your model uses userId which might be an ID, not email
-    // You might need to fetch user details separately
+    // 2. Create USER notification if user details are available
+    if (userDetails) {
+      try {
+        // Create project data for notification
+        const projectData = {
+          project_id: updatedTransaction.project_id,
+          name: project.name,
+        };
 
-    // Revalidate paths to refresh data
+        // Create project notification for user
+        await createProjectNotification(
+          projectData,
+          userDetails,
+          "payment_received",
+          "Payment Recorded",
+          `Your payment of ₱${actualPaidAmount.toLocaleString()} has been recorded for project "${project.name}". Transaction ID: ${updatedTransaction.transaction_id}`,
+          {
+            transactionId: updatedTransaction.transaction_id,
+            amount: actualPaidAmount,
+            paidDate: paidDate.toISOString(),
+            paymentType: updatedTransaction.type,
+            paymentMethod,
+            referenceNumber,
+            notes,
+            discount: discount > 0 ? discount : undefined,
+          }
+        );
+
+        console.log(`✅ User notification created for ${userDetails.email}`);
+      } catch (notificationError) {
+        console.error(
+          "❌ Error creating user notification:",
+          notificationError
+        );
+      }
+    }
+
+    // ========== REVALIDATE PATHS ==========
     revalidatePath("/admin/transactions");
     revalidatePath(`/admin/projects/[id]`, "page");
     revalidatePath("/user/projects");
+    revalidatePath(`/user/transactions`);
 
     return {
       success: true,
@@ -447,6 +658,7 @@ export async function updateTransactionPayment({
         paymentMethod: updatedTransaction.payment_method,
         referenceNumber: updatedTransaction.reference_number,
         notificationId: adminNotification?._id?.toString(),
+        emailSent: !!userDetails?.email,
       },
     };
   } catch (error) {
@@ -980,7 +1192,7 @@ export async function recordManualPayment({
     await createProjectNotification(
       projectData,
       userDetails,
-      "invoice_paid", // Using invoice_paid as the notification type
+      "payment_received", // Using invoice_paid as the notification type
       "Payment Received",
       `Manual payment of ₱${amount.toLocaleString()} has been recorded for ${project.name}.`,
       {

@@ -1,4 +1,4 @@
-// actions/inquiries.ts - UPDATED TO ALIGN WITH NOTIFICATION-SERVICES
+// actions/inquiries.ts - UPDATED TO CREATE PROPER NOTIFICATIONS
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -9,6 +9,7 @@ import User from "@/models/User";
 import DesignModel from "@/models/Design";
 import { generateEmailTemplate, EmailTemplates } from "@/lib/email-templates";
 import { notificationService } from "@/lib/notification-services";
+import { createAppointmentNotification } from "@/lib/notification-services"; // Add this import
 
 interface InquirySubmitResponse {
   success: boolean;
@@ -113,7 +114,7 @@ export async function submitInquiry(
           role: user.role,
         });
         // Check if user exists and has a valid role (not just "user" role)
-        if (user.role && user.role !== "guest") {
+        if (user.role && user.role !== "admin") {
           isGuest = false;
           userId = user_id;
           console.log(
@@ -141,7 +142,7 @@ export async function submitInquiry(
           role: user.role,
         });
         // Check if user exists and has a valid role (not just "user" role)
-        if (user.role && user.role !== "guest") {
+        if (user.role && user.role !== "admin") {
           isGuest = false;
           userId = user.user_id;
           console.log(
@@ -151,7 +152,7 @@ export async function submitInquiry(
             user.role
           );
         } else {
-          console.log("⚠️ User found but has guest role:", user.role);
+          console.log("⚠️ User found but has admin role:", user.role);
         }
       } else {
         console.log("❌ No user found with email:", email);
@@ -230,61 +231,104 @@ export async function submitInquiry(
       userRole: user?.role || "guest",
     };
 
-    // CREATE NOTIFICATION USING CENTRALIZED NOTIFICATION SERVICE
+    // CREATE NOTIFICATION USING HELPER FUNCTION (UPDATED)
     try {
-      console.log("📝 Creating notification using centralized service...");
+      console.log(
+        "📝 Creating appointment notification using helper function..."
+      );
 
-      // Create notification for admin about new inquiry
-      const notificationParams = {
-        targetUserRoles: ["admin"],
-        feature: "appointments",
-        type: "inquiry_submitted",
-        title: "New Appointment Request Received",
-        message: `${name} has submitted a new appointment request for ${design.name}`,
-        channels: ["in_app", "email"],
-        appointmentMetadata: {
-          inquiryId: inquiry._id.toString(),
-          clientName: name,
-          clientEmail: email,
-          designName: design.name,
-          preferredDate: preferredDate,
-          preferredTime: preferredTime,
-          meetingType: meetingType,
-          originalDate: preferredDate,
-          originalTime: preferredTime,
-        },
-        relatedId: inquiry._id.toString(),
-        actionUrl: `/admin/appointments?inquiry=${inquiry._id.toString()}`,
-        actionLabel: "Review Appointment",
-        metadata: {
-          inquiryId: inquiry._id.toString(),
-          clientName: name,
-          clientEmail: email,
-          designName: design.name,
-          userType: isGuest ? "guest" : "registered",
-          userRole: user?.role || "guest",
-        },
+      // Create appointment data for the notification
+      const appointmentData = {
+        inquiryId: inquiry._id.toString(),
+        appointmentId: inquiry._id.toString(),
+        userId: userId, // Will be undefined for guests
+        userEmail: email,
+        userName: name,
+        userFirstName: firstName,
+        userLastName: lastName,
+        designName: design.name,
+        originalDate: preferredDate,
+        originalTime: preferredTime,
+        meetingType: meetingType,
+        userType: isGuest ? "guest" : "registered",
       };
 
-      const notificationResult =
-        await notificationService.createNotification(notificationParams);
+      // Use the helper function which creates BOTH admin and user notifications
+      const notificationSuccess = await createAppointmentNotification(
+        appointmentData,
+        "inquiry_submitted",
+        "New Appointment Request",
+        `${name} has submitted a new appointment request for ${design.name}`,
+        {
+          phone: phone,
+          message: message,
+          userType: isGuest ? "guest" : "registered",
+        }
+      );
 
-      if (notificationResult && notificationResult._id) {
-        console.log("✅ Notification created successfully:", {
-          notificationId: notificationResult._id,
-          type: "inquiry_submitted",
-          target: "admin",
-        });
+      if (notificationSuccess) {
+        console.log("✅ Appointment notification created successfully");
       } else {
-        console.error("❌ Notification creation failed");
+        console.error("❌ Appointment notification creation failed");
         // Don't fail the entire inquiry submission if notification fails
+        // Try direct notification service as fallback
+        try {
+          console.log("🔄 Trying direct notification service as fallback...");
+
+          // Create admin notification (targetUserRoles: ["admin"])
+          const adminNotification =
+            await notificationService.createNotification({
+              targetUserRoles: ["admin"],
+              feature: "appointments",
+              type: "inquiry_submitted",
+              title: "New Appointment Request Received",
+              message: `${name} has submitted a new appointment request for ${design.name}`,
+              channels: ["in_app", "email"], // CRITICAL: Include in_app channel
+              appointmentMetadata: {
+                inquiryId: inquiry._id.toString(),
+                clientName: name,
+                clientEmail: email,
+                designName: design.name,
+                preferredDate: preferredDate,
+                preferredTime: preferredTime,
+                meetingType: meetingType,
+                originalDate: preferredDate,
+                originalTime: preferredTime,
+                userType: isGuest ? "guest" : "registered",
+              },
+              relatedId: inquiry._id.toString(),
+              actionUrl: `/admin/appointments?inquiry=${inquiry._id.toString()}`,
+              actionLabel: "Review Appointment",
+              metadata: {
+                inquiryId: inquiry._id.toString(),
+                clientName: name,
+                clientEmail: email,
+                designName: design.name,
+                userType: isGuest ? "guest" : "registered",
+                userRole: user?.role || "guest",
+              },
+              notificationType: "admin", // Explicitly set for admin
+            });
+
+          if (adminNotification && adminNotification._id) {
+            console.log(
+              "✅ Fallback admin notification created:",
+              adminNotification._id
+            );
+          }
+        } catch (fallbackError) {
+          console.error(
+            "❌ Fallback notification creation failed:",
+            fallbackError
+          );
+        }
       }
     } catch (notificationError) {
       console.error("❌ Error creating notification:", notificationError);
       // Don't fail the entire inquiry submission if notification fails
     }
 
-    // Send internal notification to admin using new template
+    // Send internal notification to admin using new template (EMAIL ONLY)
     try {
       const internalTemplate = EmailTemplates.internalNewInquiry(
         transformedInquiry,
@@ -303,7 +347,7 @@ export async function submitInquiry(
       console.error("❌ Error sending admin email:", emailError);
     }
 
-    // Send auto-reply to user using new template
+    // Send auto-reply to user using new template (EMAIL ONLY)
     try {
       const userTemplate = {
         subject: "Appointment Request Confirmation - GianConstruct",

@@ -4,6 +4,7 @@ import React from "react";
 interface NotFoundProps {
   title?: string;
   description?: string;
+  icon?: React.ReactNode;
 }
 
 export default function NotFound({

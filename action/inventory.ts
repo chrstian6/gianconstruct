@@ -17,40 +17,45 @@ function generateProductId(): string {
   return `${numbers.slice(0, 4)}-${numbers.slice(4)}`;
 }
 
-// Helper function to convert Mongoose document to IInventory
-function convertToIInventory(doc: IInventoryDoc | any): IInventory {
-  const plainDoc = doc.toObject ? doc.toObject() : doc;
-
-  // Use product_id instead of item_id
-  const product_id = plainDoc.product_id || plainDoc.item_id;
+// Helper function to convert Mongoose document or plain object to IInventory
+function convertToIInventory(doc: any): IInventory {
+  // Extract plain object from Mongoose document if needed
+  const plainObj =
+    doc && typeof doc === "object"
+      ? doc.toObject
+        ? doc.toObject()
+        : doc
+      : doc;
 
   return {
-    product_id: product_id,
-    name: plainDoc.name,
-    category: plainDoc.category,
-    quantity: plainDoc.quantity,
-    unit: plainDoc.unit,
-    description: plainDoc.description,
-    supplier: plainDoc.supplier,
-    reorderPoint: plainDoc.reorderPoint,
-    location: plainDoc.location,
-    unitCost: plainDoc.unitCost,
-    salePrice: plainDoc.salePrice,
+    product_id: plainObj.product_id || "",
+    name: plainObj.name || "",
+    category: plainObj.category || "",
+    quantity: plainObj.quantity || 0,
+    unit: plainObj.unit || "",
+    description: plainObj.description || undefined,
+    supplier: plainObj.supplier || undefined,
+    reorderPoint: plainObj.reorderPoint || 0,
+    location: plainObj.location || undefined,
+    unitCost: plainObj.unitCost || 0,
+    salePrice: plainObj.salePrice || undefined,
     totalCapital:
-      plainDoc.totalCapital || plainDoc.quantity * plainDoc.unitCost,
+      plainObj.totalCapital ||
+      (plainObj.quantity || 0) * (plainObj.unitCost || 0),
     totalValue:
-      plainDoc.totalValue || plainDoc.quantity * (plainDoc.salePrice || 0),
-    timeCreated: plainDoc.timeCreated
-      ? new Date(plainDoc.timeCreated).toISOString()
+      plainObj.totalValue ||
+      (plainObj.quantity || 0) * (plainObj.salePrice || 0),
+    timeCreated: plainObj.timeCreated
+      ? new Date(plainObj.timeCreated).toISOString()
       : new Date().toISOString(),
-    timeUpdated: plainDoc.timeUpdated
-      ? new Date(plainDoc.timeUpdated).toISOString()
+    timeUpdated: plainObj.timeUpdated
+      ? new Date(plainObj.timeUpdated).toISOString()
       : new Date().toISOString(),
-    lastUpdated: plainDoc.timeUpdated
-      ? new Date(plainDoc.timeUpdated).toISOString()
+    lastUpdated: plainObj.timeUpdated
+      ? new Date(plainObj.timeUpdated).toISOString()
       : undefined,
-    createdAt: plainDoc.timeCreated
-      ? new Date(plainDoc.timeCreated).toISOString()
+    createdAt: plainObj.timeCreated
+      ? new Date(plainObj.timeCreated).toISOString()
       : undefined,
   };
 }
@@ -60,7 +65,7 @@ export async function getInventories(): Promise<IInventory[]> {
   await dbConnect();
   try {
     const items = await Inventory.find().sort({ timeCreated: -1 }).lean();
-    return items.map((item) => convertToIInventory(item as IInventoryDoc));
+    return items.map((item) => convertToIInventory(item));
   } catch (error) {
     console.error("Error fetching inventory:", error);
     return [];
@@ -175,7 +180,7 @@ export async function createInventory(
   }
 }
 
-// In action/inventory.ts - update the createBatchInventory function
+// Create batch inventory
 export async function createBatchInventory(
   items: Omit<InventoryInput, "product_id">[]
 ) {
@@ -205,8 +210,7 @@ export async function createBatchInventory(
 
       // Create new item with correct field mapping
       const newItem = new Inventory({
-        // Map the fields correctly to match the schema
-        name: validatedData.name, // This maps to the 'name' field in schema
+        name: validatedData.name,
         category: validatedData.category,
         quantity: validatedData.quantity,
         unit: validatedData.unit,
@@ -216,7 +220,7 @@ export async function createBatchInventory(
         location: validatedData.location,
         unitCost: validatedData.unitCost,
         salePrice: validatedData.salePrice,
-        product_id: product_id, // This is the correct field name in schema
+        product_id: product_id,
         timeCreated: new Date(),
         timeUpdated: new Date(),
       });
@@ -374,7 +378,7 @@ export async function getInventoryById(product_id: string) {
 
     return {
       success: true,
-      item: convertToIInventory(item as IInventoryDoc),
+      item: convertToIInventory(item),
     };
   } catch (error) {
     console.error("Error fetching inventory item:", error);
@@ -385,7 +389,7 @@ export async function getInventoryById(product_id: string) {
   }
 }
 
-// action/inventory.ts (update the getInventoryByCategory function)
+// Get inventory by category
 export async function getInventoryByCategory(): Promise<
   {
     category: string;
@@ -403,7 +407,7 @@ export async function getInventoryByCategory(): Promise<
     >();
 
     items.forEach((item) => {
-      const inventoryItem = convertToIInventory(item as IInventoryDoc);
+      const inventoryItem = convertToIInventory(item);
       if (!categoryMap.has(inventoryItem.category)) {
         categoryMap.set(inventoryItem.category, []);
       }

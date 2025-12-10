@@ -1,4 +1,4 @@
-// lib/email-templates.ts - UPDATED WITH PROJECT TEMPLATES
+// lib/email-templates.ts - UPDATED WITH PROJECT AND PDC TEMPLATES
 
 export interface EmailData {
   title: string;
@@ -912,7 +912,6 @@ export const EmailTemplates = {
     };
   },
 
-  // UPDATE THIS TEMPLATE FOR TIMELINE PHOTO UPDATES
   projectTimelinePhotoUpdate: (
     project: any,
     user: any,
@@ -980,7 +979,6 @@ export const EmailTemplates = {
 </div>
     `;
 
-    // Handle photoCount safely in the message
     const photoMessage =
       photoCount && photoCount > 0
         ? `Our team has uploaded ${photoCount} photo${photoCount > 1 ? "s" : ""} showing the latest construction progress and developments.`
@@ -1006,7 +1004,6 @@ export const EmailTemplates = {
     };
   },
 
-  // Add this to the EmailTemplates object
   invoiceSent: (
     project: any,
     user: any,
@@ -1071,7 +1068,6 @@ export const EmailTemplates = {
     };
   },
 
-  // Also add this template to handle invoice paid notifications
   invoicePaid: (
     project: any,
     user: any,
@@ -1084,6 +1080,10 @@ export const EmailTemplates = {
   <div class="detail-row">
     <div class="detail-label">Project Name</div>
     <div class="detail-value">${project.name}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Project ID</div>
+    <div class="detail-value">${project.project_id}</div>
   </div>
   <div class="detail-row">
     <div class="detail-label">Transaction ID</div>
@@ -1119,7 +1119,6 @@ export const EmailTemplates = {
     };
   },
 
-  // Add this function to your EmailTemplates object
   paymentReceived: (
     project: any,
     user: any,
@@ -1190,11 +1189,6 @@ export const EmailTemplates = {
       },
     };
   },
-  // Add these new templates to your EmailTemplates object in lib/email-templates.ts
-
-  // ========== ADD THESE TEMPLATES TO THE EXISTING EmailTemplates OBJECT ==========
-
-  // Add these right after the paymentReceived template
 
   projectConfirmed: (
     project: any,
@@ -1386,7 +1380,6 @@ export const EmailTemplates = {
     };
   },
 
-  // Add internal project templates
   internalNewProject: (project: any, client: any) => {
     const details = `
 <div class="details-container">
@@ -1585,6 +1578,367 @@ export const EmailTemplates = {
         showButton: true,
         buttonText: "View Project Details",
         buttonUrl: `${process.env.NEXTAUTH_URL}/admin/admin-project?project=${project.project_id}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  // ========== PDC EMAIL TEMPLATES ==========
+  // Add these templates at the end of the EmailTemplates object
+
+  pdcCreated: (metadata: any) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    };
+
+    const daysUntilCheck = metadata.daysUntilCheck || 0;
+    const daysMessage =
+      daysUntilCheck > 0
+        ? `in ${daysUntilCheck} day${daysUntilCheck > 1 ? "s" : ""}`
+        : "today";
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Check Number</div>
+    <div class="detail-value">${metadata.checkNumber || "N/A"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Supplier</div>
+    <div class="detail-value">${metadata.supplier || "Supplier"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(metadata.amount || 0)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Check Date</div>
+    <div class="detail-value">${formatDate(metadata.checkDate || new Date().toISOString())}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Status</div>
+    <div class="detail-value">${(metadata.status || "pending").charAt(0).toUpperCase() + (metadata.status || "pending").slice(1)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Items</div>
+    <div class="detail-value">${metadata.itemCount || 0} item${(metadata.itemCount || 0) > 1 ? "s" : ""}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Time to Issue</div>
+    <div class="detail-value">${daysMessage}</div>
+  </div>
+</div>
+    `;
+
+    return {
+      subject: `New PDC Created: ${metadata.checkNumber || "Unknown"} - ${formatCurrency(metadata.amount || 0)}`,
+      data: {
+        title: "New PDC Created",
+        message: `A new Post-Dated Check has been created for <strong>${metadata.supplier || "Supplier"}</strong>.`,
+        details,
+        nextSteps: `
+<strong>Next Steps:</strong><br>
+1. Review the PDC details<br>
+2. Verify the check amount and date<br>
+3. Monitor for auto-issuing on check date<br>
+4. Keep track of inventory items linked to this PDC
+      `,
+        showButton: true,
+        buttonText: "View PDC Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/pdc?check=${metadata.checkNumber}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  pdcIssued: (metadata: any) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    };
+
+    const formatDateTime = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Check Number</div>
+    <div class="detail-value">${metadata.checkNumber || "N/A"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Supplier</div>
+    <div class="detail-value">${metadata.supplier || "Supplier"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(metadata.amount || 0)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Check Date</div>
+    <div class="detail-value">${formatDate(metadata.checkDate || new Date().toISOString())}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Issued On</div>
+    <div class="detail-value">${formatDateTime(metadata.issuedAt || new Date().toISOString())}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Items Covered</div>
+    <div class="detail-value">${metadata.itemCount || 0} inventory item${(metadata.itemCount || 0) > 1 ? "s" : ""}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Status</div>
+    <div class="detail-value"><span style="color: #059669; font-weight: 600;">Issued</span></div>
+  </div>
+</div>
+    `;
+
+    return {
+      subject: `PDC Issued: ${metadata.checkNumber || "Unknown"} - ${formatCurrency(metadata.amount || 0)}`,
+      data: {
+        title: "PDC Has Been Issued",
+        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> has been issued to <strong>${metadata.supplier || "Supplier"}</strong>.`,
+        details,
+        nextSteps: `
+<strong>Next Steps:</strong><br>
+1. Track payment receipt from supplier<br>
+2. Update inventory records if needed<br>
+3. File PDC record for accounting<br>
+4. Monitor for any issues with the check
+      `,
+        showButton: true,
+        buttonText: "View PDC Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/pdc?check=${metadata.checkNumber}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  pdcStatusUpdated: (metadata: any) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Check Number</div>
+    <div class="detail-value">${metadata.checkNumber || "N/A"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Supplier</div>
+    <div class="detail-value">${metadata.supplier || "Supplier"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(metadata.amount || 0)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Previous Status</div>
+    <div class="detail-value">${(metadata.oldStatus || "unknown").charAt(0).toUpperCase() + (metadata.oldStatus || "unknown").slice(1)}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">New Status</div>
+    <div class="detail-value"><span style="color: #2563eb; font-weight: 600;">${(metadata.newStatus || "unknown").charAt(0).toUpperCase() + (metadata.newStatus || "unknown").slice(1)}</span></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Updated</div>
+    <div class="detail-value">${new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}</div>
+  </div>
+</div>
+    `;
+
+    return {
+      subject: `PDC Status Update: ${metadata.checkNumber || "Unknown"} - ${metadata.oldStatus || "unknown"} → ${metadata.newStatus || "unknown"}`,
+      data: {
+        title: "PDC Status Updated",
+        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> status has been updated.`,
+        details,
+        nextSteps: `
+<strong>Action Required:</strong><br>
+1. Review the status change<br>
+2. Update financial records if needed<br>
+3. Notify relevant team members<br>
+4. Take any necessary follow-up actions
+      `,
+        showButton: true,
+        buttonText: "View PDC Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/pdc?check=${metadata.checkNumber}`,
+        isInternal: true,
+      },
+    };
+  },
+
+  pdcStatsSummary: (metadata: any) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Total PDCs</div>
+    <div class="detail-value">${metadata.totalPDCs || 0}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Total Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(metadata.totalAmount || 0)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Issued PDCs</div>
+    <div class="detail-value">${metadata.issuedPDCs || 0} (${formatCurrency(metadata.issuedAmount || 0)})</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Pending PDCs</div>
+    <div class="detail-value">${metadata.pendingPDCs || 0} (${formatCurrency(metadata.pendingAmount || 0)})</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Cancelled PDCs</div>
+    <div class="detail-value">${metadata.cancelledPDCs || 0} (${formatCurrency(metadata.cancelledAmount || 0)})</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Report Period</div>
+    <div class="detail-value">${new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })}</div>
+  </div>
+</div>
+    `;
+
+    return {
+      subject: `PDC Statistics Summary - ${metadata.totalPDCs || 0} PDCs (${formatCurrency(metadata.totalAmount || 0)})`,
+      data: {
+        title: "PDC Statistics Summary",
+        message: `Summary of Post-Dated Checks for the period.`,
+        details,
+        nextSteps: `
+<strong>Insights:</strong><br>
+• ${metadata.issuedPDCs || 0} issued checks awaiting payment<br>
+• ${metadata.pendingPDCs || 0} pending checks for future dates<br>
+• Monitor upcoming check dates for auto-issuing<br>
+• Review supplier payment patterns
+      `,
+        showButton: true,
+        buttonText: "View PDC Dashboard",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/pdc`,
+        isInternal: true,
+      },
+    };
+  },
+
+  pdcCancelled: (metadata: any) => {
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    const formatDateTime = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    };
+
+    const details = `
+<div class="details-container">
+  <div class="detail-row">
+    <div class="detail-label">Check Number</div>
+    <div class="detail-value">${metadata.checkNumber || "N/A"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Supplier</div>
+    <div class="detail-value">${metadata.supplier || "Supplier"}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Amount</div>
+    <div class="detail-value"><strong>${formatCurrency(metadata.amount || 0)}</strong></div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Cancelled On</div>
+    <div class="detail-value">${formatDateTime(metadata.cancelledAt || new Date().toISOString())}</div>
+  </div>
+  <div class="detail-row">
+    <div class="detail-label">Status</div>
+    <div class="detail-value"><span style="color: #dc2626; font-weight: 600;">Cancelled</span></div>
+  </div>
+</div>
+    `;
+
+    return {
+      subject: `PDC Cancelled: ${metadata.checkNumber || "Unknown"} - ${formatCurrency(metadata.amount || 0)}`,
+      data: {
+        title: "PDC Cancelled",
+        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> has been cancelled.`,
+        details,
+        nextSteps: `
+<strong>Action Required:</strong><br>
+1. Update financial records<br>
+2. Remove from pending payments<br>
+3. Notify relevant departments<br>
+4. Review reason for cancellation
+      `,
+        showButton: true,
+        buttonText: "View PDC Details",
+        buttonUrl: `${process.env.NEXTAUTH_URL}/admin/pdc?check=${metadata.checkNumber}`,
         isInternal: true,
       },
     };

@@ -29,7 +29,7 @@ import { IInventory } from "@/types/Inventory";
 interface EditItemModalProps {
   item: IInventory;
   onUpdate: (
-    item_id: string,
+    product_id: string,
     data: {
       name: string;
       category: string;
@@ -38,7 +38,6 @@ interface EditItemModalProps {
       description?: string;
       supplier?: string;
       reorderPoint: number;
-      safetyStock: number;
       location?: string;
       unitCost: number;
     }
@@ -110,10 +109,9 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
     description: item.description || "",
     supplier: item.supplier || "",
     reorderPoint: item.reorderPoint,
-    safetyStock: item.safetyStock || 0,
     location: item.location || "",
     unitCost: item.unitCost,
-    totalCost: item.quantity * item.unitCost, // Initialize totalCost
+    totalCost: item.quantity * item.unitCost,
   });
 
   useEffect(() => {
@@ -153,7 +151,6 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
         [name]:
           name === "quantity" ||
           name === "reorderPoint" ||
-          name === "safetyStock" ||
           name === "unitCost" ||
           name === "totalCost"
             ? Number(value)
@@ -217,14 +214,19 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
 
   const handleSubmit = () => {
     const itemData = {
-      ...form,
+      name: form.name,
+      category: form.category,
+      quantity: form.quantity,
+      unit: form.unit,
       description: form.description || undefined,
       supplier: form.supplier || undefined,
+      reorderPoint: form.reorderPoint,
       location: form.location || undefined,
+      unitCost: form.unitCost,
     };
-    // Exclude totalCost from the submitted data since onUpdate expects unitCost
-    const { totalCost, ...submitData } = itemData;
-    onUpdate(item.item_id, submitData);
+
+    // Use product_id instead of item_id and pass item.product_id
+    onUpdate(item.product_id, itemData);
   };
 
   const handleCancel = () => {
@@ -236,7 +238,6 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
       description: item.description || "",
       supplier: item.supplier || "",
       reorderPoint: item.reorderPoint,
-      safetyStock: item.safetyStock || 0,
       location: item.location || "",
       unitCost: item.unitCost,
       totalCost: item.quantity * item.unitCost,
@@ -288,31 +289,18 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
         }
       >
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <div className="space-y-3">
               <Label className="text-sm font-medium text-gray-900 font-geist">
-                Item ID
+                Product ID
               </Label>
               <Input
-                value={item.item_id}
+                value={item.product_id}
                 disabled
                 className="py-2.5 px-3.5 bg-gray-100 border-gray-300 font-mono text-xs font-geist"
               />
               <p className="text-xs text-gray-600 font-geist">
-                Unique identifier (cannot be changed)
-              </p>
-            </div>
-            <div className="space-y-3">
-              <Label className="text-sm font-medium text-gray-900 font-geist">
-                SKU
-              </Label>
-              <Input
-                value={item.sku}
-                disabled
-                className="py-2.5 px-3.5 bg-gray-100 border-gray-300 font-mono text-xs font-geist"
-              />
-              <p className="text-xs text-gray-600 font-geist">
-                Stock keeping unit (cannot be changed)
+                Unique identifier in xxxx-xxxx format (cannot be changed)
               </p>
             </div>
           </div>
@@ -609,10 +597,10 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Label
-                  htmlFor="safetyStock"
+                  htmlFor="location"
                   className="text-sm font-medium text-gray-900 font-geist"
                 >
-                  Safety Stock
+                  Location
                 </Label>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -620,20 +608,17 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
                     <p className="text-sm">
-                      Set a buffer stock to prevent stockouts during unexpected
-                      demand.
+                      Enter the storage location for this item (optional).
                     </p>
                   </TooltipContent>
                 </Tooltip>
               </div>
               <Input
-                id="safetyStock"
-                type="number"
-                name="safetyStock"
-                value={form.safetyStock}
+                id="location"
+                name="location"
+                value={form.location}
                 onChange={handleChange}
-                min="0"
-                placeholder="0"
+                placeholder="e.g., Shelf A1, Warehouse B"
                 className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
               />
             </div>
@@ -691,35 +676,6 @@ export function EditItemModal({ item, onUpdate }: EditItemModalProps) {
                   )}
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="location"
-                  className="text-sm font-medium text-gray-900 font-geist"
-                >
-                  Location
-                </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-gray-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm">
-                      Enter the storage location for this item (optional).
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <Input
-                id="location"
-                name="location"
-                value={form.location}
-                onChange={handleChange}
-                placeholder="e.g., Shelf A1, Warehouse B"
-                className="py-2.5 px-3.5 bg-white border-gray-300 focus:ring-gray-500 font-geist"
-              />
             </div>
           </div>
 

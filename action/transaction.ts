@@ -6,6 +6,8 @@ import Transaction from "@/models/Transactions";
 import Project from "@/models/Project";
 import { getProjectPaymentSummary } from "@/lib/paymentUtils";
 import { verifySession } from "@/lib/redis";
+import User from "@/models/User";
+import { notificationService } from "@/lib/notification-services";
 
 export interface CreatePartialPaymentResponse {
   success: boolean;
@@ -23,6 +25,116 @@ export interface CreatePartialPaymentResponse {
     total_pending: number;
     remaining_balance: number;
   };
+}
+
+// Helper function to get user details
+async function getUserDetails(userId: string) {
+  try {
+    const user = await User.findOne({ user_id: userId });
+    if (!user) {
+      console.warn(`User not found for userId: ${userId}`);
+      return null;
+    }
+
+    return {
+      email: user.email,
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      fullName:
+        `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+        "Valued Client",
+    };
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    return null;
+  }
+}
+
+// Helper function to create transaction notification
+async function createTransactionNotification(
+  transaction: any,
+  project: any,
+  userDetails: any,
+  notificationType: string,
+  title: string,
+  message: string,
+  additionalMetadata: any = {},
+  isAdmin: boolean = false
+) {
+  try {
+    console.log(`📝 Creating ${notificationType} notification...`);
+
+    const baseMetadata = {
+      transactionId: transaction.transaction_id,
+      amount: transaction.amount,
+      totalAmount: transaction.total_amount,
+      transactionType: transaction.type,
+      status: transaction.status,
+      paymentDeadline: transaction.payment_deadline?.toISOString(),
+      dueDate: transaction.due_date?.toISOString(),
+      projectId: project.project_id,
+      projectName: project.name,
+      clientName: userDetails?.fullName,
+      clientEmail: userDetails?.email,
+      remainingBalance: additionalMetadata.remainingBalance || 0,
+      paymentMethod: transaction.payment_method,
+      referenceNumber: transaction.reference_number,
+    };
+
+    // Determine notificationType for routing (admin vs user)
+    const notificationRecipientType: "user" | "admin" | undefined = isAdmin
+      ? "admin"
+      : "user";
+
+    const notificationParams = {
+      userId: transaction.user_id,
+      userEmail: userDetails?.email,
+      targetUserRoles: isAdmin ? ["admin"] : undefined,
+      feature: "transactions",
+      type: notificationType,
+      title,
+      message,
+      channels: ["in_app", "email"],
+      metadata: {
+        ...baseMetadata,
+        ...additionalMetadata,
+      },
+      relatedId: transaction.transaction_id,
+      actionUrl: isAdmin ? `/admin/transactions` : `/user/transactions`,
+      actionLabel: "View Transaction",
+      notificationType: notificationRecipientType,
+    };
+
+    console.log("📧 Transaction notification params:", {
+      feature: notificationParams.feature,
+      type: notificationParams.type,
+      notificationType: notificationParams.notificationType,
+      userEmail: notificationParams.userEmail,
+      targetUserRoles: notificationParams.targetUserRoles,
+    });
+
+    const notificationResult =
+      await notificationService.createNotification(notificationParams);
+
+    if (notificationResult && notificationResult._id) {
+      console.log(
+        `✅ ${notificationType} notification created:`,
+        notificationResult._id
+      );
+      return true;
+    } else {
+      console.log(
+        `❌ ${notificationType} notification failed - no ID returned`
+      );
+      return false;
+    }
+  } catch (notificationError) {
+    console.error(
+      `❌ Error creating ${notificationType} notification:`,
+      notificationError
+    );
+    return false;
+  }
 }
 
 export async function createPartialPayment(
@@ -88,6 +200,54 @@ export async function createPartialPayment(
       amount: partialPayment.amount,
       new_remaining_balance: updatedSummary?.remaining_balance,
     });
+
+    // Get user details for notification
+    const userDetails = await getUserDetails(project.userId);
+
+    // Create notifications for partial payment
+    if (userDetails) {
+      // 1. Create ADMIN notification
+      await createTransactionNotification(
+        partialPayment,
+        project,
+        userDetails,
+        "invoice_sent",
+        "New Partial Payment Created - Admin",
+        `[Admin] A new partial payment of ₱${amount.toLocaleString("en-PH")} has been created for project "${project.name}" by ${userDetails.fullName} (${userDetails.email}). Transaction ID: ${partialPayment.transaction_id}`,
+        {
+          remainingBalance: updatedSummary?.remaining_balance || 0,
+          paymentType: "partial_payment",
+          dueDate: paymentDeadline.toISOString(),
+        },
+        true
+      );
+
+      // 2. Create USER notification
+      await notificationService.createNotification({
+        userId: project.userId,
+        userEmail: userDetails.email,
+        feature: "transactions",
+        type: "invoice_sent",
+        title: "Partial Payment Created",
+        message: `A partial payment of ₱${amount.toLocaleString("en-PH")} has been created for your project "${project.name}". Please pay within 7 days (by ${paymentDeadline.toLocaleDateString("en-PH")}). Transaction ID: ${partialPayment.transaction_id}`,
+        channels: ["in_app", "email"],
+        metadata: {
+          transactionId: partialPayment.transaction_id,
+          amount: partialPayment.amount,
+          remainingBalance: updatedSummary?.remaining_balance || 0,
+          paymentDeadline: paymentDeadline.toISOString(),
+          projectId: project.project_id,
+          projectName: project.name,
+          clientName: userDetails.fullName,
+          clientEmail: userDetails.email,
+          paymentType: "partial_payment",
+        },
+        relatedId: partialPayment.transaction_id,
+        actionUrl: `/user/transactions`,
+        actionLabel: "View Payment Details",
+        notificationType: "user",
+      });
+    }
 
     revalidatePath("/user/projects");
     revalidatePath("/admin/transactions");
@@ -170,6 +330,15 @@ export async function markTransactionAsPaid(
       return { success: false, error: "Failed to update transaction" };
     }
 
+    // Get the project details
+    const project = await Project.findOne({
+      project_id: updatedTransaction.project_id,
+    });
+
+    if (!project) {
+      return { success: false, error: "Project not found for transaction" };
+    }
+
     // Get updated payment summary
     const paymentSummary = await getProjectPaymentSummary(
       updatedTransaction.project_id
@@ -180,6 +349,56 @@ export async function markTransactionAsPaid(
       amount: updatedTransaction.amount,
       project_id: updatedTransaction.project_id,
     });
+
+    // Get user details for notification
+    const userDetails = await getUserDetails(updatedTransaction.user_id);
+
+    // Create notifications for payment received
+    if (userDetails) {
+      // 1. Create ADMIN notification
+      await createTransactionNotification(
+        updatedTransaction,
+        project,
+        userDetails,
+        "payment_received",
+        "Payment Received - Admin",
+        `[Admin] Payment of ₱${updatedTransaction.amount.toLocaleString("en-PH")} has been received for project "${project.name}". Transaction ID: ${updatedTransaction.transaction_id}, Payment Method: ${paymentMethod}`,
+        {
+          remainingBalance: paymentSummary?.remaining_balance || 0,
+          paymentMethod: paymentMethod,
+          referenceNumber: referenceNumber,
+          paidAt: currentDate.toISOString(),
+        },
+        true
+      );
+
+      // 2. Create USER notification
+      await notificationService.createNotification({
+        userId: updatedTransaction.user_id,
+        userEmail: userDetails.email,
+        feature: "transactions",
+        type: "payment_received",
+        title: "Payment Confirmed",
+        message: `Your payment of ₱${updatedTransaction.amount.toLocaleString("en-PH")} for project "${project.name}" has been confirmed. Thank you for your payment! Transaction ID: ${updatedTransaction.transaction_id}`,
+        channels: ["in_app", "email"],
+        metadata: {
+          transactionId: updatedTransaction.transaction_id,
+          amount: updatedTransaction.amount,
+          remainingBalance: paymentSummary?.remaining_balance || 0,
+          paymentMethod: paymentMethod,
+          referenceNumber: referenceNumber,
+          paidAt: currentDate.toISOString(),
+          projectId: project.project_id,
+          projectName: project.name,
+          clientName: userDetails.fullName,
+          clientEmail: userDetails.email,
+        },
+        relatedId: updatedTransaction.transaction_id,
+        actionUrl: `/user/transactions`,
+        actionLabel: "View Transaction",
+        notificationType: "user",
+      });
+    }
 
     revalidatePath("/user/projects");
     revalidatePath("/admin/transactions");
@@ -383,6 +602,7 @@ export async function getUserTransactionsWithDetails(): Promise<{
     return { success: false, error: "Failed to get transactions" };
   }
 }
+
 // Get transaction statistics for the logged-in user
 export async function getUserTransactionStats(): Promise<{
   success: boolean;
@@ -635,6 +855,58 @@ export async function updateTransactionPaymentDetails(
 
     console.log("✅ Transaction payment details updated:", transactionId);
 
+    // Get project and user details for notification
+    const project = await Project.findOne({
+      project_id: updatedTransaction.project_id,
+    });
+
+    if (project) {
+      const userDetails = await getUserDetails(updatedTransaction.user_id);
+
+      if (userDetails) {
+        // Create ADMIN notification
+        await createTransactionNotification(
+          updatedTransaction,
+          project,
+          userDetails,
+          "payment_details_updated",
+          "Payment Details Updated - Admin",
+          `[Admin] Client ${userDetails.fullName} has updated payment details for transaction ${updatedTransaction.transaction_id}. Payment Method: ${paymentMethod}, Reference: ${referenceNumber || "N/A"}`,
+          {
+            paymentMethod: paymentMethod,
+            referenceNumber: referenceNumber,
+            updatedAt: new Date().toISOString(),
+          },
+          true
+        );
+
+        // Create USER notification
+        await notificationService.createNotification({
+          userId: updatedTransaction.user_id,
+          userEmail: userDetails.email,
+          feature: "transactions",
+          type: "payment_details_updated",
+          title: "Payment Details Updated",
+          message: `Your payment details for transaction ${updatedTransaction.transaction_id} have been updated. Payment Method: ${paymentMethod}, Reference: ${referenceNumber || "N/A"}`,
+          channels: ["in_app", "email"],
+          metadata: {
+            transactionId: updatedTransaction.transaction_id,
+            amount: updatedTransaction.amount,
+            paymentMethod: paymentMethod,
+            referenceNumber: referenceNumber,
+            projectId: project.project_id,
+            projectName: project.name,
+            clientName: userDetails.fullName,
+            clientEmail: userDetails.email,
+          },
+          relatedId: updatedTransaction.transaction_id,
+          actionUrl: `/user/transactions`,
+          actionLabel: "View Transaction",
+          notificationType: "user",
+        });
+      }
+    }
+
     revalidatePath("/user/transactions");
     revalidatePath(`/user/projects/${updatedTransaction.project_id}`);
 
@@ -709,6 +981,57 @@ export async function cancelUserTransaction(
     }
 
     console.log("✅ Transaction cancelled:", transactionId);
+
+    // Get project and user details for notification
+    const project = await Project.findOne({
+      project_id: updatedTransaction.project_id,
+    });
+
+    if (project) {
+      const userDetails = await getUserDetails(updatedTransaction.user_id);
+
+      if (userDetails) {
+        // Create ADMIN notification
+        await createTransactionNotification(
+          updatedTransaction,
+          project,
+          userDetails,
+          "transaction_cancelled",
+          "Transaction Cancelled - Admin",
+          `[Admin] Transaction ${updatedTransaction.transaction_id} has been cancelled by ${userDetails.fullName}. Reason: ${reason || "No reason provided"}`,
+          {
+            reason: reason || "No reason provided",
+            cancelledAt: new Date().toISOString(),
+          },
+          true
+        );
+
+        // Create USER notification
+        await notificationService.createNotification({
+          userId: updatedTransaction.user_id,
+          userEmail: userDetails.email,
+          feature: "transactions",
+          type: "transaction_cancelled",
+          title: "Transaction Cancelled",
+          message: `Your transaction ${updatedTransaction.transaction_id} has been cancelled. Reason: ${reason || "No reason provided"}`,
+          channels: ["in_app", "email"],
+          metadata: {
+            transactionId: updatedTransaction.transaction_id,
+            amount: updatedTransaction.amount,
+            reason: reason || "No reason provided",
+            cancelledAt: new Date().toISOString(),
+            projectId: project.project_id,
+            projectName: project.name,
+            clientName: userDetails.fullName,
+            clientEmail: userDetails.email,
+          },
+          relatedId: updatedTransaction.transaction_id,
+          actionUrl: `/user/transactions`,
+          actionLabel: "View Transaction",
+          notificationType: "user",
+        });
+      }
+    }
 
     revalidatePath("/user/transactions");
     revalidatePath(`/user/projects/${updatedTransaction.project_id}`);
@@ -814,5 +1137,170 @@ export async function getUpcomingDueTransactions(): Promise<{
   } catch (error) {
     console.error("❌ Error getting upcoming due transactions:", error);
     return { success: false, error: "Failed to get upcoming due transactions" };
+  }
+}
+
+// NEW: Create a payment reminder notification
+export async function createPaymentReminder(transactionId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    console.log("🔔 Creating payment reminder for transaction:", transactionId);
+
+    const transaction = await Transaction.findOne({
+      transaction_id: transactionId,
+    });
+
+    if (!transaction) {
+      return { success: false, error: "Transaction not found" };
+    }
+
+    // Only send reminders for pending transactions
+    if (transaction.status !== "pending") {
+      return {
+        success: false,
+        error: "Cannot send reminder for non-pending transaction",
+      };
+    }
+
+    // Get project details
+    const project = await Project.findOne({
+      project_id: transaction.project_id,
+    });
+
+    if (!project) {
+      return { success: false, error: "Project not found" };
+    }
+
+    // Get user details
+    const userDetails = await getUserDetails(transaction.user_id);
+
+    if (!userDetails) {
+      return { success: false, error: "User details not found" };
+    }
+
+    // Calculate days until deadline
+    const currentDate = new Date();
+    const deadline = new Date(transaction.payment_deadline);
+    const daysUntilDeadline = Math.ceil(
+      (deadline.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    let reminderType = "";
+    let title = "";
+    let message = "";
+
+    if (daysUntilDeadline <= 0) {
+      reminderType = "payment_overdue";
+      title = "Payment Overdue";
+      message = `Your payment of ₱${transaction.amount.toLocaleString("en-PH")} for project "${project.name}" is overdue. Please make the payment immediately to avoid delays.`;
+    } else if (daysUntilDeadline <= 2) {
+      reminderType = "payment_reminder_urgent";
+      title = "Payment Due Soon";
+      message = `Friendly reminder: Your payment of ₱${transaction.amount.toLocaleString("en-PH")} for project "${project.name}" is due in ${daysUntilDeadline} day(s).`;
+    } else {
+      reminderType = "payment_reminder";
+      title = "Payment Reminder";
+      message = `Reminder: Your payment of ₱${transaction.amount.toLocaleString("en-PH")} for project "${project.name}" is due on ${deadline.toLocaleDateString("en-PH")}.`;
+    }
+
+    // Create USER reminder notification
+    await notificationService.createNotification({
+      userId: transaction.user_id,
+      userEmail: userDetails.email,
+      feature: "transactions",
+      type: reminderType,
+      title,
+      message,
+      channels: ["in_app", "email"],
+      metadata: {
+        transactionId: transaction.transaction_id,
+        amount: transaction.amount,
+        dueDate: transaction.payment_deadline?.toISOString(),
+        daysUntilDeadline: daysUntilDeadline,
+        projectId: project.project_id,
+        projectName: project.name,
+        clientName: userDetails.fullName,
+        clientEmail: userDetails.email,
+      },
+      relatedId: transaction.transaction_id,
+      actionUrl: `/user/transactions`,
+      actionLabel: "View Payment",
+      notificationType: "user",
+    });
+
+    console.log(`✅ Payment reminder sent for transaction: ${transactionId}`);
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("❌ Error creating payment reminder:", error);
+    return { success: false, error: "Failed to create payment reminder" };
+  }
+}
+
+// NEW: Get transaction notification statistics
+export async function getTransactionNotificationStats(userId: string): Promise<{
+  success: boolean;
+  stats?: {
+    pendingReminders: number;
+    overdueReminders: number;
+    recentPayments: number;
+    totalNotifications: number;
+  };
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    console.log("📊 Getting transaction notification stats for user:", userId);
+
+    // Get all transactions for this user
+    const transactions = await Transaction.find({ user_id: userId }).lean();
+
+    const currentDate = new Date();
+
+    // Calculate statistics
+    const pendingTransactions = transactions.filter(
+      (t) => t.status === "pending"
+    );
+
+    const overdueTransactions = pendingTransactions.filter((t) => {
+      if (!t.payment_deadline) return false;
+      return new Date(t.payment_deadline) < currentDate;
+    });
+
+    const recentPaidTransactions = transactions
+      .filter((t) => t.status === "paid")
+      .filter((t) => {
+        if (!t.paid_at) return false;
+        const paidDate = new Date(t.paid_at);
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return paidDate >= thirtyDaysAgo;
+      });
+
+    const stats = {
+      pendingReminders: pendingTransactions.length,
+      overdueReminders: overdueTransactions.length,
+      recentPayments: recentPaidTransactions.length,
+      totalNotifications:
+        pendingTransactions.length + recentPaidTransactions.length,
+    };
+
+    console.log("✅ Transaction notification stats:", stats);
+
+    return {
+      success: true,
+      stats,
+    };
+  } catch (error) {
+    console.error("❌ Error getting transaction notification stats:", error);
+    return {
+      success: false,
+      error: "Failed to get transaction notification statistics",
+    };
   }
 }

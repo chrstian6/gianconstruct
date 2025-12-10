@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Info, Calculator, X } from "lucide-react";
+import { Info, Calculator, X, Calendar } from "lucide-react";
 import { Design } from "@/types/design";
 import {
   Dialog,
@@ -30,6 +30,9 @@ import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import DetailsCard from "@/components/admin/catalog/DetailsCard";
 import QuotationCard from "@/components/admin/catalog/QuotationCard";
+import { AppointmentsSheet } from "@/components/user/AppointmentsSheet";
+import { useAuthStore } from "@/lib/stores";
+import { cn } from "@/lib/utils";
 
 // 🔹 Simple and Fast Supabase Image Cache
 const supabaseImageCache = new Map<
@@ -148,6 +151,8 @@ export function PublicDesignDetails({
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] =
     useState<boolean>(false);
   const [isLoanDialogOpen, setIsLoanDialogOpen] = useState<boolean>(false);
+  const [isAppointmentsSheetOpen, setIsAppointmentsSheetOpen] =
+    useState<boolean>(false);
 
   // Carousel state
   const [api, setApi] = useState<CarouselApi>();
@@ -157,6 +162,14 @@ export function PublicDesignDetails({
 
   // Track already preloaded images to prevent duplicates
   const preloadedImagesRef = useRef<Set<string>>(new Set());
+
+  // Get user from auth store
+  const { user } = useAuthStore();
+
+  // 🔹 Check if user is logged in
+  const isLoggedIn = useMemo(() => {
+    return !!user && !!user.user_id;
+  }, [user]);
 
   // 🔹 Fast preload without complex logic
   useEffect(() => {
@@ -238,8 +251,14 @@ export function PublicDesignDetails({
   );
 
   const handleInquireClick = useCallback(() => {
-    onInquire(design);
-  }, [design, onInquire]);
+    if (isLoggedIn) {
+      // If logged in, open the appointments sheet
+      setIsAppointmentsSheetOpen(true);
+    } else {
+      // If not logged in, use the original inquiry flow
+      onInquire(design);
+    }
+  }, [isLoggedIn, onInquire, design]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -253,7 +272,7 @@ export function PublicDesignDetails({
       design.name,
       design.description,
       design.price,
-      design.estimated_downpayment, // UPDATED: Replaced number_of_rooms
+      design.estimated_downpayment,
       design.square_meters,
       design.category,
       design.isLoanOffer,
@@ -269,11 +288,11 @@ export function PublicDesignDetails({
         <CarouselItem key={`${design.design_id}-${index}`}>
           <Card className="border-0 shadow-none">
             <CardContent className="flex items-center justify-center p-0">
-              <div className="w-full min-h-[500px] max-h-[680px] flex items-center justify-center bg-gray-100 rounded-lg">
+              <div className="w-full min-h-[200px] sm:min-h-[300px] md:min-h-[400px] lg:min-h-[500px] max-h-[90vh] flex items-center justify-center bg-gray-100 rounded-lg">
                 <OptimizedImage
                   src={image}
                   alt={`${design.name} ${index + 1}`}
-                  className="w-full h-auto max-h-[680px] object-contain rounded-lg"
+                  className="w-full h-auto max-h-[90vh] object-contain rounded-lg"
                   priority={index === 0}
                 />
               </div>
@@ -291,13 +310,14 @@ export function PublicDesignDetails({
         <button
           key={`thumb-${design.design_id}-${index}`}
           onClick={() => handleThumbnailClick(index)}
-          className={`border-2 rounded-lg overflow-hidden transition-all duration-200 ${
+          className={cn(
+            "border-2 rounded-lg overflow-hidden transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50",
             current === index
-              ? "border-orange-500 ring-2 ring-orange-500 ring-opacity-50"
+              ? "border-primary ring-2 ring-primary/50"
               : "border-gray-200 hover:border-gray-300"
-          }`}
+          )}
         >
-          <div className="w-full h-40 relative">
+          <div className="w-full h-24 sm:h-32 md:h-40 relative">
             <OptimizedImage
               src={image}
               alt={`${design.name} thumbnail ${index + 1}`}
@@ -332,50 +352,74 @@ export function PublicDesignDetails({
     <>
       {/* Drawer */}
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="h-[98vh] max-h-[98vh]" ref={carouselRef}>
+        <DrawerContent
+          className="h-[95vh] sm:h-[98vh] max-h-[95vh] sm:max-h-[98vh]"
+          ref={carouselRef}
+        >
           <DrawerTitle asChild>
             <VisuallyHidden>Design Details - {design.name}</VisuallyHidden>
           </DrawerTitle>
 
-          <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth">
             {/* Header */}
-            <div className="w-full max-w-5xl mx-auto flex items-start justify-between mb-6 relative pt-5">
-              <h1 className="text-3xl font-semibold">{design.name}</h1>
+            <div className="w-full max-w-6xl mx-auto flex items-start justify-between mb-4 sm:mb-6 relative pt-3 sm:pt-5">
+              <div className="flex-1 min-w-0 mr-2">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold truncate">
+                  {design.name}
+                </h1>
+                <div className="md:hidden mt-1">
+                  <Badge
+                    variant="secondary"
+                    className={
+                      design.isLoanOffer
+                        ? "bg-green-100 text-green-800 hover:bg-green-200 text-xs"
+                        : "bg-gray-100 text-gray-800 text-xs"
+                    }
+                  >
+                    {design.isLoanOffer
+                      ? "Available for Loan"
+                      : "Not Available for Loan"}
+                  </Badge>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleClose}
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             </div>
 
-            {/* Sticky Actions */}
-            <div className="w-full max-w-6xl p-4 bg-white sticky top-[-25] z-10 mx-auto">
-              <div className="flex justify-between items-center w-full max-w-5xl mx-auto">
-                <Badge
-                  variant="secondary"
-                  className={
-                    design.isLoanOffer
-                      ? "bg-green-100 text-green-800 hover:bg-green-200"
-                      : "bg-gray-100 text-gray-800"
-                  }
-                >
-                  {design.isLoanOffer
-                    ? "Available for Loan"
-                    : "Not Available for Loan"}
-                </Badge>
+            {/* Sticky Actions - Desktop */}
+            <div className="hidden md:block w-full max-w-6xl p-3 sm:p-4 bg-white/95 backdrop-blur-sm sticky top-0 z-10 mx-auto border-b">
+              <div className="flex flex-col sm:flex-row justify-between items-center w-full max-w-5xl mx-auto gap-3">
+                <div className="w-full sm:w-auto">
+                  <Badge
+                    variant="secondary"
+                    className={
+                      design.isLoanOffer
+                        ? "bg-green-100 text-green-800 hover:bg-green-200"
+                        : "bg-gray-100 text-gray-800"
+                    }
+                  >
+                    {design.isLoanOffer
+                      ? "Available for Loan"
+                      : "Not Available for Loan"}
+                  </Badge>
+                </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-2 justify-end w-full sm:w-auto">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsDetailsDialogOpen(true)}
-                    className="flex items-center gap-2 font-medium cursor-pointer p-3 border-gray-300"
+                    className="flex items-center gap-2 font-medium cursor-pointer px-3 py-2 border-gray-300 text-xs sm:text-sm"
                   >
-                    <Info className="h-4 w-4" />
-                    Project Details
+                    <Info className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Project</span>
+                    <span className="sm:hidden">Details</span>
                   </Button>
 
                   {design.isLoanOffer && (
@@ -383,25 +427,64 @@ export function PublicDesignDetails({
                       variant="outline"
                       size="sm"
                       onClick={() => setIsLoanDialogOpen(true)}
-                      className="flex items-center gap-2 font-medium cursor-pointer p-3 border-gray-300"
+                      className="flex items-center gap-2 font-medium cursor-pointer px-3 py-2 border-gray-300 text-xs sm:text-sm"
                     >
-                      <Calculator className="h-4 w-4" />
-                      Check Loan Quotation
+                      <Calculator className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">Loan</span>
+                      <span className="sm:hidden">Quotation</span>
                     </Button>
                   )}
 
                   <Button
                     onClick={handleInquireClick}
-                    className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2"
+                    className="bg-primary hover:bg-primary/90 text-white px-3 py-2 text-xs sm:text-sm"
                   >
-                    Inquire Now
+                    {isLoggedIn ? (
+                      <>
+                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Book</span>
+                        <span className="sm:hidden">Book Now</span>
+                      </>
+                    ) : (
+                      "Inquire Now"
+                    )}
                   </Button>
                 </div>
               </div>
             </div>
 
+            {/* Mobile Floating Action Buttons */}
+            <div className="fixed bottom-4 right-4 z-20 flex flex-col gap-2 md:hidden">
+              {design.isLoanOffer && (
+                <Button
+                  size="icon"
+                  onClick={() => setIsLoanDialogOpen(true)}
+                  className="h-10 w-10 rounded-full shadow-lg bg-blue-500 hover:bg-blue-600"
+                  title="Loan Quotation"
+                >
+                  <Calculator className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                size="icon"
+                onClick={() => setIsDetailsDialogOpen(true)}
+                className="h-10 w-10 rounded-full shadow-lg bg-gray-700 hover:bg-gray-800"
+                title="Project Details"
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                onClick={handleInquireClick}
+                className="h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90"
+                title={isLoggedIn ? "Book Appointment" : "Inquire Now"}
+              >
+                <Calendar className="h-5 w-5" />
+              </Button>
+            </div>
+
             {/* Carousel */}
-            <div className="w-full mb-6">
+            <div className="w-full mb-4 sm:mb-6 mt-2">
               <Carousel
                 setApi={setApi}
                 className="w-full max-w-6xl mx-auto"
@@ -413,32 +496,49 @@ export function PublicDesignDetails({
                 <CarouselContent>{carouselItems}</CarouselContent>
                 {memoizedImages.length > 1 && (
                   <>
-                    <CarouselPrevious className="left-4 size-8 bg-white/80 hover:bg-white transition-all duration-300" />
-                    <CarouselNext className="right-4 size-8 bg-white/80 hover:bg-white transition-all duration-300" />
+                    <CarouselPrevious className="left-2 sm:left-4 size-6 sm:size-8 bg-white/80 hover:bg-white transition-all duration-300" />
+                    <CarouselNext className="right-2 sm:right-4 size-6 sm:size-8 bg-white/80 hover:bg-white transition-all duration-300" />
                   </>
                 )}
               </Carousel>
               {memoizedImages.length > 1 && (
-                <div className="text-center text-sm text-gray-500 mt-4">
+                <div className="text-center text-xs sm:text-sm text-gray-500 mt-2 sm:mt-4">
                   Image {current + 1} of {count}
                 </div>
               )}
             </div>
 
             {/* Description */}
-            <div className="text-center max-w-6xl mx-auto mb-8">
-              <p className="text-base font-medium text-gray-700 leading-relaxed tracking-[1.2px]">
+            <div className="text-center max-w-6xl mx-auto mb-6 sm:mb-8">
+              <p className="text-sm sm:text-base font-medium text-gray-700 leading-relaxed tracking-[0.5px] sm:tracking-[1.2px] px-2 sm:px-0">
                 {memoizedDescription}
               </p>
             </div>
 
+            {/* Mobile Inquire Button */}
+            <div className="md:hidden mb-6 px-4">
+              <Button
+                onClick={handleInquireClick}
+                className="w-full bg-primary hover:bg-primary/90 text-white py-3 text-base font-medium"
+              >
+                {isLoggedIn ? (
+                  <>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Book Appointment
+                  </>
+                ) : (
+                  "Inquire Now"
+                )}
+              </Button>
+            </div>
+
             {/* Thumbnails */}
             {memoizedImages.length > 1 && (
-              <div className="mt-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <div className="mt-6 sm:mt-8 px-2 sm:px-0">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
                   All Images
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
                   {thumbnailItems}
                 </div>
               </div>
@@ -447,28 +547,38 @@ export function PublicDesignDetails({
         </DrawerContent>
       </Drawer>
 
-      {/* Dialogs */}
+      {/* Dialogs - Responsive */}
       <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 scroll-smooth">
-          <DialogHeader className="px-6 py-4">
-            <DialogTitle className="text-2xl font-bold">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 scroll-smooth">
+          <DialogHeader className="px-4 sm:px-6 py-3 sm:py-4">
+            <DialogTitle className="text-xl sm:text-2xl font-bold">
               <VisuallyHidden>Project Details</VisuallyHidden>
             </DialogTitle>
           </DialogHeader>
-          <DetailsCard design={memoizedDesign} />
+          <div className="px-2 sm:px-0">
+            <DetailsCard design={memoizedDesign} />
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isLoanDialogOpen} onOpenChange={setIsLoanDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 scroll-smooth">
-          <DialogHeader className="px-6 py-4">
-            <DialogTitle className="text-2xl font-bold">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0 scroll-smooth">
+          <DialogHeader className="px-4 sm:px-6 py-3 sm:py-4">
+            <DialogTitle className="text-xl sm:text-2xl font-bold">
               <VisuallyHidden>Quotation</VisuallyHidden>
             </DialogTitle>
           </DialogHeader>
-          <QuotationCard design={memoizedDesign} />
+          <div className="px-2 sm:px-0">
+            <QuotationCard design={memoizedDesign} />
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* Appointments Sheet for logged-in users */}
+      <AppointmentsSheet
+        open={isAppointmentsSheetOpen}
+        onOpenChange={setIsAppointmentsSheetOpen}
+      />
     </>
   );
 }

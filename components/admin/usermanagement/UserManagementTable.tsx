@@ -16,11 +16,32 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, Edit3, UserX, UserCheck } from "lucide-react";
+import {
+  MoreVertical,
+  Eye,
+  Edit3,
+  UserX,
+  UserCheck,
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  CheckCircle,
+  XCircle,
+  Shield,
+  UserRoundPen,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useModalStore } from "@/lib/stores";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Define the User type locally
 interface User {
@@ -81,151 +102,298 @@ export function UserManagementTable({
   };
 
   const formatText = (text: string, maxLength: number = 20) => {
+    if (!text) return "—";
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
   };
 
-  // Define table headers with visibility control
-  const tableHeaders = [
-    { key: "user_id", label: "ID", visible: columnVisibility.user_id },
-    {
-      key: "firstName",
-      label: "Name",
-      visible: columnVisibility.firstName || columnVisibility.lastName,
-    },
-    { key: "email", label: "Email", visible: columnVisibility.email },
-    { key: "contactNo", label: "Contact", visible: columnVisibility.contactNo },
-    { key: "role", label: "Role", visible: columnVisibility.role },
-    { key: "verified", label: "Status", visible: columnVisibility.verified },
-    { key: "actions", label: "Actions", visible: columnVisibility.actions },
-  ].filter((header) => header.visible);
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "—";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return "—";
+    }
+  };
+
+  // Get status info for user
+  const getUserStatusInfo = (verified: boolean) => {
+    if (verified) {
+      return {
+        text: "Active",
+        variant: "default" as const,
+        icon: CheckCircle,
+        color: "text-emerald-600",
+        bgColor: "bg-emerald-50",
+      };
+    } else {
+      return {
+        text: "Inactive",
+        variant: "destructive" as const,
+        icon: XCircle,
+        color: "text-rose-600",
+        bgColor: "bg-rose-50",
+      };
+    }
+  };
+
+  // Get role info
+  const getRoleInfo = (role: string) => {
+    if (!role)
+      return {
+        text: "—",
+        icon: User,
+        color: "text-gray-600",
+        bgColor: "bg-gray-50",
+      };
+
+    switch (role.toLowerCase()) {
+      case "admin":
+        return {
+          text: "Admin",
+          icon: Shield,
+          color: "text-purple-600",
+          bgColor: "bg-purple-50",
+        };
+      default:
+        return {
+          text: role.charAt(0).toUpperCase() + role.slice(1),
+          icon: User,
+          color: "text-blue-600",
+          bgColor: "bg-blue-50",
+        };
+    }
+  };
 
   return (
-    <div className="w-full">
-      <div className="overflow-x-auto">
-        <Table className="min-w-full compact-table">
-          <TableHeader className="bg-muted/50">
-            <TableRow className="h-10">
-              {tableHeaders.map((header) => (
-                <TableHead
-                  key={header.key}
-                  className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                >
-                  {header.label}
+    <div className="space-y-4">
+      {/* Table Header */}
+
+      {/* Table Content */}
+      <div>
+        <Table className="border border-border rounded-lg overflow-hidden">
+          <TableHeader className="bg-background">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-16 font-semibold text-foreground">
+                #
+              </TableHead>
+              {(columnVisibility.firstName || columnVisibility.lastName) && (
+                <TableHead className="font-semibold text-foreground">
+                  User
                 </TableHead>
-              ))}
+              )}
+              {columnVisibility.email && (
+                <TableHead className="font-semibold text-foreground">
+                  Contact
+                </TableHead>
+              )}
+              {columnVisibility.role && (
+                <TableHead className="font-semibold text-foreground">
+                  Role
+                </TableHead>
+              )}
+              {columnVisibility.verified && (
+                <TableHead className="font-semibold text-foreground">
+                  Status
+                </TableHead>
+              )}
+              {columnVisibility.createdAt && (
+                <TableHead className="font-semibold text-foreground">
+                  Created
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
-          <TableBody className="bg-card divide-y divide-border">
+          <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={tableHeaders.length}
-                  className="px-3 py-4 text-center text-sm text-muted-foreground"
-                >
-                  No users found
+                <TableCell colSpan={7} className="text-center py-12">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                    <User className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    No Users Found
+                  </h3>
+                  <p className="text-muted-foreground max-w-md mx-auto">
+                    No users have been registered yet.
+                  </p>
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow
-                  key={user.user_id}
-                  className="h-12 hover:bg-accent/50 transition-colors"
-                >
-                  {/* User ID Column */}
-                  {columnVisibility.user_id && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground font-mono">
-                      {formatText(user.user_id, 8)}
-                    </TableCell>
-                  )}
+              users.map((user, index) => {
+                const statusInfo = getUserStatusInfo(user.verified);
+                const roleInfo = getRoleInfo(user.role);
+                const StatusIcon = statusInfo.icon;
+                const RoleIcon = roleInfo.icon;
 
-                  {/* Name Column */}
-                  {(columnVisibility.firstName ||
-                    columnVisibility.lastName) && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
-                      {formatText(`${user.firstName} ${user.lastName}`, 15)}
+                return (
+                  <TableRow
+                    key={user.user_id}
+                    className="hover:bg-accent/50 border-border"
+                  >
+                    <TableCell className="font-medium text-foreground">
+                      {index + 1}
                     </TableCell>
-                  )}
 
-                  {/* Email Column */}
-                  {columnVisibility.email && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
-                      {formatText(user.email, 20)}
-                    </TableCell>
-                  )}
+                    {/* User Column */}
+                    {(columnVisibility.firstName ||
+                      columnVisibility.lastName) && (
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded bg-muted">
+                              <User className="h-3.5 w-3.5 text-foreground" />
+                            </div>
+                            <div>
+                              <div className="font-semibold text-sm text-foreground">
+                                {formatText(
+                                  `${user.firstName || ""} ${user.lastName || ""}`,
+                                  20
+                                )}
+                              </div>
+                              {columnVisibility.user_id && (
+                                <div className="text-xs text-muted-foreground">
+                                  ID: {formatText(user.user_id, 8)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                    )}
 
-                  {/* Contact Column */}
-                  {columnVisibility.contactNo && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
-                      {user.contactNo ? formatText(user.contactNo, 12) : "N/A"}
-                    </TableCell>
-                  )}
+                    {/* Contact Column */}
+                    {columnVisibility.email && (
+                      <TableCell>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm text-foreground truncate max-w-[200px]">
+                              {formatText(user.email || "", 25)}
+                            </span>
+                          </div>
+                          {user.contactNo && columnVisibility.contactNo && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Phone className="h-3 w-3" />
+                              {formatText(user.contactNo, 15)}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
 
-                  {/* Role Column */}
-                  {columnVisibility.role && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap">
-                      <Badge variant="secondary" className="text-xs capitalize">
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                  )}
+                    {/* Role Column */}
+                    {columnVisibility.role && (
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={`${roleInfo.bgColor} ${roleInfo.color} border-0 flex items-center gap-1.5`}
+                        >
+                          <RoleIcon className="h-3 w-3" />
+                          {roleInfo.text}
+                        </Badge>
+                      </TableCell>
+                    )}
 
-                  {/* Status Column */}
-                  {columnVisibility.verified && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap">
-                      <Badge
-                        className="text-xs"
-                        variant={user.verified ? "default" : "secondary"}
-                      >
-                        {user.verified ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                  )}
+                    {/* Status Column */}
+                    {columnVisibility.verified && (
+                      <TableCell>
+                        <Badge
+                          variant={statusInfo.variant}
+                          className={`${statusInfo.bgColor} ${statusInfo.color} border-0 flex items-center gap-1.5`}
+                        >
+                          <StatusIcon className="h-3 w-3" />
+                          {statusInfo.text}
+                        </Badge>
+                      </TableCell>
+                    )}
 
-                  {/* Actions Column */}
-                  {columnVisibility.actions && (
-                    <TableCell className="px-3 py-2 whitespace-nowrap text-xs text-foreground">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem className="text-xs cursor-pointer">
-                            <Eye className="mr-2 h-3.5 w-3.5" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-xs cursor-pointer"
-                            onClick={() => handleEditClick(user)}
-                          >
-                            <Edit3 className="mr-2 h-3.5 w-3.5" />
-                            Edit User
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-xs cursor-pointer"
-                            onClick={() => handleToggleInactive(user.user_id)}
-                          >
-                            {user.verified ? (
-                              <>
-                                <UserX className="mr-2 h-3.5 w-3.5" />
-                                Deactivate
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck className="mr-2 h-3.5 w-3.5" />
-                                Activate
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
+                    {/* Created At Column */}
+                    {columnVisibility.createdAt && (
+                      <TableCell>
+                        <div className="flex items-center gap-2 text-sm text-foreground">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                          {formatDate(user.createdAt)}
+                        </div>
+                      </TableCell>
+                    )}
+
+                    {/* Actions Column */}
+                    {columnVisibility.actions && (
+                      <TableCell className="text-right">
+                        <div className="flex justify-end items-center gap-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEditClick(user)}
+                                  className="h-8 w-8 hover:bg-accent text-foreground"
+                                >
+                                  <UserRoundPen className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>View Details</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 hover:bg-accent text-foreground"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleEditClick(user)}
+                                className="cursor-pointer"
+                              >
+                                <Edit3 className="h-4 w-4 mr-2" />
+                                Edit User
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  handleToggleInactive(user.user_id)
+                                }
+                                className={
+                                  user.verified
+                                    ? "text-amber-600 focus:text-amber-600 cursor-pointer"
+                                    : "text-emerald-600 focus:text-emerald-600 cursor-pointer"
+                                }
+                              >
+                                {user.verified ? (
+                                  <>
+                                    <UserX className="h-4 w-4 mr-2" />
+                                    Deactivate
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserCheck className="h-4 w-4 mr-2" />
+                                    Activate
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

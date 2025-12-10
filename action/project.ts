@@ -101,6 +101,163 @@ async function getUserDetails(userId: string) {
   }
 }
 
+// Helper function to auto-cancel pending transactions for a cancelled project
+async function autoCancelPendingTransactions(
+  projectId: string
+): Promise<{ cancelledCount: number; error?: string }> {
+  try {
+    console.log(
+      `🔄 Auto-cancelling pending transactions for project: ${projectId}`
+    );
+
+    // Find all pending transactions for this project
+    const pendingTransactions = await Transaction.find({
+      project_id: projectId,
+      status: "pending",
+    });
+
+    if (pendingTransactions.length === 0) {
+      console.log(`✅ No pending transactions found for project ${projectId}`);
+      return { cancelledCount: 0 };
+    }
+
+    console.log(
+      `📊 Found ${pendingTransactions.length} pending transactions to cancel`
+    );
+
+    const currentDate = new Date();
+    let cancelledCount = 0;
+    const updatePromises: Promise<any>[] = [];
+
+    for (const transaction of pendingTransactions) {
+      console.log(
+        `🔄 Auto-cancelling transaction ${transaction.transaction_id}`
+      );
+
+      updatePromises.push(
+        Transaction.findOneAndUpdate(
+          { transaction_id: transaction.transaction_id },
+          {
+            status: "cancelled",
+            notes:
+              `${transaction.notes || ""}\n[Auto-cancelled due to project cancellation on ${currentDate.toISOString()}]`.trim(),
+            updated_at: currentDate,
+          },
+          { new: true }
+        )
+      );
+      cancelledCount++;
+    }
+
+    // Wait for all updates to complete
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+      console.log(
+        `✅ Auto-cancelled ${cancelledCount} pending transactions for project ${projectId}`
+      );
+    }
+
+    return { cancelledCount };
+  } catch (error) {
+    console.error("❌ Error auto-cancelling pending transactions:", error);
+    return {
+      cancelledCount: 0,
+      error: "Failed to auto-cancel pending transactions",
+    };
+  }
+}
+
+// Helper function to check if project has pending transactions or remaining balance
+async function checkProjectPaymentStatus(projectId: string): Promise<{
+  hasPendingTransactions: boolean;
+  hasRemainingBalance: boolean;
+  paymentSummary?: {
+    total_cost: number;
+    total_paid: number;
+    total_pending: number;
+    remaining_balance: number;
+  };
+}> {
+  try {
+    console.log(`🔍 Checking payment status for project: ${projectId}`);
+
+    // Get payment summary
+    const paymentSummary = await getProjectPaymentSummary(projectId);
+
+    if (!paymentSummary) {
+      console.log(`❌ Could not get payment summary for project ${projectId}`);
+
+      // Fallback: check for pending transactions directly
+      const pendingTransactions = await Transaction.countDocuments({
+        project_id: projectId,
+        status: "pending",
+      });
+
+      return {
+        hasPendingTransactions: pendingTransactions > 0,
+        hasRemainingBalance: false,
+      };
+    }
+
+    console.log(`📊 Payment summary for project ${projectId}:`, {
+      total_cost: paymentSummary.total_cost,
+      total_paid: paymentSummary.total_paid,
+      total_pending: paymentSummary.total_pending,
+      remaining_balance: paymentSummary.remaining_balance,
+    });
+
+    // Check for pending transactions
+    const pendingTransactions = await Transaction.countDocuments({
+      project_id: projectId,
+      status: "pending",
+    });
+
+    const hasPendingTransactions = pendingTransactions > 0;
+
+    // Use the paymentSummary.remaining_balance if available
+    const hasRemainingBalance = paymentSummary.remaining_balance > 0;
+
+    console.log(`📋 Payment status check results:`, {
+      hasPendingTransactions,
+      pendingTransactionCount: pendingTransactions,
+      hasRemainingBalance,
+      remainingBalance: paymentSummary.remaining_balance,
+    });
+
+    return {
+      hasPendingTransactions,
+      hasRemainingBalance,
+      paymentSummary: {
+        total_cost: paymentSummary.total_cost,
+        total_paid: paymentSummary.total_paid,
+        total_pending: paymentSummary.total_pending,
+        remaining_balance: paymentSummary.remaining_balance,
+      },
+    };
+  } catch (error) {
+    console.error("❌ Error checking project payment status:", error);
+
+    // Fallback: check for pending transactions
+    try {
+      const pendingTransactions = await Transaction.countDocuments({
+        project_id: projectId,
+        status: "pending",
+      });
+
+      return {
+        hasPendingTransactions: pendingTransactions > 0,
+        hasRemainingBalance: false,
+      };
+    } catch (fallbackError) {
+      console.error("❌ Fallback check also failed:", fallbackError);
+      return {
+        hasPendingTransactions: false,
+        hasRemainingBalance: false,
+      };
+    }
+  }
+}
+
 // Upload image to Supabase with better error handling for large files
 async function uploadImageToSupabase(
   file: File,
@@ -374,6 +531,7 @@ export async function getProjects(): Promise<ActionResponse> {
 }
 
 // Create a new project - UPDATED VERSION WITH BETTER ERROR HANDLING
+// Updated createProject function in actions/project.ts
 export async function createProject(
   formData: FormData
 ): Promise<ActionResponse> {
@@ -565,25 +723,106 @@ export async function createProject(
     const userDetails = await getUserDetails(userId);
     console.log("✅ User details:", userDetails?.email);
 
-    // Create project creation notification
+    // 🔔 CREATE NOTIFICATIONS FOR BOTH ADMIN AND USER
     console.log("🔔 Creating notifications...");
+
+    // Prepare notification metadata
+    const notificationMetadata = {
+      projectId: project.project_id,
+      projectName: project.name,
+      status: project.status,
+      startDate: project.startDate?.toISOString(),
+      endDate: project.endDate?.toISOString(),
+      totalCost: project.totalCost || 0,
+      location: project.location?.fullAddress || "Not specified",
+      clientName: userDetails?.fullName || "Valued Client",
+      clientFirstName: userDetails?.firstName || "",
+      clientLastName: userDetails?.lastName || "",
+      clientEmail: userDetails?.email || "",
+      previousStatus: null,
+      newStatus: "pending",
+    };
+
+    // 1. CREATE ADMIN NOTIFICATION (targetUserRoles: ["admin"])
+    console.log("📧 Creating ADMIN notification...");
     try {
-      await createProjectNotification(
-        project,
-        userDetails,
-        "project_created",
-        "New Project Created",
-        `New project "${name}" has been created and is awaiting confirmation`,
-        {
-          previousStatus: null,
-          newStatus: "pending",
-        }
+      const adminNotificationResult =
+        await notificationService.createNotification({
+          // No userId/userEmail - goes to admin email via targetUserRoles
+          targetUserRoles: ["admin"],
+          feature: "projects",
+          type: "project_created",
+          title: "New Project Created - Action Required",
+          message: `A new project "${project.name}" has been created by ${userDetails?.fullName || "a client"} (${userDetails?.email || "email not provided"}). Please review and confirm the project details.`,
+          channels: ["in_app", "email"],
+          projectMetadata: notificationMetadata,
+          metadata: notificationMetadata,
+          relatedId: project.project_id,
+          actionUrl: `/admin/admin-project?project=${project.project_id}`,
+          actionLabel: "Review Project",
+        });
+
+      if (adminNotificationResult && adminNotificationResult._id) {
+        console.log(
+          "✅ Admin notification created:",
+          adminNotificationResult._id
+        );
+      } else {
+        console.error("❌ Admin notification failed - no ID returned");
+      }
+    } catch (adminNotificationError) {
+      console.error(
+        "❌ Error creating admin notification:",
+        adminNotificationError
       );
-      console.log("✅ Notification created");
-    } catch (notificationError) {
-      console.error("❌ Notification failed:", notificationError);
-      // Continue anyway
+      // Continue anyway - don't fail the whole process
     }
+
+    // 2. CREATE USER NOTIFICATION (for the user who created the project)
+    if (userDetails && userDetails.email) {
+      console.log("📧 Creating USER notification...");
+      try {
+        // Customize for user
+        const userTitle = "Your Project Has Been Created";
+        const userMessage = `Thank you for creating your project "${project.name}". Our team will review your project and contact you within 24-48 hours to confirm the start date and discuss next steps.`;
+
+        const userNotificationResult =
+          await notificationService.createNotification({
+            // This goes directly to the user
+            userId: userId,
+            userEmail: userDetails.email,
+            feature: "projects",
+            type: "project_created",
+            title: userTitle,
+            message: userMessage,
+            channels: ["in_app", "email"],
+            projectMetadata: notificationMetadata,
+            metadata: notificationMetadata,
+            relatedId: project.project_id,
+            actionUrl: `/user/projects/${project.project_id}`,
+            actionLabel: "View My Project",
+          });
+
+        if (userNotificationResult && userNotificationResult._id) {
+          console.log(
+            "✅ User notification created:",
+            userNotificationResult._id
+          );
+        } else {
+          console.error("❌ User notification failed - no ID returned");
+        }
+      } catch (userNotificationError) {
+        console.error(
+          "❌ Error creating user notification:",
+          userNotificationError
+        );
+        // Continue anyway
+      }
+    } else {
+      console.log("⚠️ User details not found, skipping user notification");
+    }
+
+    console.log("✅ Notifications created successfully");
 
     // Create automatic timeline entry for project creation
     console.log("📅 Creating timeline entry...");
@@ -592,7 +831,7 @@ export async function createProject(
         project_id: project_id,
         type: "project_created",
         title: "Project Created",
-        description: `Project "${name}" has been created and is awaiting confirmation.`,
+        description: `Project "${project.name}" has been created and is awaiting confirmation.`,
         date: new Date(),
       });
       console.log("✅ Timeline entry created");
@@ -624,7 +863,10 @@ export async function createProject(
       updatedAt: project.updatedAt.toISOString(),
     });
 
+    // Revalidate all relevant paths
     revalidatePath("/admin/admin-project");
+    revalidatePath("/user/projects");
+    revalidatePath("/user/userdashboard");
     console.log("🎉 Project creation completed successfully!");
     return { success: true, project: plainProject };
   } catch (error) {
@@ -1976,38 +2218,6 @@ export async function confirmProjectStart(
     // ✅ CREATE NOTIFICATIONS - USING DIRECT notificationService.createNotification CALLS
     console.log("📢 Creating notifications for project confirmation...");
 
-    // Prepare common metadata for notifications
-    const notificationMetadata = {
-      projectId: project.project_id,
-      projectName: project.name,
-      status: "active",
-      previousStatus: "pending",
-      startDate: currentDate.toISOString(),
-      confirmedAt: currentDate.toISOString(),
-      location: project.location?.fullAddress || "Project Location",
-      totalCost: project.totalCost,
-      downpaymentAmount: downpaymentAmount,
-      remainingBalance: remainingBalance,
-      clientName: userDetails?.fullName || "Valued Client",
-      clientFirstName: userDetails?.firstName || "",
-      clientLastName: userDetails?.lastName || "",
-      clientEmail: userDetails?.email || "",
-      clientId: project.userId,
-      transactionId: downpaymentTransaction.transaction_id,
-      paymentDeadline: paymentDeadline.toISOString(),
-      formattedDownpaymentAmount: `₱${downpaymentAmount.toLocaleString("en-PH")}`,
-      formattedRemainingBalance: `₱${remainingBalance.toLocaleString("en-PH")}`,
-      formattedTotalCost: `₱${project.totalCost.toLocaleString("en-PH")}`,
-      paymentDeadlineFormatted: paymentDeadline.toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-
     // 1. FIRST: Create notification for ADMIN (targetUserRoles: ["admin"])
     console.log("📧 Creating admin notification...");
     try {
@@ -2017,14 +2227,28 @@ export async function confirmProjectStart(
           targetUserRoles: ["admin"],
           feature: "projects",
           type: "project_confirmed",
-          title: `Project Confirmed: ${project.name}`,
+          title: "Project Confirmed by Client",
           message: `Project "${project.name}" has been confirmed by ${userDetails?.fullName || "the client"} and is now active. Downpayment: ₱${downpaymentAmount.toLocaleString("en-PH")} (Remaining: ₱${remainingBalance.toLocaleString("en-PH")})`,
           channels: ["in_app", "email"],
-          projectMetadata: notificationMetadata,
-          metadata: notificationMetadata,
-          relatedId: project.project_id,
+          projectMetadata: {
+            projectId: project.project_id,
+            projectName: project.name,
+            status: "active",
+            previousStatus: "pending",
+            startDate: currentDate.toISOString(),
+            confirmedAt: currentDate.toISOString(),
+            location: project.location?.fullAddress,
+            totalCost: project.totalCost,
+            downpaymentAmount: downpaymentAmount,
+            remainingBalance: remainingBalance,
+            clientName: userDetails?.fullName,
+            clientEmail: userDetails?.email,
+            clientId: project.userId,
+            transactionId: downpaymentTransaction.transaction_id,
+            paymentDeadline: paymentDeadline.toISOString(),
+          },
           actionUrl: `/admin/admin-project?project=${project.project_id}`,
-          actionLabel: "View Project Details",
+          actionLabel: "View Project",
         });
 
       if (adminNotificationResult) {
@@ -2054,12 +2278,26 @@ export async function confirmProjectStart(
             userEmail: userDetails.email,
             feature: "projects",
             type: "project_confirmed",
-            title: `Project Confirmed: ${project.name}`,
+            title: "Project Confirmed Successfully",
             message: `Your project "${project.name}" has been confirmed and is now active. Please pay the downpayment of ₱${downpaymentAmount.toLocaleString("en-PH")} within 48 hours (by ${paymentDeadline.toLocaleString()}). Remaining balance: ₱${remainingBalance.toLocaleString("en-PH")}`,
             channels: ["in_app", "email"],
-            projectMetadata: notificationMetadata,
-            metadata: notificationMetadata,
-            relatedId: project.project_id,
+            projectMetadata: {
+              projectId: project.project_id,
+              projectName: project.name,
+              status: "active",
+              previousStatus: "pending",
+              startDate: currentDate.toISOString(),
+              confirmedAt: currentDate.toISOString(),
+              location: project.location?.fullAddress,
+              totalCost: project.totalCost,
+              downpaymentAmount: downpaymentAmount,
+              remainingBalance: remainingBalance,
+              clientName: userDetails.fullName,
+              clientEmail: userDetails.email,
+              clientId: project.userId,
+              transactionId: downpaymentTransaction.transaction_id,
+              paymentDeadline: paymentDeadline.toISOString(),
+            },
             actionUrl: `/user/projects`,
             actionLabel: "View My Projects",
           });
@@ -2161,7 +2399,7 @@ export async function confirmProjectStart(
   }
 }
 
-// Cancel a project
+// MODIFIED: Cancel a project - NOW AUTO-CANCELLING PENDING TRANSACTIONS
 export async function cancelProject(
   projectId: string
 ): Promise<UpdateProjectResponse> {
@@ -2201,6 +2439,22 @@ export async function cancelProject(
       return { success: false, error: "Failed to cancel project" };
     }
 
+    // 🔄 AUTO-CANCEL PENDING TRANSACTIONS FOR THIS PROJECT
+    console.log(
+      `🔄 Auto-cancelling pending transactions for cancelled project: ${projectId}`
+    );
+    const cancellationResult = await autoCancelPendingTransactions(projectId);
+
+    if (cancellationResult.error) {
+      console.error(
+        `❌ Error auto-cancelling transactions: ${cancellationResult.error}`
+      );
+    } else {
+      console.log(
+        `✅ Auto-cancelled ${cancellationResult.cancelledCount} pending transactions for project ${projectId}`
+      );
+    }
+
     // Get user details for notification
     const userDetails = await getUserDetails(project.userId);
 
@@ -2211,11 +2465,12 @@ export async function cancelProject(
         userDetails,
         "project_cancelled",
         "Project Cancelled",
-        `Project "${project.name}" has been cancelled`,
+        `Project "${project.name}" has been cancelled. ${cancellationResult.cancelledCount > 0 ? `${cancellationResult.cancelledCount} pending transaction(s) were also cancelled.` : ""}`,
         {
           previousStatus: project.status,
           newStatus: "cancelled",
           cancelledAt: new Date().toISOString(),
+          cancelledTransactionsCount: cancellationResult.cancelledCount,
         }
       );
     }
@@ -2245,6 +2500,8 @@ export async function cancelProject(
     });
 
     revalidatePath("/admin/admin-project");
+    revalidatePath("/user/transactions");
+    revalidatePath("/admin/transactions");
     return { success: true, project: plainProject };
   } catch (error) {
     console.error("Error cancelling project:", error);
@@ -2257,7 +2514,7 @@ export async function cancelProject(
   }
 }
 
-// Complete a project
+// MODIFIED: Complete a project - NOW WITH PAYMENT STATUS CHECK
 export async function completeProject(
   projectId: string
 ): Promise<UpdateProjectResponse> {
@@ -2274,6 +2531,63 @@ export async function completeProject(
     const project = await Project.findOne({ project_id: projectId });
     if (!project) {
       return { success: false, error: "Project not found" };
+    }
+
+    // 🔍 CHECK PAYMENT STATUS BEFORE COMPLETING PROJECT
+    console.log(
+      `🔍 Checking payment status before completing project: ${projectId}`
+    );
+    const paymentStatus = await checkProjectPaymentStatus(projectId);
+
+    // Check for pending transactions
+    if (paymentStatus.hasPendingTransactions) {
+      // Get pending transaction count for better error message
+      const pendingCount = await Transaction.countDocuments({
+        project_id: projectId,
+        status: "pending",
+      });
+
+      console.log(
+        `❌ Cannot complete project: Has ${pendingCount} pending transaction(s)`
+      );
+      return {
+        success: false,
+        error: `Cannot complete project: There ${pendingCount === 1 ? "is" : "are"} ${pendingCount} pending transaction${pendingCount === 1 ? "" : "s"}. Please mark all transactions as paid or cancel them before completing the project.`,
+      };
+    }
+
+    // Check for remaining balance using the paymentSummary if available
+    let remainingBalance = 0;
+    if (paymentStatus.paymentSummary) {
+      remainingBalance = paymentStatus.paymentSummary.remaining_balance;
+    } else {
+      // Fallback: calculate from payment summary function
+      const paymentSummary = await getProjectPaymentSummary(projectId);
+      remainingBalance = paymentSummary?.remaining_balance || 0;
+    }
+
+    if (remainingBalance > 0) {
+      console.log(
+        `❌ Cannot complete project: Has remaining balance of ₱${remainingBalance}`
+      );
+      return {
+        success: false,
+        error: `Cannot complete project: There is an unpaid balance of ₱${remainingBalance.toLocaleString("en-PH")}. Please ensure all payments are received before completing the project.`,
+      };
+    }
+
+    // Log payment status for debugging
+    if (paymentStatus.paymentSummary) {
+      console.log(`📊 Project payment status before completion:`, {
+        totalCost: paymentStatus.paymentSummary.total_cost,
+        totalPaid: paymentStatus.paymentSummary.total_paid,
+        totalPending: paymentStatus.paymentSummary.total_pending,
+        remainingBalance: paymentStatus.paymentSummary.remaining_balance,
+      });
+    } else {
+      console.log(
+        `📊 No detailed payment summary available for project ${projectId}`
+      );
     }
 
     // Update project status to "completed"
@@ -2295,16 +2609,23 @@ export async function completeProject(
 
     // Create project completion notification
     if (userDetails) {
+      let paymentInfo = "All payments completed.";
+
+      if (paymentStatus.paymentSummary) {
+        paymentInfo = `All payments completed. Total project cost: ₱${paymentStatus.paymentSummary.total_cost.toLocaleString("en-PH")}, Total paid: ₱${paymentStatus.paymentSummary.total_paid.toLocaleString("en-PH")}`;
+      }
+
       await createProjectNotification(
         updatedProject,
         userDetails,
         "project_completed",
         "Project Completed",
-        `Project "${project.name}" has been completed successfully`,
+        `Project "${project.name}" has been completed successfully. ${paymentInfo}`,
         {
           previousStatus: project.status,
           newStatus: "completed",
           completedAt: new Date().toISOString(),
+          paymentSummary: paymentStatus.paymentSummary,
         }
       );
     }
@@ -2335,6 +2656,8 @@ export async function completeProject(
 
     revalidatePath("/admin/admin-project");
     revalidatePath("/user/projects");
+    revalidatePath("/admin/transactions");
+    revalidatePath("/user/transactions");
     return { success: true, project: plainProject };
   } catch (error) {
     console.error("Error completing project:", error);

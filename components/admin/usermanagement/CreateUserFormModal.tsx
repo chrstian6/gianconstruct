@@ -1,7 +1,7 @@
 // components/admin/usermanagement/CreateUserFormModal.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,9 +21,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Info } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertCircle,
+  Info,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Shield,
+  UserPlus,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { toast } from "sonner";
-import { createUser } from "@/action/userManagement";
+import { createUser, checkEmailAvailability } from "@/action/userManagement";
 import { useModalStore } from "@/lib/stores";
 
 export function CreateUserFormModal() {
@@ -42,7 +58,22 @@ export function CreateUserFormModal() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null);
   const [showValidationAlert, setShowValidationAlert] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Define valid roles and display names inline
+  const userRoles = {
+    user: "User",
+    project_manager: "Project Manager",
+    admin: "Administrator",
+  };
+
+  const availableRoles = Object.keys(userRoles);
+  const formatRoleDisplay = (role: string): string =>
+    userRoles[role as keyof typeof userRoles] || role;
 
   // Reset form when modal opens with new data
   useEffect(() => {
@@ -71,9 +102,96 @@ export function CreateUserFormModal() {
         });
       }
       setErrors({});
+      setEmailAvailable(null);
       setShowValidationAlert(false);
     }
   }, [isCreateAccountOpen, createAccountData]);
+
+  // Check email availability using server action
+  const checkEmail = useCallback(async (email: string) => {
+    if (!email) {
+      setEmailAvailable(null);
+      return;
+    }
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailAvailable(null);
+      setErrors((prev) => ({
+        ...prev,
+        email: "Please enter a valid email address",
+      }));
+      return;
+    }
+
+    setIsCheckingEmail(true);
+    try {
+      const result = await checkEmailAvailability(email);
+
+      if (result.error) {
+        // Handle validation errors
+        setEmailAvailable(null);
+        if (result.error === "Invalid email format") {
+          setErrors((prev) => ({
+            ...prev,
+            email: "Please enter a valid email address",
+          }));
+        } else {
+          setErrors((prev) => ({ ...prev, email: "" }));
+        }
+      } else {
+        setEmailAvailable(result.available);
+
+        if (!result.available) {
+          setErrors((prev) => ({ ...prev, email: "Email already in use" }));
+        } else {
+          setErrors((prev) => ({ ...prev, email: "" }));
+        }
+      }
+    } catch (error) {
+      console.error("Error checking email:", error);
+      // Don't block on network errors, just show unknown status
+      setEmailAvailable(null);
+      setErrors((prev) => ({ ...prev, email: "" }));
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  }, []);
+
+  // Debounced email check
+  const debouncedCheckEmail = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout;
+
+      return (email: string) => {
+        clearTimeout(timeoutId);
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          setEmailAvailable(null);
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setErrors((prev) => ({
+              ...prev,
+              email: "Please enter a valid email address",
+            }));
+          } else {
+            setErrors((prev) => ({ ...prev, email: "" }));
+          }
+          return;
+        }
+
+        timeoutId = setTimeout(() => {
+          checkEmail(email);
+        }, 500);
+      };
+    })(),
+    [checkEmail]
+  );
+
+  // Check email on change
+  useEffect(() => {
+    debouncedCheckEmail(newUser.email);
+  }, [newUser.email, debouncedCheckEmail]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -89,7 +207,16 @@ export function CreateUserFormModal() {
       setNewUser((prev) => ({ ...prev, [name]: value }));
     }
 
-    setErrors((prev) => ({ ...prev, [name]: "", general: "" }));
+    // Clear validation errors when user types
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+
+    // Clear general errors
+    if (errors.general) {
+      setErrors((prev) => ({ ...prev, general: "" }));
+    }
+
     // Hide validation alert when user starts typing
     setShowValidationAlert(false);
   };
@@ -99,6 +226,20 @@ export function CreateUserFormModal() {
     setErrors((prev) => ({ ...prev, role: "", general: "" }));
     setShowValidationAlert(false);
   };
+
+  // Real-time password validation
+  useEffect(() => {
+    if (newUser.password && newUser.confirmPassword) {
+      if (newUser.password !== newUser.confirmPassword) {
+        setErrors((prev) => ({
+          ...prev,
+          confirmPassword: "Passwords do not match",
+        }));
+      } else {
+        setErrors((prev) => ({ ...prev, confirmPassword: "" }));
+      }
+    }
+  }, [newUser.password, newUser.confirmPassword]);
 
   const validateForm = () => {
     const validationErrors: Record<string, string> = {};
@@ -116,6 +257,14 @@ export function CreateUserFormModal() {
     if (newUser.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
       validationErrors.email = "Please enter a valid email address";
     }
+
+    // Check email availability - only if we know it's taken
+    if (newUser.email && emailAvailable === false) {
+      validationErrors.email = "Email already in use";
+    }
+
+    // Don't block submission if email check is still loading or failed
+    // Server-side validation in createUser will catch duplicates
 
     // Validate password
     if (newUser.password && newUser.password.length < 6) {
@@ -178,7 +327,7 @@ export function CreateUserFormModal() {
         contactNo: newUser.contactNo,
         address: newUser.address,
         password: newUser.password,
-        role: newUser.role,
+        role: newUser.role as any,
       });
 
       if (result.success && result.user) {
@@ -194,6 +343,7 @@ export function CreateUserFormModal() {
           role: "user",
         });
         setErrors({});
+        setEmailAvailable(null);
         setShowValidationAlert(false);
 
         // Refresh the page to show the new user
@@ -214,342 +364,468 @@ export function CreateUserFormModal() {
     }
   };
 
-  // Calculate form completion percentage
-  const calculateCompletion = () => {
-    const requiredFields = [
-      "firstName",
-      "lastName",
-      "email",
-      "password",
-      "confirmPassword",
-    ];
-    const filledFields = requiredFields.filter(
-      (field) =>
-        newUser[field as keyof typeof newUser]?.toString().trim().length > 0
-    ).length;
-
-    return Math.round((filledFields / requiredFields.length) * 100);
+  const isFormValid = () => {
+    const validationErrors = validateForm();
+    return Object.keys(validationErrors).length === 0;
   };
-
-  const completionPercentage = calculateCompletion();
 
   return (
     <Dialog open={isCreateAccountOpen} onOpenChange={setIsCreateAccountOpen}>
-      <DialogContent className="sm:max-w-[540px] p-0 gap-0 rounded-lg border border-gray-200 shadow-lg">
-        {/* Header */}
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-100">
-          <div className="flex items-start justify-between">
+      <DialogContent className="sm:max-w-[550px] bg-card p-0 border-border max-h-[85vh] flex flex-col">
+        <DialogHeader className="p-6 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-muted">
+              <UserPlus className="h-5 w-5 text-foreground" />
+            </div>
             <div>
-              <DialogTitle className="text-xl font-semibold text-gray-900">
+              <DialogTitle className="text-xl font-semibold text-foreground">
                 {createAccountData
                   ? "Create Account for Guest"
                   : "Create New User"}
               </DialogTitle>
-              <p className="text-sm text-gray-500 mt-1">
+              <DialogDescription className="text-muted-foreground">
                 Add a new user to the system
-              </p>
+              </DialogDescription>
             </div>
-            <div className="text-right">
-              <div className="text-xs font-medium text-gray-500">
-                Form completion
-              </div>
-              <div className="text-lg font-semibold text-gray-900">
-                {completionPercentage}%
-              </div>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="mt-4 w-full bg-gray-200 rounded-full h-1.5">
-            <div
-              className="bg-gray-900 h-1.5 rounded-full transition-all duration-300"
-              style={{ width: `${completionPercentage}%` }}
-            />
           </div>
         </DialogHeader>
 
-        {/* Form Content */}
-        <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
-          {/* Name Row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2" id="firstName">
-              <Label
-                htmlFor="firstName"
-                className="text-sm font-medium text-gray-700"
-              >
-                First name
-              </Label>
-              <Input
-                id="firstName"
-                name="firstName"
-                placeholder="Enter first name"
-                value={newUser.firstName}
-                onChange={handleInputChange}
-                className={`h-10 px-3 text-sm ${errors.firstName ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-                disabled={isLoading}
-              />
-              {errors.firstName && (
-                <p className="text-xs text-red-500 pt-1">{errors.firstName}</p>
-              )}
-            </div>
-            <div className="space-y-2" id="lastName">
-              <Label
-                htmlFor="lastName"
-                className="text-sm font-medium text-gray-700"
-              >
-                Last name
-              </Label>
-              <Input
-                id="lastName"
-                name="lastName"
-                placeholder="Enter last name"
-                value={newUser.lastName}
-                onChange={handleInputChange}
-                className={`h-10 px-3 text-sm ${errors.lastName ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-                disabled={isLoading}
-              />
-              {errors.lastName && (
-                <p className="text-xs text-red-500 pt-1">{errors.lastName}</p>
-              )}
-            </div>
-          </div>
+        <Separator />
 
-          {/* Email */}
-          <div className="space-y-2" id="email">
-            <Label
-              htmlFor="email"
-              className="text-sm font-medium text-gray-700"
-            >
-              Email address
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="user@example.com"
-              value={newUser.email}
-              onChange={handleInputChange}
-              className={`h-10 px-3 text-sm ${errors.email ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-              disabled={isLoading || !!createAccountData}
-            />
-            {errors.email && (
-              <p className="text-xs text-red-500 pt-1">{errors.email}</p>
-            )}
-          </div>
-
-          {/* Role */}
-          <div className="space-y-2">
-            <Label htmlFor="role" className="text-sm font-medium text-gray-700">
-              User role
-            </Label>
-            <Select
-              value={newUser.role}
-              onValueChange={handleRoleChange}
-              disabled={isLoading}
-            >
-              <SelectTrigger
-                className={`h-10 px-3 text-sm ${errors.role ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-              >
-                <SelectValue placeholder="Select user role" />
-              </SelectTrigger>
-              <SelectContent className="text-sm">
-                <SelectItem value="user" className="text-sm py-2">
-                  User
-                </SelectItem>
-                <SelectItem value="admin" className="text-sm py-2">
-                  Administrator
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.role && (
-              <p className="text-xs text-red-500 pt-1">{errors.role}</p>
-            )}
-            <p className="text-xs text-gray-500 pt-1">
-              Administrators have full system access
-            </p>
-          </div>
-
-          {/* Contact Number */}
-          <div className="space-y-2" id="contactNo">
-            <div className="flex items-center justify-between">
-              <Label
-                htmlFor="contactNo"
-                className="text-sm font-medium text-gray-700"
-              >
-                Phone number
-              </Label>
-              <span
-                className={`text-xs ${newUser.contactNo.length === 11 ? "text-green-600" : "text-gray-500"}`}
-              >
-                {newUser.contactNo.length}/11
-              </span>
-            </div>
-            <Input
-              id="contactNo"
-              name="contactNo"
-              type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="09XXXXXXXXX"
-              value={newUser.contactNo}
-              onChange={handleInputChange}
-              className={`h-10 px-3 text-sm ${errors.contactNo ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-              disabled={isLoading}
-              maxLength={11}
-            />
-            {errors.contactNo ? (
-              <p className="text-xs text-red-500 pt-1">{errors.contactNo}</p>
-            ) : (
-              <p className="text-xs text-gray-500 pt-1">
-                Enter 11-digit Philippine phone number starting with 09
-              </p>
-            )}
-          </div>
-
-          {/* Address */}
-          <div className="space-y-2">
-            <Label
-              htmlFor="address"
-              className="text-sm font-medium text-gray-700"
-            >
-              Address
-            </Label>
-            <Input
-              id="address"
-              name="address"
-              placeholder="Enter full address (optional)"
-              value={newUser.address}
-              onChange={handleInputChange}
-              className="h-10 px-3 text-sm border-gray-300 focus-visible:ring-gray-200"
-              disabled={isLoading}
-            />
-          </div>
-
-          {/* Password */}
-          <div className="space-y-2" id="password">
-            <Label
-              htmlFor="password"
-              className="text-sm font-medium text-gray-700"
-            >
-              Temporary password
-            </Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="Create a temporary password"
-              value={newUser.password}
-              onChange={handleInputChange}
-              className={`h-10 px-3 text-sm ${errors.password ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-              disabled={isLoading}
-            />
-            {errors.password && (
-              <p className="text-xs text-red-500 pt-1">{errors.password}</p>
-            )}
-            <p className="text-xs text-gray-500 pt-1">
-              Minimum 6 characters. User will change on first login.
-            </p>
-          </div>
-
-          {/* Confirm Password */}
-          <div className="space-y-2" id="confirmPassword">
-            <Label
-              htmlFor="confirmPassword"
-              className="text-sm font-medium text-gray-700"
-            >
-              Confirm password
-            </Label>
-            <Input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              placeholder="Re-enter the temporary password"
-              value={newUser.confirmPassword}
-              onChange={handleInputChange}
-              className={`h-10 px-3 text-sm ${errors.confirmPassword ? "border-red-300 focus-visible:ring-red-200" : "border-gray-300 focus-visible:ring-gray-200"}`}
-              disabled={isLoading}
-            />
-            {errors.confirmPassword && (
-              <p className="text-xs text-red-500 pt-1">
-                {errors.confirmPassword}
-              </p>
-            )}
-          </div>
-
-          {/* Validation Alert */}
-          {showValidationAlert && Object.keys(errors).length > 0 && (
-            <Alert className="border-red-200 bg-red-50 mt-4">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-sm text-red-600">
-                <div className="font-medium mb-1">
-                  Please fix the following issues:
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="space-y-6">
+            {/* User Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-muted">
+                  <User className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <ul className="list-disc pl-4 space-y-1">
-                  {errors.firstName && <li>First name: {errors.firstName}</li>}
-                  {errors.lastName && <li>Last name: {errors.lastName}</li>}
-                  {errors.email && <li>Email: {errors.email}</li>}
+                <h3 className="text-sm font-medium text-foreground">
+                  Personal Information
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="firstName"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    First Name
+                  </Label>
+                  <Input
+                    id="firstName"
+                    name="firstName"
+                    value={newUser.firstName}
+                    onChange={handleInputChange}
+                    className={`border-border focus:border-foreground ${errors.firstName ? "border-red-500" : ""}`}
+                    placeholder="Enter first name"
+                    disabled={isLoading}
+                  />
+                  {errors.firstName && (
+                    <p className="text-xs text-red-500 pt-1">
+                      {errors.firstName}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="lastName"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Last Name
+                  </Label>
+                  <Input
+                    id="lastName"
+                    name="lastName"
+                    value={newUser.lastName}
+                    onChange={handleInputChange}
+                    className={`border-border focus:border-foreground ${errors.lastName ? "border-red-500" : ""}`}
+                    placeholder="Enter last name"
+                    disabled={isLoading}
+                  />
+                  {errors.lastName && (
+                    <p className="text-xs text-red-500 pt-1">
+                      {errors.lastName}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-muted">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-medium text-foreground">
+                  Contact Information
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="email"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Email Address
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={newUser.email}
+                      onChange={handleInputChange}
+                      className={`border-border focus:border-foreground pr-10 ${errors.email ? "border-red-500" : emailAvailable === true ? "border-emerald-500" : emailAvailable === false ? "border-red-500" : ""}`}
+                      placeholder="Enter email address"
+                      disabled={isLoading || !!createAccountData}
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      {isCheckingEmail ? (
+                        <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                      ) : emailAvailable === true ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      ) : emailAvailable === false ? (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      ) : null}
+                    </div>
+                  </div>
+                  {errors.email && (
+                    <p className="text-xs text-red-500 pt-1">{errors.email}</p>
+                  )}
+                  {emailAvailable === true && (
+                    <p className="text-xs text-emerald-600 pt-1 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      Email is available
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="contactNo"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Contact Number
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="contactNo"
+                      name="contactNo"
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={newUser.contactNo}
+                      onChange={handleInputChange}
+                      className={`border-border focus:border-foreground flex-1 ${errors.contactNo ? "border-red-500" : ""}`}
+                      placeholder="09XXXXXXXXX"
+                      disabled={isLoading}
+                      maxLength={11}
+                    />
+                    <div className="text-xs text-muted-foreground min-w-[60px] text-right">
+                      {newUser.contactNo.length}/11
+                    </div>
+                  </div>
                   {errors.contactNo && (
-                    <li>Phone number: {errors.contactNo}</li>
+                    <p className="text-xs text-red-500 pt-1">
+                      {errors.contactNo}
+                    </p>
                   )}
-                  {errors.password && <li>Password: {errors.password}</li>}
+                  <p className="text-xs text-muted-foreground">
+                    Enter 11-digit Philippine phone number starting with 09
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="address"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Address
+                  </Label>
+                  <Input
+                    id="address"
+                    name="address"
+                    value={newUser.address}
+                    onChange={handleInputChange}
+                    className="border-border focus:border-foreground"
+                    placeholder="Enter full address (optional)"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Account Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-muted">
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-medium text-foreground">
+                  Account Information
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Role Selection Card */}
+                <Card className="border-border bg-muted/50">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-muted-foreground" />
+                        <Label className="text-sm font-medium text-foreground">
+                          Role
+                        </Label>
+                      </div>
+                      <Select
+                        value={newUser.role}
+                        onValueChange={handleRoleChange}
+                        disabled={isLoading}
+                      >
+                        <SelectTrigger className="border-border">
+                          <SelectValue placeholder="Select user role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableRoles.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {formatRoleDisplay(role)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.role && (
+                        <p className="text-xs text-red-500 pt-1">
+                          {errors.role}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Password Requirements Card */}
+                <Card className="border-border bg-muted/50">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1 rounded bg-blue-50">
+                          <div className="h-4 w-4 rounded-full bg-blue-600" />
+                        </div>
+                        <Label className="text-sm font-medium text-foreground">
+                          Password Requirements
+                        </Label>
+                      </div>
+                      <ul className="space-y-1 text-xs text-muted-foreground">
+                        <li
+                          className={`flex items-center gap-1 ${newUser.password.length >= 6 ? "text-emerald-600" : ""}`}
+                        >
+                          {newUser.password.length >= 6 ? (
+                            <CheckCircle className="h-3 w-3" />
+                          ) : (
+                            <div className="h-3 w-3 rounded-full border border-muted-foreground" />
+                          )}
+                          At least 6 characters
+                        </li>
+                        <li
+                          className={`flex items-center gap-1 ${newUser.password === newUser.confirmPassword && newUser.confirmPassword ? "text-emerald-600" : ""}`}
+                        >
+                          {newUser.password === newUser.confirmPassword &&
+                          newUser.confirmPassword ? (
+                            <CheckCircle className="h-3 w-3" />
+                          ) : (
+                            <div className="h-3 w-3 rounded-full border border-muted-foreground" />
+                          )}
+                          Passwords match
+                        </li>
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Password Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="password"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Temporary Password
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      value={newUser.password}
+                      onChange={handleInputChange}
+                      className={`border-border focus:border-foreground pr-10 ${errors.password ? "border-red-500" : ""}`}
+                      placeholder="Create temporary password"
+                      disabled={isLoading}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                      disabled={isLoading}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  {errors.password && (
+                    <p className="text-xs text-red-500 pt-1">
+                      {errors.password}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="confirmPassword"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Confirm Password
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={newUser.confirmPassword}
+                      onChange={handleInputChange}
+                      className={`border-border focus:border-foreground pr-10 ${errors.confirmPassword ? "border-red-500" : newUser.password === newUser.confirmPassword && newUser.confirmPassword ? "border-emerald-500" : ""}`}
+                      placeholder="Re-enter password"
+                      disabled={isLoading}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      disabled={isLoading}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
                   {errors.confirmPassword && (
-                    <li>Confirm password: {errors.confirmPassword}</li>
+                    <p className="text-xs text-red-500 pt-1">
+                      {errors.confirmPassword}
+                    </p>
                   )}
-                  {errors.role && <li>Role: {errors.role}</li>}
-                  {errors.general && <li>{errors.general}</li>}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
+                  {newUser.password === newUser.confirmPassword &&
+                    newUser.confirmPassword && (
+                      <p className="text-xs text-emerald-600 pt-1 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Passwords match
+                      </p>
+                    )}
+                </div>
+              </div>
+            </div>
 
-        {/* Information Alert */}
-        <div className="px-6 py-3 border-t border-gray-100 bg-blue-50/50">
-          <Alert className="border-blue-200 bg-blue-50">
-            <Info className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-xs text-blue-600">
-              <span className="font-medium">Note:</span> All fields are required
-              except address and phone number. Phone number must be 11 digits
-              starting with 09. User will receive credentials via email and must
-              change password on first login.
-            </AlertDescription>
-          </Alert>
-        </div>
+            {/* Information Alert */}
+            <div className="space-y-4">
+              <Alert className="border-blue-200 bg-blue-50">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm text-blue-700">
+                  <div className="font-medium mb-1">Important Information:</div>
+                  <ul className="list-disc pl-4 space-y-1 text-xs">
+                    <li>All fields except address are required</li>
+                    <li>Phone number must be 11 digits starting with 09</li>
+                    <li>User will receive credentials via email</li>
+                    <li>Password must be changed on first login</li>
+                    <li>Account will be automatically verified</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
 
-        {/* Footer */}
-        <DialogFooter className="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
-          <div className="flex items-center justify-between w-full">
-            <div className="text-xs text-gray-500">
-              {completionPercentage < 100 ? (
-                <span>Complete all required fields to create user</span>
-              ) : (
-                <span className="text-green-600 font-medium">
-                  All required fields completed ✓
-                </span>
+              {/* Validation Alert */}
+              {showValidationAlert && Object.keys(errors).length > 0 && (
+                <Alert className="border-red-200 bg-red-50">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-sm text-red-600">
+                    <div className="font-medium mb-1">
+                      Please fix the following issues:
+                    </div>
+                    <ul className="list-disc pl-4 space-y-1 text-xs">
+                      {errors.firstName && (
+                        <li>First name: {errors.firstName}</li>
+                      )}
+                      {errors.lastName && <li>Last name: {errors.lastName}</li>}
+                      {errors.email && <li>Email: {errors.email}</li>}
+                      {errors.contactNo && (
+                        <li>Phone number: {errors.contactNo}</li>
+                      )}
+                      {errors.password && <li>Password: {errors.password}</li>}
+                      {errors.confirmPassword && (
+                        <li>Confirm password: {errors.confirmPassword}</li>
+                      )}
+                      {errors.general && <li>{errors.general}</li>}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
               )}
             </div>
-            <div className="flex items-center gap-3">
+          </div>
+        </div>
+
+        <Separator />
+
+        <DialogFooter className="p-4 sm:p-6 bg-card">
+          <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
+            <div className="text-sm text-muted-foreground">
+              {isFormValid() ? (
+                <div className="flex items-center gap-2 text-emerald-600">
+                  <CheckCircle className="h-4 w-4" />
+                  All requirements met
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-amber-600">
+                  <AlertCircle className="h-4 w-4" />
+                  Complete all required fields
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Button
-                variant="ghost"
+                variant="outline"
                 onClick={() => setIsCreateAccountOpen(false)}
-                className="h-9 px-4 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                className="flex-1 sm:flex-none border-border hover:bg-accent"
                 disabled={isLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleCreateUser}
-                className={`h-9 px-5 text-sm ${completionPercentage < 100 ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-gray-900 text-white hover:bg-gray-800 focus:bg-gray-800"}`}
-                disabled={isLoading || completionPercentage < 100}
+                className="flex-1 sm:flex-none bg-foreground hover:bg-foreground/90 text-background"
+                disabled={isLoading || !isFormValid()}
                 title={
-                  completionPercentage < 100
+                  !isFormValid()
                     ? "Complete all required fields"
                     : "Create new user"
                 }
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-background border-t-transparent rounded-full animate-spin" />
                     Creating...
                   </div>
                 ) : (

@@ -3,15 +3,7 @@
 
 import { IInventory } from "@/types/Inventory";
 import { InventoryTable } from "@/components/admin/inventory/Table";
-import { InventoryGrid } from "@/components/admin/inventory/InventoryGrid";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Search,
@@ -189,21 +181,52 @@ export function MaterialsView({
   };
 
   return (
-    <>
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Inventory</h2>
+          <p className="text-sm text-gray-600">Manage your inventory items</p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={onExportPDF}
+            className="gap-2 bg-gray-800 hover:bg-gray-900"
+            disabled={loading || filteredItems.length === 0}
+            title={filteredItems.length === 0 ? "No items to export" : ""}
+          >
+            <FileText className="h-4 w-4" />
+            Export PDF
+          </Button>
+          <Button
+            onClick={onAddItem}
+            variant="default"
+            size="sm"
+            className="whitespace-nowrap bg-red-600 hover:bg-red-700"
+            disabled={loading}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add Item
+          </Button>
+        </div>
+      </div>
+
       {/* Search and Filter Bar */}
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search inventory..."
+              placeholder="Search items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-10 rounded-sm border-gray-200 border-1 border-b-0 font-geist h-8 text-sm"
+              className="pl-10 pr-10 w-full"
             />
             {searchTerm && (
               <X
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 cursor-pointer hover:text-gray-700"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 cursor-pointer hover:text-gray-600"
                 onClick={() => setSearchTerm("")}
               />
             )}
@@ -212,9 +235,9 @@ export function MaterialsView({
           <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                className="rounded-sm gap-2 font-geist"
+                className="gap-2 border-gray-300"
                 disabled={loading}
               >
                 <Filter className="h-4 w-4" />
@@ -222,17 +245,14 @@ export function MaterialsView({
                 {hasActiveFilters && (
                   <Badge
                     variant="secondary"
-                    className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center bg-gray-900 text-white"
+                    className="ml-1 rounded-full h-5 w-5 p-0 flex items-center justify-center bg-gray-800 text-white"
                   >
                     !
                   </Badge>
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-56 bg-white font-geist"
-              align="start"
-            >
+            <DropdownMenuContent className="w-56" align="start">
               <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
               <DropdownMenuGroup>
                 <DropdownMenuItem
@@ -303,13 +323,14 @@ export function MaterialsView({
               variant="ghost"
               size="sm"
               onClick={onClearFilters}
-              className="rounded-sm text-gray-600 hover:text-gray-900 font-geist"
+              className="text-gray-600 hover:text-gray-900"
             >
               Clear
               <X className="ml-1 h-4 w-4" />
             </Button>
           )}
         </div>
+
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -331,287 +352,229 @@ export function MaterialsView({
           >
             <Grid3X3 className="h-4 w-4" />
           </Button>
-          <Button
-            onClick={onAddItem}
-            variant="default"
-            size="sm"
-            className="rounded-sm whitespace-nowrap font-geist"
-            disabled={loading}
-          >
-            <Plus className="mr-2 h-4 w-4" /> Add Item
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={onExportPDF}
-            className="rounded-sm font-geist gap-2 bg-red-600 hover:bg-red-700"
-            disabled={loading || filteredItems.length === 0}
-            title={filteredItems.length === 0 ? "No items to export" : ""}
-          >
-            <FileText className="h-4 w-4" />
-            Export PDF
-          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                Columns <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.id}
+                onCheckedChange={() => toggleColumnVisibility("id")}
+              >
+                Product ID
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.name}
+                onCheckedChange={() => toggleColumnVisibility("name")}
+              >
+                Product Name
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.category}
+                onCheckedChange={() => toggleColumnVisibility("category")}
+              >
+                Category
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.quantity}
+                onCheckedChange={() => toggleColumnVisibility("quantity")}
+              >
+                Quantity
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.unit}
+                onCheckedChange={() => toggleColumnVisibility("unit")}
+              >
+                Unit
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.unitCost}
+                onCheckedChange={() => toggleColumnVisibility("unitCost")}
+              >
+                Base Price
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.salePrice}
+                onCheckedChange={() => toggleColumnVisibility("salePrice")}
+              >
+                Sale Price
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.totalCapital}
+                onCheckedChange={() => toggleColumnVisibility("totalCapital")}
+              >
+                Total Capital
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.totalValue}
+                onCheckedChange={() => toggleColumnVisibility("totalValue")}
+              >
+                Total Value
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.location}
+                onCheckedChange={() => toggleColumnVisibility("location")}
+              >
+                Location
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.supplier}
+                onCheckedChange={() => toggleColumnVisibility("supplier")}
+              >
+                Supplier
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.reorderPoint}
+                onCheckedChange={() => toggleColumnVisibility("reorderPoint")}
+              >
+                Reorder Point
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.status}
+                onCheckedChange={() => toggleColumnVisibility("status")}
+              >
+                Status
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={columnVisibility.actions}
+                onCheckedChange={() => toggleColumnVisibility("actions")}
+              >
+                Actions
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Inventory Table/Grid Section */}
+      {/* Empty State */}
       {filteredItems.length === 0 && !loading ? (
-        <Card className="max-w-md mx-auto shadow-none">
-          <CardContent className="pt-2">
-            <div className="text-center p-8">
-              <h3 className="text-xl font-semibold text-gray-900 font-geist">
-                No items found
-              </h3>
-              <p className="text-gray-600 mt-2 font-geist">
-                {hasActiveFilters
-                  ? "Try adjusting your filters or search query."
-                  : "No inventory items available. Add a new item to get started."}
-              </p>
-              {hasActiveFilters && (
-                <Button
-                  onClick={onClearFilters}
-                  variant="default"
-                  size="sm"
-                  className="mt-4 rounded-sm font-geist"
-                >
-                  Clear Filters
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="border border-gray-200 rounded-lg bg-white p-12 text-center">
+          <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Rows4 className="h-8 w-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            No inventory items found
+          </h3>
+          <p className="text-gray-600 max-w-sm mx-auto mb-6">
+            {hasActiveFilters
+              ? "Try adjusting your filters or search query."
+              : "No inventory items available. Add a new item to get started."}
+          </p>
+          {hasActiveFilters && (
+            <Button
+              onClick={onClearFilters}
+              variant="default"
+              size="sm"
+              className="mt-4"
+            >
+              Clear Filters
+            </Button>
+          )}
+        </div>
       ) : (
-        <Card className="w-full overflow-x-auto">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5">
-              <div>
-                <CardTitle className="text-foreground-900 font-geist">
-                  Inventory Items
-                </CardTitle>
-                <CardDescription className="font-geist">
-                  View and manage all inventory items in your system
-                  {hasActiveFilters && " (filtered)"}
-                </CardDescription>
+        <div className="space-y-4">
+          {/* Inventory Table */}
+          <div className="w-full">
+            <InventoryTable
+              items={currentItems}
+              loading={loading}
+              onDelete={onDeleteItem}
+              onEdit={onEditItem}
+              onViewDetails={onViewDetails}
+              columnVisibility={columnVisibility}
+            />
+          </div>
+
+          {/* Pagination - Always visible */}
+          {filteredItems.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <span>•</span>
+                <span>{filteredItems.length} total items</span>
               </div>
-              <div className="flex gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-sm font-geist gap-2"
-                    >
-                      Columns <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.id}
-                      onCheckedChange={() => toggleColumnVisibility("id")}
-                    >
-                      Product ID
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.name}
-                      onCheckedChange={() => toggleColumnVisibility("name")}
-                    >
-                      Product Name
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.category}
-                      onCheckedChange={() => toggleColumnVisibility("category")}
-                    >
-                      Category
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.quantity}
-                      onCheckedChange={() => toggleColumnVisibility("quantity")}
-                    >
-                      Quantity
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.unit}
-                      onCheckedChange={() => toggleColumnVisibility("unit")}
-                    >
-                      Unit
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.unitCost}
-                      onCheckedChange={() => toggleColumnVisibility("unitCost")}
-                    >
-                      Base Price
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.salePrice}
-                      onCheckedChange={() =>
-                        toggleColumnVisibility("salePrice")
-                      }
-                    >
-                      Sale Price
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.totalCapital}
-                      onCheckedChange={() =>
-                        toggleColumnVisibility("totalCapital")
-                      }
-                    >
-                      Total Capital
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.totalValue}
-                      onCheckedChange={() =>
-                        toggleColumnVisibility("totalValue")
-                      }
-                    >
-                      Total Value
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.location}
-                      onCheckedChange={() => toggleColumnVisibility("location")}
-                    >
-                      Location
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.supplier}
-                      onCheckedChange={() => toggleColumnVisibility("supplier")}
-                    >
-                      Supplier
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.reorderPoint}
-                      onCheckedChange={() =>
-                        toggleColumnVisibility("reorderPoint")
-                      }
-                    >
-                      Reorder Point
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.status}
-                      onCheckedChange={() => toggleColumnVisibility("status")}
-                    >
-                      Status
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={columnVisibility.actions}
-                      onCheckedChange={() => toggleColumnVisibility("actions")}
-                    >
-                      Actions
-                    </DropdownMenuCheckboxItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+
+              <div className="flex items-center gap-2">
+                {/* Previous Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {getPageNumbers().map((page, index) =>
+                    page === -1 || page === -2 ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="px-2 text-sm text-gray-500"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(page as number)}
+                        className={`h-8 w-8 p-0 text-xs ${
+                          currentPage === page ? "bg-gray-900 text-white" : ""
+                        }`}
+                      >
+                        {page}
+                      </Button>
+                    )
+                  )}
+                </div>
+
+                {/* Next Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Items Per Page Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Show:</span>
+                <Select
+                  value={itemsPerPage.toString()}
+                  onValueChange={(value) => {
+                    setItemsPerPage(Number(value));
+                    setCurrentPage(1); // Reset to first page
+                  }}
+                >
+                  <SelectTrigger className="w-[80px] h-8">
+                    <SelectValue placeholder={itemsPerPage} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-gray-600">per page</span>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="w-full rounded-sm border-none">
-              {viewMode === "table" ? (
-                <InventoryTable
-                  items={currentItems}
-                  loading={loading}
-                  onDelete={onDeleteItem}
-                  onEdit={onEditItem}
-                  onViewDetails={onViewDetails}
-                  columnVisibility={columnVisibility}
-                />
-              ) : (
-                <InventoryGrid
-                  items={currentItems}
-                  loading={loading}
-                  onDelete={onDeleteItem}
-                  onEdit={onEditItem}
-                  onViewDetails={onViewDetails}
-                />
-              )}
-            </div>
-
-            {/* Pagination - Always visible */}
-            {filteredItems.length > 0 && (
-              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <span>•</span>
-                  <span>{filteredItems.length} total items</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Previous Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePreviousPage}
-                    disabled={currentPage === 1}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-
-                  {/* Page Numbers */}
-                  <div className="flex items-center gap-1">
-                    {getPageNumbers().map((page, index) =>
-                      page === -1 || page === -2 ? (
-                        <span
-                          key={`ellipsis-${index}`}
-                          className="px-2 text-sm text-gray-500"
-                        >
-                          ...
-                        </span>
-                      ) : (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handlePageChange(page as number)}
-                          className={`h-8 w-8 p-0 text-xs ${
-                            currentPage === page ? "bg-gray-900 text-white" : ""
-                          }`}
-                        >
-                          {page}
-                        </Button>
-                      )
-                    )}
-                  </div>
-
-                  {/* Next Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextPage}
-                    disabled={currentPage === totalPages}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {/* Items Per Page Selector */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Show:</span>
-                  <Select
-                    value={itemsPerPage.toString()}
-                    onValueChange={(value) => {
-                      setItemsPerPage(Number(value));
-                      setCurrentPage(1); // Reset to first page
-                    }}
-                  >
-                    <SelectTrigger className="w-[80px] h-8">
-                      <SelectValue placeholder={itemsPerPage} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="text-sm text-gray-600">per page</span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          )}
+        </div>
       )}
-    </>
+    </div>
   );
 }

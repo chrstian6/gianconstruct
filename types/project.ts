@@ -219,3 +219,64 @@ export interface Milestone {
   created_at: Date;
   updated_at: Date;
 }
+
+// Add these interfaces to your existing types/project.ts file
+
+export interface ProjectAssignment {
+  _id: string;
+  assignment_id: string;
+  project_id: string;
+  project_manager_id: string;
+  assigned_by: string;
+  assignment_date: string;
+  status: "active" | "completed" | "transferred";
+  notes?: string;
+  transferred_to?: string;
+  transferred_date?: string;
+  completed_at?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectManager {
+  user_id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  contactNo?: string;
+  address: string;
+  avatar?: string;
+}
+
+export interface AssignedProject {
+  project: Project;
+  assignment: ProjectAssignment;
+  projectManager: ProjectManager;
+}
+
+// Zod schemas for validation
+export const ProjectAssignmentZodSchema = z.object({
+  _id: z.string(),
+  assignment_id: z.string(),
+  project_id: z.string(),
+  project_manager_id: z.string(),
+  assigned_by: z.string(),
+  assignment_date: z.string().datetime(),
+  status: z.enum(["active", "completed", "transferred"]),
+  notes: z.string().optional(),
+  transferred_to: z.string().optional(),
+  transferred_date: z.string().datetime().optional(),
+  completed_at: z.string().datetime().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const AssignProjectsZodSchema = z.object({
+  projectIds: z
+    .array(z.string())
+    .min(1, "At least one project must be selected"),
+  projectManagerId: z.string().min(1, "Project manager is required"),
+  notes: z.string().optional(),
+});
+
+export type AssignProjectsInput = z.infer<typeof AssignProjectsZodSchema>;

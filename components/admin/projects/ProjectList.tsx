@@ -22,6 +22,13 @@ import {
   ListFilter,
   ArrowUpDown,
   LayoutGrid,
+  Users,
+  Settings,
+  Calendar,
+  User,
+  CheckCircle,
+  XCircle,
+  Clock,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -48,10 +55,12 @@ import {
 } from "@/action/project";
 import { getUsers } from "@/action/userManagement";
 import { getProjectMilestones } from "@/action/milestone";
-import { Project, Milestone } from "@/types/project"; // Import Milestone from types
+import { Project, Milestone } from "@/types/project";
 import ProjectCard from "./ProjectCard";
 import CreateProjectModal from "./CreateProjectModal";
 import EditProjectModal from "./EditProjectModal";
+import AssignProjectsModal from "./AssignProjectsModal";
+import ManageAssignmentsModal from "./ManageAssignmentsModal"; // New import
 import ConfirmationModal from "@/components/ConfirmationModal";
 import NotFound from "../NotFound";
 import { useModalStore } from "@/lib/stores";
@@ -66,8 +75,6 @@ interface User {
   contactNo?: string;
   address: string;
 }
-
-// Remove the local Milestone interface since we're importing it from types
 
 type StatusFilter = "all" | "pending" | "active" | "completed" | "cancelled";
 type DateFilter = "any" | "today" | "thisWeek" | "thisMonth" | "overdue";
@@ -91,6 +98,11 @@ export default function ProjectList() {
   );
   const [isMultiDeleteModalOpen, setIsMultiDeleteModalOpen] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
+
+  // Assign Projects Modal state
+  const [isAssignProjectsOpen, setIsAssignProjectsOpen] = useState(false);
+  // Manage Assignments Modal state
+  const [isManageAssignmentsOpen, setIsManageAssignmentsOpen] = useState(false);
 
   // Milestones progress state
   const [milestonesProgress, setMilestonesProgress] = useState<{
@@ -313,7 +325,7 @@ export default function ProjectList() {
       if (response.success) {
         toast.success("Project deleted successfully");
         await fetchProjects();
-        await fetchStatusCounts(); // Refresh status counts after deletion
+        await fetchStatusCounts();
       } else {
         toast.error(response.error || "Failed to delete project");
       }
@@ -336,7 +348,7 @@ export default function ProjectList() {
           `Successfully deleted ${selectedProjects.size} project${selectedProjects.size > 1 ? "s" : ""}`
         );
         await fetchProjects();
-        await fetchStatusCounts(); // Refresh status counts after deletion
+        await fetchStatusCounts();
         setSelectedProjects(new Set());
         setIsSelectMode(false);
       } else {
@@ -359,7 +371,6 @@ export default function ProjectList() {
     setIsMultiDeleteModalOpen(false);
   }, []);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCancelProject = useCallback(
     async (project: Project) => {
       try {
@@ -367,7 +378,7 @@ export default function ProjectList() {
         if (response.success) {
           toast.success("Project cancelled successfully");
           await fetchProjects();
-          await fetchStatusCounts(); // Refresh status counts after cancellation
+          await fetchStatusCounts();
         } else {
           toast.error(response.error || "Failed to cancel project");
         }
@@ -389,14 +400,26 @@ export default function ProjectList() {
   const handleProjectUpdated = useCallback(
     async (updatedProject: Project) => {
       await fetchProjects();
-      await fetchStatusCounts(); // Refresh status counts after update
+      await fetchStatusCounts();
     },
     [fetchProjects, fetchStatusCounts]
   );
 
   const handleProjectCreated = useCallback(async () => {
     await fetchProjects();
-    await fetchStatusCounts(); // Refresh status counts after creation
+    await fetchStatusCounts();
+  }, [fetchProjects, fetchStatusCounts]);
+
+  const handleProjectsAssigned = useCallback(async () => {
+    toast.success("Projects assigned successfully!");
+    await fetchProjects();
+    await fetchStatusCounts();
+  }, [fetchProjects, fetchStatusCounts]);
+
+  const handleAssignmentsManaged = useCallback(async () => {
+    toast.success("Assignments updated successfully!");
+    await fetchProjects();
+    await fetchStatusCounts();
   }, [fetchProjects, fetchStatusCounts]);
 
   const getPageNumbers = useCallback(
@@ -491,16 +514,32 @@ export default function ProjectList() {
           {/* Top Row: Title & Primary Action */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              {/* Increased Text Size */}
               <h1 className="text-3xl font-bold tracking-tight text-zinc-900 font-geist">
                 Projects
               </h1>
-              {/* Replaced dynamic count with static description */}
               <p className="text-zinc-500 mt-1 text-sm font-medium font-geist">
                 Manage and organize your construction projects.
               </p>
             </div>
             <div className="flex items-center gap-3 w-full md:w-auto">
+              {/* Assign Projects Button */}
+              <Button
+                onClick={() => setIsAssignProjectsOpen(true)}
+                variant="outline"
+                className="border-zinc-300 hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 shadow-sm transition-all duration-200 font-medium px-5 h-10 rounded-lg w-full md:w-auto font-geist"
+              >
+                <Users className="mr-2 h-4 w-4" /> Assign Projects
+              </Button>
+
+              {/* Manage Assignments Button */}
+              <Button
+                onClick={() => setIsManageAssignmentsOpen(true)}
+                variant="outline"
+                className="border-zinc-300 hover:bg-zinc-50 text-zinc-700 hover:text-zinc-900 shadow-sm transition-all duration-200 font-medium px-5 h-10 rounded-lg w-full md:w-auto font-geist"
+              >
+                <Settings className="mr-2 h-4 w-4" /> Manage Assignments
+              </Button>
+
               <Button
                 onClick={() => setIsCreateProjectOpen(true)}
                 className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm transition-all duration-200 font-medium px-5 h-10 rounded-lg w-full md:w-auto font-geist"
@@ -858,6 +897,16 @@ export default function ProjectList() {
         users={users}
         onUpdate={handleProjectUpdated}
         onBackToUserSelection={() => {}}
+      />
+      <AssignProjectsModal
+        isOpen={isAssignProjectsOpen}
+        onClose={() => setIsAssignProjectsOpen(false)}
+        onProjectsAssigned={handleProjectsAssigned}
+      />
+      <ManageAssignmentsModal
+        isOpen={isManageAssignmentsOpen}
+        onClose={() => setIsManageAssignmentsOpen(false)}
+        onAssignmentsManaged={handleAssignmentsManaged}
       />
       <ConfirmationModal
         isOpen={isDeleteModalOpen}
