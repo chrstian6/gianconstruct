@@ -26,6 +26,7 @@ import {
   Target,
   ChevronLeft,
   ChevronRight,
+  Package,
 } from "lucide-react";
 import { Project, Task } from "@/types/project";
 import { updateProject } from "@/action/project";
@@ -67,6 +68,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import EditProjectModal from "@/components/admin/projects/EditProjectModal";
+import ManageInventoryModal from "@/components/admin/projects/ManageInventoryModal";
+import ProjectInventoryTab from "./details/ProjectInventoryTab";
 
 // --- Types ---
 interface User {
@@ -114,6 +117,7 @@ export default function ProjectDetails({
   // Modal States
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
+  const [isManageInventoryOpen, setIsManageInventoryOpen] = useState(false);
 
   // Edit Form State
   const [editedProject, setEditedProject] = useState({
@@ -460,6 +464,7 @@ export default function ProjectDetails({
   const tabs = [
     { id: "timeline", label: "Timeline", icon: Activity },
     { id: "milestones", label: "Milestones", icon: Target },
+    { id: "inventory", label: "Inventory", icon: Package },
     { id: "proposed-design", label: "Design", icon: Layout },
     { id: "client", label: "Client", icon: Users },
     { id: "details", label: "Details", icon: Info },
@@ -480,6 +485,11 @@ export default function ProjectDetails({
       onClick: handleAddMilestoneClick,
     },
     {
+      label: "Manage Inventory",
+      icon: Package,
+      onClick: () => setIsManageInventoryOpen(true),
+    },
+    {
       label: "Edit Project",
       icon: Edit,
       onClick: () => setIsEditProjectModalOpen(true),
@@ -492,7 +502,7 @@ export default function ProjectDetails({
   ];
 
   return (
-    <div className="flex flex-col min-h-screen font-geist bg-zinc-50">
+    <div className="flex flex-col min-h-screen font-geist bg-background">
       {/* Hidden File Input */}
       <Input
         type="file"
@@ -556,6 +566,16 @@ export default function ProjectDetails({
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Milestone
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
+                onClick={() => setIsManageInventoryOpen(true)}
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Manage Inventory
               </Button>
 
               <Button
@@ -844,6 +864,22 @@ export default function ProjectDetails({
                     <MilestonesTab projectId={project.project_id} />
                   </CardContent>
                 </Card>
+              )}
+
+              {activeTab === "inventory" && (
+                <div className="rounded-xl bg-white border border-zinc-200 p-4 md:p-6">
+                  <div className="mb-6">
+                    <h2 className="text-base md:text-lg font-semibold text-zinc-900">
+                      Project Inventory
+                    </h2>
+                    <p className="text-sm text-zinc-500 mt-1">
+                      Track and manage all materials transferred from main
+                      inventory to this project. View current stock, monitor low
+                      stock alerts, and manage inventory transactions.
+                    </p>
+                  </div>
+                  <ProjectInventoryTab projectId={project.project_id} />
+                </div>
               )}
 
               {activeTab === "proposed-design" && (
@@ -1142,6 +1178,16 @@ export default function ProjectDetails({
           users={users}
           onUpdate={handleProjectUpdate}
           onBackToUserSelection={handleBackToUserSelection}
+        />
+      )}
+
+      {/* Manage Inventory Modal */}
+      {project && (
+        <ManageInventoryModal
+          open={isManageInventoryOpen}
+          onOpenChange={setIsManageInventoryOpen}
+          projectId={project.project_id}
+          projectName={project.name}
         />
       )}
 

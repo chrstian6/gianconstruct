@@ -85,9 +85,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Fetch appointment stats
   const fetchAppointmentStats = async () => {
     try {
-      const result = await getAppointmentStats();
-      if (result.success && result.stats) {
-        setAppointmentStats(result.stats);
+      // Only fetch if user is NOT cashier
+      if (user?.role !== "cashier") {
+        const result = await getAppointmentStats();
+        if (result.success && result.stats) {
+          setAppointmentStats(result.stats);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch appointment stats:", error);
@@ -97,11 +100,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   useEffect(() => {
     fetchAppointmentStats();
 
-    // Set up interval to refresh stats every 30 seconds
-    const interval = setInterval(fetchAppointmentStats, 30000);
+    // Set up interval to refresh stats every 30 seconds only for non-cashier roles
+    let interval: NodeJS.Timeout | null = null;
+    if (user?.role !== "cashier") {
+      interval = setInterval(fetchAppointmentStats, 30000);
+    }
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [user?.role]); // Re-run when user role changes
 
   const handleLogout = async () => {
     try {
@@ -117,8 +125,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setIsLogoutModalOpen(true);
   };
 
-  const data = {
-    navMain: [
+  // Define menu items based on user role
+  const getMenuItems = (): MenuSection[] => {
+    const isCashier = user?.role === "cashier";
+
+    if (isCashier) {
+      // Cashier only sees Dashboard and Transactions
+      return [
+        {
+          section: "Main Navigation",
+          items: [
+            {
+              name: "Dashboard",
+              href: "/admin/admindashboard",
+              description: "Overview and analytics",
+            },
+            {
+              name: "Transactions",
+              href: "/admin/transaction",
+              description: "Process client payments and generate receipts",
+            },
+          ],
+        },
+      ];
+    }
+
+    // For all other roles (admin, project_manager, etc.), show full menu
+    return [
       {
         section: "Main Navigation",
         items: [
@@ -166,7 +199,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           },
         ],
       },
-    ],
+    ];
+  };
+
+  const data = {
+    navMain: getMenuItems(),
   };
 
   // Check if a menu item is active

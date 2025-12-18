@@ -2,10 +2,11 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 
-// Define valid roles
+// Define valid roles - ADDED CASHIER
 export const USER_ROLES = {
   USER: "user",
-  PROJECT_MANAGER: "project_manager", // Added project manager
+  PROJECT_MANAGER: "project_manager",
+  CASHIER: "cashier", // NEW ROLE
   ADMIN: "admin",
 } as const;
 

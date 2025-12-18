@@ -37,6 +37,7 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createUser, checkEmailAvailability } from "@/action/userManagement";
@@ -64,16 +65,31 @@ export function CreateUserFormModal() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Define valid roles and display names inline
+  // Define valid roles and display names inline - UPDATED WITH CASHIER
   const userRoles = {
     user: "User",
     project_manager: "Project Manager",
+    cashier: "Cashier",
     admin: "Administrator",
   };
 
   const availableRoles = Object.keys(userRoles);
   const formatRoleDisplay = (role: string): string =>
     userRoles[role as keyof typeof userRoles] || role;
+
+  // Get role icon
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case "admin":
+        return Shield;
+      case "project_manager":
+        return User;
+      case "cashier":
+        return Receipt;
+      default:
+        return User;
+    }
+  };
 
   // Reset form when modal opens with new data
   useEffect(() => {
@@ -320,6 +336,9 @@ export function CreateUserFormModal() {
     setIsLoading(true);
 
     try {
+      // Convert role to lowercase to match enum values in User model
+      const roleToSend = newUser.role.toLowerCase();
+
       const result = await createUser({
         firstName: newUser.firstName,
         lastName: newUser.lastName,
@@ -327,7 +346,7 @@ export function CreateUserFormModal() {
         contactNo: newUser.contactNo,
         address: newUser.address,
         password: newUser.password,
-        role: newUser.role as any,
+        role: roleToSend as any, // Send lowercase role
       });
 
       if (result.success && result.user) {
@@ -589,14 +608,28 @@ export function CreateUserFormModal() {
                         disabled={isLoading}
                       >
                         <SelectTrigger className="border-border">
-                          <SelectValue placeholder="Select user role" />
+                          <SelectValue placeholder="Select user role">
+                            <div className="flex items-center gap-2">
+                              {(() => {
+                                const Icon = getRoleIcon(newUser.role);
+                                return <Icon className="h-4 w-4" />;
+                              })()}
+                              {formatRoleDisplay(newUser.role)}
+                            </div>
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {availableRoles.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {formatRoleDisplay(role)}
-                            </SelectItem>
-                          ))}
+                          {availableRoles.map((role) => {
+                            const Icon = getRoleIcon(role);
+                            return (
+                              <SelectItem key={role} value={role}>
+                                <div className="flex items-center gap-2">
+                                  <Icon className="h-4 w-4" />
+                                  {formatRoleDisplay(role)}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       {errors.role && (

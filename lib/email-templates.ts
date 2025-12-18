@@ -399,7 +399,7 @@ export const EmailTemplates = {
     };
   },
 
-  // Internal notification templates
+  // Internal notification templates - FOR ADMIN TEAM ONLY
   internalAppointmentUpdate: (
     inquiry: any,
     type: string,
@@ -498,14 +498,43 @@ export const EmailTemplates = {
       completed: `Consultation Completed - ${inquiry.name} - ${formatDate(inquiry.preferredDate)}`,
     };
 
+    let adminMessage = "";
+    let adminNextSteps = "";
+
+    switch (type) {
+      case "confirmed":
+        adminMessage = `A client appointment has been confirmed in the system. Please review the details below and prepare for the upcoming consultation.<br><br><strong>Client:</strong> ${inquiry.name}<br><strong>Appointment:</strong> ${formatDate(inquiry.preferredDate)} at ${formatTime(inquiry.preferredTime)}<br><strong>Package:</strong> ${inquiry.design.name}`;
+        adminNextSteps =
+          "Please ensure all relevant team members are informed about this confirmed appointment. Prepare consultation materials and confirm resource availability for the scheduled date and time.";
+        break;
+      case "cancelled":
+        adminMessage = `A client appointment has been cancelled. Please update your schedule and records accordingly.<br><br><strong>Client:</strong> ${inquiry.name}<br><strong>Original Appointment:</strong> ${formatDate(inquiry.preferredDate)} at ${formatTime(inquiry.preferredTime)}<br><strong>Cancellation Reason:</strong> ${additionalData?.reason || "Not specified"}`;
+        adminNextSteps =
+          "Update team schedules and release any allocated resources. Consider following up with the client to understand their needs better and potentially reschedule in the future.";
+        break;
+      case "rescheduled":
+        adminMessage = `A client appointment has been rescheduled. Please note the new appointment details.<br><br><strong>Client:</strong> ${inquiry.name}<br><strong>New Appointment:</strong> ${formatDate(additionalData?.newDate || inquiry.preferredDate)} at ${formatTime(additionalData?.newTime || inquiry.preferredTime)}<br><strong>Previous Appointment:</strong> ${formatDate(inquiry.preferredDate)} at ${formatTime(inquiry.preferredTime)}`;
+        adminNextSteps =
+          "Update all team schedules and confirm resource availability for the new appointment time. Ensure calendar systems are updated to reflect the change.";
+        break;
+      case "completed":
+        adminMessage = `A client consultation has been completed. Please proceed with follow-up actions.<br><br><strong>Client:</strong> ${inquiry.name}<br><strong>Completed Appointment:</strong> ${formatDate(inquiry.preferredDate)} at ${formatTime(inquiry.preferredTime)}<br><strong>Consultation Package:</strong> ${inquiry.design.name}`;
+        adminNextSteps =
+          "Begin preparing the client proposal based on consultation notes. Schedule follow-up communication and assign team members for next steps in the client journey.";
+        break;
+      default:
+        adminMessage = `A client appointment update has been recorded in the system.`;
+        adminNextSteps =
+          "Review the appointment details and take appropriate action as needed.";
+    }
+
     return {
       subject: subjectMap[type],
       data: {
-        title: `Appointment ${status}`,
-        message: `A client appointment has been ${type} in the system. Please review the details below and ensure all relevant team members are informed about this update.<br><br>Appointment details:`,
+        title: `Appointment ${status} - Admin Notification`,
+        message: adminMessage,
         details,
-        nextSteps:
-          "Please ensure all relevant team members are informed about this appointment update and take any necessary follow-up actions.",
+        nextSteps: adminNextSteps,
         isInternal: true,
       },
     };
@@ -570,11 +599,11 @@ export const EmailTemplates = {
     return {
       subject: `New Consultation Inquiry - ${inquiry.name} - ${inquiry.design.name}`,
       data: {
-        title: "New Consultation Inquiry",
-        message: `A potential client has submitted a consultation request and is awaiting confirmation. This represents a new business opportunity that requires your immediate attention and professional follow-up.<br><br>Client inquiry details:`,
+        title: "New Consultation Inquiry - Admin Notification",
+        message: `A potential client has submitted a consultation request and is awaiting confirmation. This represents a new business opportunity that requires your immediate attention.<br><br><strong>Client:</strong> ${inquiry.name}<br><strong>Preferred Date:</strong> ${formatDate(inquiry.preferredDate)}<br><strong>Package Interest:</strong> ${inquiry.design.name}`,
         details,
         nextSteps:
-          "Please review this inquiry promptly and contact the client within 24 hours to confirm the appointment and provide excellent customer service.",
+          "Please review this inquiry promptly and contact the client within 24 hours to confirm the appointment. Assign a sales representative to follow up and convert this lead into a confirmed appointment.",
         isInternal: true,
       },
     };
@@ -1361,7 +1390,7 @@ export const EmailTemplates = {
       subject: `🔔 Project Confirmed by Client: ${project.name}`,
       data: {
         title: "Project Confirmed - Awaiting Payment",
-        message: `Project <strong>"${project.name}"</strong> has been confirmed by <strong>${client.name}</strong> (${client.email}).<br><br>The project is now active and awaiting downpayment.`,
+        message: `Project <strong>"${project.name}"</strong> has been confirmed by <strong>${client.name}</strong> (${client.email}).<br><br>The project is now active and awaiting downpayment. Please prepare for construction commencement upon payment receipt.`,
         details,
         nextSteps: `
 <strong>Action Required:</strong><br>
@@ -1429,7 +1458,7 @@ export const EmailTemplates = {
       subject: `🏗️ New Project Created: ${project.name}`,
       data: {
         title: "New Project Created - Action Required",
-        message: `A new project has been created and requires your attention.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br><strong>Project:</strong> ${project.name}`,
+        message: `A new project has been created and requires your attention.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br><strong>Project:</strong> ${project.name}<br><strong>Estimated Budget:</strong> ₱${(project.totalCost || 0).toLocaleString()}<br><strong>Status:</strong> Pending Client Confirmation`,
         details,
         nextSteps: `
 <strong>Action Required:</strong><br>
@@ -1438,6 +1467,7 @@ export const EmailTemplates = {
 <br>3. Assign project manager and team members
 <br>4. Estimate materials and resources needed
 <br>5. Set up project timeline and milestones
+<br>6. Prepare contract documents for client review
       `,
         showButton: true,
         buttonText: "View Project Details",
@@ -1500,7 +1530,14 @@ export const EmailTemplates = {
       subject: `✅ Project Completed: ${project.name}`,
       data: {
         title: "Project Successfully Completed",
-        message: `Project <strong>"${project.name}"</strong> has been successfully completed.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br>Total Project Value: <strong>₱${(project.totalCost || 0).toLocaleString()}</strong>`,
+        message: `Project <strong>"${project.name}"</strong> has been successfully completed.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br><strong>Total Project Value:</strong> ₱${(project.totalCost || 0).toLocaleString()}<br><strong>Completion Date:</strong> ${new Date().toLocaleDateString(
+          "en-PH",
+          {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }
+        )}`,
         details,
         nextSteps: `
 <strong>Final Steps Required:</strong><br>
@@ -1510,6 +1547,7 @@ export const EmailTemplates = {
 <br>4. Update project financial records
 <br>5. Archive project documentation
 <br>6. Request client testimonial or review
+<br>7. Conduct project post-mortem with team
       `,
         showButton: true,
         buttonText: "View Project Details",
@@ -1563,17 +1601,27 @@ export const EmailTemplates = {
       subject: `🚫 Project Cancelled: ${project.name}`,
       data: {
         title: "Project Has Been Cancelled",
-        message: `Project <strong>"${project.name}"</strong> has been cancelled.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br>Please review the cancellation details below.`,
+        message: `Project <strong>"${project.name}"</strong> has been cancelled.<br><br><strong>Client:</strong> ${client.name} (${client.email})<br><strong>Cancellation Date:</strong> ${new Date().toLocaleDateString(
+          "en-PH",
+          {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }
+        )}<br><br>Please review the cancellation details below and take appropriate actions.`,
         details,
         nextSteps: `
 <strong>Action Required:</strong><br>
 1. Stop all work on this project immediately
 <br>2. Calculate any cancellation fees or refunds due
 <br>3. Notify all team members and suppliers
-<br>4. Return any unused materials
-<br>5. Update financial records
+<br>4. Return any unused materials to inventory
+<br>5. Update financial records and billing
 <br>6. Archive project documentation
 <br>7. Follow up with client regarding final settlement
+<br>8. Document reasons for cancellation for future reference
       `,
         showButton: true,
         buttonText: "View Project Details",
@@ -1584,8 +1632,6 @@ export const EmailTemplates = {
   },
 
   // ========== PDC EMAIL TEMPLATES ==========
-  // Add these templates at the end of the EmailTemplates object
-
   pdcCreated: (metadata: any) => {
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat("en-PH", {
@@ -1648,14 +1694,15 @@ export const EmailTemplates = {
       subject: `New PDC Created: ${metadata.checkNumber || "Unknown"} - ${formatCurrency(metadata.amount || 0)}`,
       data: {
         title: "New PDC Created",
-        message: `A new Post-Dated Check has been created for <strong>${metadata.supplier || "Supplier"}</strong>.`,
+        message: `A new Post-Dated Check has been created for <strong>${metadata.supplier || "Supplier"}</strong>.<br><br><strong>Check Details:</strong><br>• Check Number: ${metadata.checkNumber || "N/A"}<br>• Amount: ${formatCurrency(metadata.amount || 0)}<br>• Check Date: ${formatDate(metadata.checkDate || new Date().toISOString())}<br>• Status: ${(metadata.status || "pending").charAt(0).toUpperCase() + (metadata.status || "pending").slice(1)}`,
         details,
         nextSteps: `
 <strong>Next Steps:</strong><br>
 1. Review the PDC details<br>
 2. Verify the check amount and date<br>
 3. Monitor for auto-issuing on check date<br>
-4. Keep track of inventory items linked to this PDC
+4. Keep track of inventory items linked to this PDC<br>
+5. Update financial records accordingly
       `,
         showButton: true,
         buttonText: "View PDC Details",
@@ -1731,14 +1778,15 @@ export const EmailTemplates = {
       subject: `PDC Issued: ${metadata.checkNumber || "Unknown"} - ${formatCurrency(metadata.amount || 0)}`,
       data: {
         title: "PDC Has Been Issued",
-        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> has been issued to <strong>${metadata.supplier || "Supplier"}</strong>.`,
+        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> has been issued to <strong>${metadata.supplier || "Supplier"}</strong>.<br><br><strong>Issue Details:</strong><br>• Amount: ${formatCurrency(metadata.amount || 0)}<br>• Check Date: ${formatDate(metadata.checkDate || new Date().toISOString())}<br>• Issued On: ${formatDateTime(metadata.issuedAt || new Date().toISOString())}<br>• Items Covered: ${metadata.itemCount || 0} inventory item${(metadata.itemCount || 0) > 1 ? "s" : ""}`,
         details,
         nextSteps: `
 <strong>Next Steps:</strong><br>
 1. Track payment receipt from supplier<br>
 2. Update inventory records if needed<br>
 3. File PDC record for accounting<br>
-4. Monitor for any issues with the check
+4. Monitor for any issues with the check<br>
+5. Update supplier payment history
       `,
         showButton: true,
         buttonText: "View PDC Details",
@@ -1797,14 +1845,15 @@ export const EmailTemplates = {
       subject: `PDC Status Update: ${metadata.checkNumber || "Unknown"} - ${metadata.oldStatus || "unknown"} → ${metadata.newStatus || "unknown"}`,
       data: {
         title: "PDC Status Updated",
-        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> status has been updated.`,
+        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> status has been updated.<br><br><strong>Status Change:</strong><br>• From: ${(metadata.oldStatus || "unknown").charAt(0).toUpperCase() + (metadata.oldStatus || "unknown").slice(1)}<br>• To: ${(metadata.newStatus || "unknown").charAt(0).toUpperCase() + (metadata.newStatus || "unknown").slice(1)}<br>• Supplier: ${metadata.supplier || "Supplier"}<br>• Amount: ${formatCurrency(metadata.amount || 0)}`,
         details,
         nextSteps: `
 <strong>Action Required:</strong><br>
 1. Review the status change<br>
 2. Update financial records if needed<br>
 3. Notify relevant team members<br>
-4. Take any necessary follow-up actions
+4. Take any necessary follow-up actions<br>
+5. Document reason for status change
       `,
         showButton: true,
         buttonText: "View PDC Details",
@@ -1861,14 +1910,22 @@ export const EmailTemplates = {
       subject: `PDC Statistics Summary - ${metadata.totalPDCs || 0} PDCs (${formatCurrency(metadata.totalAmount || 0)})`,
       data: {
         title: "PDC Statistics Summary",
-        message: `Summary of Post-Dated Checks for the period.`,
+        message: `Summary of Post-Dated Checks for the period ending ${new Date().toLocaleDateString(
+          "en-US",
+          {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }
+        )}.<br><br><strong>Key Statistics:</strong><br>• Total PDCs: ${metadata.totalPDCs || 0}<br>• Total Amount: ${formatCurrency(metadata.totalAmount || 0)}<br>• Issued PDCs: ${metadata.issuedPDCs || 0}<br>• Pending PDCs: ${metadata.pendingPDCs || 0}<br>• Cancelled PDCs: ${metadata.cancelledPDCs || 0}`,
         details,
         nextSteps: `
 <strong>Insights:</strong><br>
 • ${metadata.issuedPDCs || 0} issued checks awaiting payment<br>
 • ${metadata.pendingPDCs || 0} pending checks for future dates<br>
 • Monitor upcoming check dates for auto-issuing<br>
-• Review supplier payment patterns
+• Review supplier payment patterns<br>
+• Check for any overdue payments requiring follow-up
       `,
         showButton: true,
         buttonText: "View PDC Dashboard",
@@ -1927,14 +1984,16 @@ export const EmailTemplates = {
       subject: `PDC Cancelled: ${metadata.checkNumber || "Unknown"} - ${formatCurrency(metadata.amount || 0)}`,
       data: {
         title: "PDC Cancelled",
-        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> has been cancelled.`,
+        message: `Post-Dated Check <strong>${metadata.checkNumber || "Unknown"}</strong> has been cancelled.<br><br><strong>Cancellation Details:</strong><br>• Supplier: ${metadata.supplier || "Supplier"}<br>• Amount: ${formatCurrency(metadata.amount || 0)}<br>• Cancelled On: ${formatDateTime(metadata.cancelledAt || new Date().toISOString())}<br>• Reason: ${metadata.reason || "Not specified"}`,
         details,
         nextSteps: `
 <strong>Action Required:</strong><br>
 1. Update financial records<br>
 2. Remove from pending payments<br>
 3. Notify relevant departments<br>
-4. Review reason for cancellation
+4. Review reason for cancellation<br>
+5. Update supplier payment history<br>
+6. Document cancellation for audit purposes
       `,
         showButton: true,
         buttonText: "View PDC Details",

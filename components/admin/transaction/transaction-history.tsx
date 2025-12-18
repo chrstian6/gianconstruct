@@ -35,12 +35,9 @@ import {
 import { ProjectTransactionDetail } from "@/action/confirmed-projects";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import {
-  sendInvoiceEmail,
-  recordExistingTransactionPayment,
-} from "@/action/invoice";
+import { sendInvoiceEmail } from "@/action/invoice";
 import { useModalStore } from "@/lib/stores";
-import { ManualPaymentDialog } from "@/components/admin/transaction/manual-payment-dialog";
+import { UnifiedPaymentDialog } from "@/components/admin/transaction/unified-payment-dialog";
 import { TransactionHistorySkeleton } from "@/components/admin/transaction/skeleton/transaction-history-skeleton";
 
 interface TransactionHistoryProps {
@@ -272,7 +269,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     });
   };
 
-  // Send invoice for the entire project (summary invoice) - FIXED AMOUNT
+  // Send invoice for the entire project (summary invoice)
   const handleSendProjectInvoice = async () => {
     if (!clientEmail) {
       toast.error("Client email is required to send invoice");
@@ -296,13 +293,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       const totalPaid = paymentSummary.totalPaid;
       const remainingBalance = paymentSummary.remainingBalance;
 
-      const pendingTransactions = transactions.filter(
-        (t) => t.status === "pending"
-      );
       const currentDate = new Date().toISOString();
 
       if (remainingBalance > 0) {
-        // Send invoice for the REMAINING BALANCE
         const description =
           `Project Invoice - ${projectName || "Project"}\n\n` +
           `Project Total: ${formatCurrencyWithDecimal(totalValue)}\n` +
@@ -322,7 +315,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           clientName: clientName || "Valued Client",
           projectId,
           projectName: projectName || "Project",
-          amount: remainingBalance, // THIS IS THE CORRECT AMOUNT - remaining balance
+          amount: remainingBalance,
           dueDate: currentDate,
           type: "balance_due",
           description: description,
@@ -339,7 +332,6 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           toast.error(result.error || "Failed to send project invoice");
         }
       } else {
-        // If fully paid, send a receipt/summary
         const description =
           `Payment Receipt - ${projectName || "Project"}\n\n` +
           `Project Total: ${formatCurrencyWithDecimal(totalValue)}\n` +
@@ -359,7 +351,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           clientName: clientName || "Valued Client",
           projectId,
           projectName: projectName || "Project",
-          amount: 0, // Zero amount for receipts
+          amount: 0,
           dueDate: currentDate,
           type: "receipt",
           description: description,
@@ -451,6 +443,19 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     }
   };
 
+  // Refresh transaction history
+  const handleRefreshTransactions = async () => {
+    if (onRefresh) {
+      try {
+        await onRefresh();
+        toast.success("Transaction history refreshed");
+      } catch (error) {
+        console.error("Error refreshing transactions:", error);
+        toast.error("Failed to refresh transactions");
+      }
+    }
+  };
+
   // Check if there are any pending transactions
   const hasPendingTransactions = transactions.some(
     (t) => t.status === "pending"
@@ -482,7 +487,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             <div className="flex items-center gap-2">
               {clientEmail && (
                 <>
-                  {/* Send Invoice button - for sending project summary invoice */}
+                  {/* Send Invoice button */}
                   {transactions.length > 0 && (
                     <Button
                       onClick={handleSendProjectInvoice}
@@ -496,7 +501,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     </Button>
                   )}
 
-                  {/* Additional Payment button - for making extra payments */}
+                  {/* Additional Payment button */}
                   {paymentSummary.remainingBalance > 0 && (
                     <Button
                       onClick={handleMakeAdditionalPayment}
@@ -509,7 +514,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     </Button>
                   )}
 
-                  {/* Send All Invoices button - for admin reminders */}
+                  {/* Send All Invoices button */}
                   {hasPendingTransactions && (
                     <Button
                       onClick={handleSendAllInvoices}
@@ -772,118 +777,10 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             </Table>
           </div>
         )}
-
-        {/* Payment Instructions Box */}
-        {/* Payment Actions Explained - Clean Black & White Design */}
-        {paymentSummary.remainingBalance > 0 && (
-          <div className="mt-6 p-5 bg-white border border-gray-300 rounded-lg">
-            <h4 className="text-base font-semibold text-gray-900 mb-3">
-              Payment Actions Explained
-            </h4>
-            <p className="text-sm text-gray-700 mb-4">
-              Different payment options are available for managing the remaining
-              balance:
-            </p>
-
-            <div className="space-y-3">
-              {/* Send Invoice */}
-              <div className="flex items-start">
-                <Badge className="bg-blue-600 text-white text-xs mr-3">
-                  Send Invoice
-                </Badge>
-                <div>
-                  <span className="text-sm text-gray-900">
-                    Send a summary invoice for the remaining balance
-                  </span>
-                  <div className="text-xs text-gray-600 mt-0.5">
-                    Amount:{" "}
-                    {formatCurrencyWithDecimal(paymentSummary.remainingBalance)}
-                  </div>
-                </div>
-              </div>
-
-              {/* Add Payment */}
-              <div className="flex items-start">
-                <Badge className="bg-green-600 text-white text-xs mr-3">
-                  Add Payment
-                </Badge>
-                <div>
-                  <span className="text-sm text-gray-900">
-                    Record a new payment against the remaining balance
-                  </span>
-                  <div className="text-xs text-gray-600 mt-0.5">
-                    Manually enter any payment amount
-                  </div>
-                </div>
-              </div>
-
-              {/* Remind All */}
-              <div className="flex items-start">
-                <Badge className="bg-yellow-600 text-white text-xs mr-3">
-                  Remind All
-                </Badge>
-                <div>
-                  <span className="text-sm text-gray-900">
-                    Send reminders for all individual pending transactions
-                  </span>
-                  <div className="text-xs text-gray-600 mt-0.5">
-                    {paymentSummary.pendingCount} pending transaction
-                    {paymentSummary.pendingCount !== 1 ? "s" : ""}
-                  </div>
-                </div>
-              </div>
-
-              {/* Individual Actions */}
-              <div className="flex items-start">
-                <div className="flex gap-1 mr-3">
-                  <Badge className="bg-green-600 text-white text-xs">
-                    Pay Now
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="text-blue-700 text-xs border-blue-300"
-                  >
-                    Send Invoice
-                  </Badge>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-900">
-                    Individual transaction actions
-                  </span>
-                  <div className="text-xs text-gray-600 mt-0.5">
-                    Use buttons in each transaction row
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Summary */}
-            <div className="mt-4 pt-4 border-t border-gray-300">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-900">
-                  Payment Summary
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-600">
-                    Paid: {formatCurrencyWithDecimal(paymentSummary.totalPaid)}
-                  </span>
-                  <span className="text-xs text-gray-600">
-                    Pending:{" "}
-                    {formatCurrencyWithDecimal(paymentSummary.totalPending)}
-                  </span>
-                  <span className="text-xs font-medium text-gray-900">
-                    Balance:{" "}
-                    {formatCurrencyWithDecimal(paymentSummary.remainingBalance)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </CardContent>
 
-      {/* Add the Manual Payment Dialog */}
-      <ManualPaymentDialog onPaymentSuccess={onRefresh} />
+      {/* Unified Payment Dialog - Pass the refresh callback */}
+      <UnifiedPaymentDialog onPaymentSuccess={handleRefreshTransactions} />
     </Card>
   );
 };

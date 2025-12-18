@@ -1,4 +1,4 @@
-// middleware.ts - UPDATED
+// middleware.ts - UPDATED WITH CASHIER SUPPORT
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionFromRequest } from "@/lib/redis"; // Use the new function
 
@@ -38,7 +38,8 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/admin") ||
     pathname.startsWith("/user") ||
-    pathname.startsWith("/project-manager")
+    pathname.startsWith("/project-manager") ||
+    pathname.startsWith("/cashier")
   ) {
     if (!session) {
       console.log("Unauthorized access to protected route:", pathname);
@@ -46,25 +47,32 @@ export async function middleware(request: NextRequest) {
     }
 
     // Role-based access control for all protected routes
-    if (pathname.startsWith("/admin") && userRole !== "admin") {
-      console.log("Non-admin attempted to access admin route:", {
-        userRole,
-        pathname,
-      });
 
-      // Redirect based on actual role
-      if (userRole === "project_manager") {
-        return NextResponse.redirect(
-          new URL("/project-manager/manage-project", request.url)
-        );
-      } else if (userRole === "user") {
-        return NextResponse.redirect(
-          new URL("/user/userdashboard", request.url)
-        );
+    // ADMIN ROUTES: Allow both admin and cashier
+    if (pathname.startsWith("/admin")) {
+      // Allow admin and cashier roles
+      const allowedRoles = ["admin", "cashier"];
+      if (!allowedRoles.includes(userRole!)) {
+        console.log("Unauthorized role attempted to access admin route:", {
+          userRole,
+          pathname,
+        });
+
+        // Redirect based on actual role
+        if (userRole === "project_manager") {
+          return NextResponse.redirect(
+            new URL("/project-manager/manage-project", request.url)
+          );
+        } else if (userRole === "user") {
+          return NextResponse.redirect(
+            new URL("/user/userdashboard", request.url)
+          );
+        }
+        return NextResponse.redirect(new URL("/", request.url));
       }
-      return NextResponse.redirect(new URL("/", request.url));
     }
 
+    // USER ROUTES: Only users
     if (pathname.startsWith("/user") && userRole !== "user") {
       console.log("Non-user attempted to access user route:", {
         userRole,
@@ -72,7 +80,7 @@ export async function middleware(request: NextRequest) {
       });
 
       // Redirect based on actual role
-      if (userRole === "admin") {
+      if (userRole === "admin" || userRole === "cashier") {
         return NextResponse.redirect(
           new URL("/admin/admindashboard", request.url)
         );
@@ -84,7 +92,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/", request.url));
     }
 
-    // FIX: Project manager route protection - was in wrong place
+    // PROJECT MANAGER ROUTES: Only project managers
     if (
       pathname.startsWith("/project-manager") &&
       userRole !== "project_manager"
@@ -98,6 +106,26 @@ export async function middleware(request: NextRequest) {
       );
 
       // Redirect based on actual role
+      if (userRole === "admin" || userRole === "cashier") {
+        return NextResponse.redirect(
+          new URL("/admin/admindashboard", request.url)
+        );
+      } else if (userRole === "user") {
+        return NextResponse.redirect(
+          new URL("/user/userdashboard", request.url)
+        );
+      }
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    // CASHIER ROUTES: Only cashier (and optionally admin if you want)
+    if (pathname.startsWith("/cashier") && userRole !== "cashier") {
+      console.log("Non-cashier attempted to access cashier route:", {
+        userRole,
+        pathname,
+      });
+
+      // Redirect based on actual role
       if (userRole === "admin") {
         return NextResponse.redirect(
           new URL("/admin/admindashboard", request.url)
@@ -105,6 +133,10 @@ export async function middleware(request: NextRequest) {
       } else if (userRole === "user") {
         return NextResponse.redirect(
           new URL("/user/userdashboard", request.url)
+        );
+      } else if (userRole === "project_manager") {
+        return NextResponse.redirect(
+          new URL("/project-manager/manage-project", request.url)
         );
       }
       return NextResponse.redirect(new URL("/", request.url));
@@ -118,6 +150,7 @@ export async function middleware(request: NextRequest) {
     // Determine redirect based on role
     switch (userRole) {
       case "admin":
+      case "cashier":
         redirectPath = "/admin/admindashboard";
         break;
       case "user":
@@ -157,7 +190,8 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/user/:path*",
-    "/project-manager/:path*", // ADD THIS LINE
+    "/project-manager/:path*",
+    "/cashier/:path*", // ADD CASHIER ROUTES
     "/",
     "/catalog",
     "/authentication-login",

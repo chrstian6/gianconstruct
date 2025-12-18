@@ -51,6 +51,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { useAuthStore } from "@/lib/stores"; // Import auth store
 
 interface MilestonesTabProps {
   projectId: string;
@@ -64,6 +65,7 @@ interface MilestoneFormData {
 }
 
 export default function MilestonesTab({ projectId }: MilestonesTabProps) {
+  const { user } = useAuthStore(); // Get user from auth store
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -92,6 +94,10 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
     progress: 0,
     target_date: undefined,
   });
+
+  // Check if user has permission (admin or project_manager)
+  const hasPermission =
+    user?.role === "admin" || user?.role === "project_manager";
 
   useEffect(() => {
     fetchMilestones();
@@ -319,13 +325,15 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
             Track your project progress through key milestones
           </p>
         </div>
-        <Button
-          onClick={() => setIsCreateDialogOpen(true)}
-          className="bg-zinc-900 text-white hover:bg-zinc-800 shadow-none"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Milestone
-        </Button>
+        {hasPermission && (
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            className="bg-zinc-900 text-white hover:bg-zinc-800 shadow-none"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Milestone
+          </Button>
+        )}
       </div>
 
       {/* Overall Progress */}
@@ -371,13 +379,15 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
                 Add your first milestone to start tracking your project
                 progress.
               </p>
-              <Button
-                onClick={() => setIsCreateDialogOpen(true)}
-                className="bg-zinc-900 text-white hover:bg-zinc-800"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Create First Milestone
-              </Button>
+              {hasPermission && (
+                <Button
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  className="bg-zinc-900 text-white hover:bg-zinc-800"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create First Milestone
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -449,10 +459,10 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
                             }
                             max={100}
                             step={1}
-                            disabled={milestone.completed}
+                            disabled={milestone.completed || !hasPermission}
                             className={cn(
                               "w-full",
-                              milestone.completed &&
+                              (milestone.completed || !hasPermission) &&
                                 "opacity-50 cursor-not-allowed"
                             )}
                           />
@@ -462,7 +472,7 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
                             <span>100%</span>
                           </div>
                         </div>
-                        {!milestone.completed && (
+                        {!milestone.completed && hasPermission && (
                           <Button
                             onClick={() => handleUpdateProgress(milestone.id)}
                             disabled={updatingProgress === milestone.id}
@@ -488,48 +498,54 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {!milestone.completed && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCompleteMilestone(milestone.id)}
-                        disabled={isCompleting === milestone.id}
-                        className="h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                      >
-                        {isCompleting === milestone.id ? (
-                          <div className="h-3 w-3 animate-spin rounded-full border border-emerald-700 border-t-transparent" />
-                        ) : (
-                          <Check className="h-3 w-3 mr-1" />
-                        )}
-                        Complete
-                      </Button>
-                    )}
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <GripVertical className="h-4 w-4" />
+                  {hasPermission && (
+                    <div className="flex items-center gap-2">
+                      {!milestone.completed && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCompleteMilestone(milestone.id)}
+                          disabled={isCompleting === milestone.id}
+                          className="h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                        >
+                          {isCompleting === milestone.id ? (
+                            <div className="h-3 w-3 animate-spin rounded-full border border-emerald-700 border-t-transparent" />
+                          ) : (
+                            <Check className="h-3 w-3 mr-1" />
+                          )}
+                          Complete
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => openEditDialog(milestone)}
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDeleteMilestone(milestone.id)}
-                          disabled={isDeleting}
-                          className="text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                      )}
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => openEditDialog(milestone)}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteMilestone(milestone.id)}
+                            disabled={isDeleting}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -538,250 +554,267 @@ export default function MilestonesTab({ projectId }: MilestonesTabProps) {
       </div>
 
       {/* Create Milestone Dialog */}
-      <Dialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        modal={false}
-      >
-        <DialogContent className="sm:max-w-[500px] bg-white font-geist border-zinc-200">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-zinc-900">
-              Create Milestone
-            </DialogTitle>
-            <DialogDescription className="text-zinc-500">
-              Add a new milestone to track your project progress.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="title" className="text-zinc-700 font-medium">
-                Milestone Title *
-              </Label>
-              <Input
-                id="title"
-                value={newMilestone.title}
-                onChange={(e) =>
-                  setNewMilestone({ ...newMilestone, title: e.target.value })
-                }
-                placeholder="e.g., Design Phase Completion"
-                className="border-zinc-200 focus:ring-zinc-900"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label
-                htmlFor="description"
-                className="text-zinc-700 font-medium"
-              >
-                Description
-              </Label>
-              <Textarea
-                id="description"
-                value={newMilestone.description}
-                onChange={(e) =>
-                  setNewMilestone({
-                    ...newMilestone,
-                    description: e.target.value,
-                  })
-                }
-                placeholder="Describe what this milestone entails..."
-                rows={3}
-                className="border-zinc-200 focus:ring-zinc-900 resize-none"
-              />
-            </div>
-            <div className="grid gap-4">
+      {hasPermission && (
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          modal={false}
+        >
+          <DialogContent className="sm:max-w-[500px] bg-white font-geist border-zinc-200">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-zinc-900">
+                Create Milestone
+              </DialogTitle>
+              <DialogDescription className="text-zinc-500">
+                Add a new milestone to track your project progress.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="progress" className="text-zinc-700 font-medium">
-                  Progress: {newMilestone.progress}%
+                <Label htmlFor="title" className="text-zinc-700 font-medium">
+                  Milestone Title *
                 </Label>
-                <div className="space-y-2">
-                  <Slider
-                    value={[newMilestone.progress]}
-                    onValueChange={(value) =>
-                      setNewMilestone({ ...newMilestone, progress: value[0] })
-                    }
-                    max={100}
-                    step={1}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-zinc-500">
-                    <span>0%</span>
-                    <span>50%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
+                <Input
+                  id="title"
+                  value={newMilestone.title}
+                  onChange={(e) =>
+                    setNewMilestone({ ...newMilestone, title: e.target.value })
+                  }
+                  placeholder="e.g., Design Phase Completion"
+                  className="border-zinc-200 focus:ring-zinc-900"
+                />
               </div>
-              <div className="grid gap-2">
-                <Label className="text-zinc-700 font-medium">Target Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal border-zinc-200",
-                        !newMilestone.target_date && "text-zinc-500"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {newMilestone.target_date ? (
-                        format(newMilestone.target_date, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={newMilestone.target_date}
-                      onSelect={(date) => {
-                        setNewMilestone({ ...newMilestone, target_date: date });
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsCreateDialogOpen(false)}
-              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateMilestone}
-              className="bg-zinc-900 text-white hover:bg-zinc-800"
-            >
-              Create Milestone
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Milestone Dialog */}
-      <Dialog
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        modal={false}
-      >
-        <DialogContent className="sm:max-w-[500px] bg-white font-geist border-zinc-200">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-zinc-900">
-              Edit Milestone
-            </DialogTitle>
-            <DialogDescription className="text-zinc-500">
-              Update the milestone details.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-title" className="text-zinc-700 font-medium">
-                Milestone Title *
-              </Label>
-              <Input
-                id="edit-title"
-                value={editForm.title}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, title: e.target.value })
-                }
-                className="border-zinc-200 focus:ring-zinc-900"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label
-                htmlFor="edit-description"
-                className="text-zinc-700 font-medium"
-              >
-                Description
-              </Label>
-              <Textarea
-                id="edit-description"
-                value={editForm.description}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, description: e.target.value })
-                }
-                rows={3}
-                className="border-zinc-200 focus:ring-zinc-900 resize-none"
-              />
-            </div>
-            <div className="grid gap-4">
               <div className="grid gap-2">
                 <Label
-                  htmlFor="edit-progress"
+                  htmlFor="description"
                   className="text-zinc-700 font-medium"
                 >
-                  Progress: {editForm.progress}%
+                  Description
                 </Label>
-                <div className="space-y-2">
-                  <Slider
-                    value={[editForm.progress]}
-                    onValueChange={(value) =>
-                      setEditForm({ ...editForm, progress: value[0] })
-                    }
-                    max={100}
-                    step={1}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-zinc-500">
-                    <span>0%</span>
-                    <span>50%</span>
-                    <span>100%</span>
+                <Textarea
+                  id="description"
+                  value={newMilestone.description}
+                  onChange={(e) =>
+                    setNewMilestone({
+                      ...newMilestone,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Describe what this milestone entails..."
+                  rows={3}
+                  className="border-zinc-200 focus:ring-zinc-900 resize-none"
+                />
+              </div>
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="progress"
+                    className="text-zinc-700 font-medium"
+                  >
+                    Progress: {newMilestone.progress}%
+                  </Label>
+                  <div className="space-y-2">
+                    <Slider
+                      value={[newMilestone.progress]}
+                      onValueChange={(value) =>
+                        setNewMilestone({ ...newMilestone, progress: value[0] })
+                      }
+                      max={100}
+                      step={1}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>0%</span>
+                      <span>50%</span>
+                      <span>100%</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-zinc-700 font-medium">Target Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal border-zinc-200",
-                        !editForm.target_date && "text-zinc-500"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {editForm.target_date ? (
-                        format(editForm.target_date, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={editForm.target_date}
-                      onSelect={(date) => {
-                        setEditForm({ ...editForm, target_date: date });
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <div className="grid gap-2">
+                  <Label className="text-zinc-700 font-medium">
+                    Target Date
+                  </Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal border-zinc-200",
+                          !newMilestone.target_date && "text-zinc-500"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {newMilestone.target_date ? (
+                          format(newMilestone.target_date, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={newMilestone.target_date}
+                        onSelect={(date) => {
+                          setNewMilestone({
+                            ...newMilestone,
+                            target_date: date,
+                          });
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateMilestone}
-              className="bg-zinc-900 text-white hover:bg-zinc-800"
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+                className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateMilestone}
+                className="bg-zinc-900 text-white hover:bg-zinc-800"
+              >
+                Create Milestone
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Milestone Dialog */}
+      {hasPermission && (
+        <Dialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          modal={false}
+        >
+          <DialogContent className="sm:max-w-[500px] bg-white font-geist border-zinc-200">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-zinc-900">
+                Edit Milestone
+              </DialogTitle>
+              <DialogDescription className="text-zinc-500">
+                Update the milestone details.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+              <div className="grid gap-2">
+                <Label
+                  htmlFor="edit-title"
+                  className="text-zinc-700 font-medium"
+                >
+                  Milestone Title *
+                </Label>
+                <Input
+                  id="edit-title"
+                  value={editForm.title}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, title: e.target.value })
+                  }
+                  className="border-zinc-200 focus:ring-zinc-900"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label
+                  htmlFor="edit-description"
+                  className="text-zinc-700 font-medium"
+                >
+                  Description
+                </Label>
+                <Textarea
+                  id="edit-description"
+                  value={editForm.description}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, description: e.target.value })
+                  }
+                  rows={3}
+                  className="border-zinc-200 focus:ring-zinc-900 resize-none"
+                />
+              </div>
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="edit-progress"
+                    className="text-zinc-700 font-medium"
+                  >
+                    Progress: {editForm.progress}%
+                  </Label>
+                  <div className="space-y-2">
+                    <Slider
+                      value={[editForm.progress]}
+                      onValueChange={(value) =>
+                        setEditForm({ ...editForm, progress: value[0] })
+                      }
+                      max={100}
+                      step={1}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>0%</span>
+                      <span>50%</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-zinc-700 font-medium">
+                    Target Date
+                  </Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal border-zinc-200",
+                          !editForm.target_date && "text-zinc-500"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {editForm.target_date ? (
+                          format(editForm.target_date, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={editForm.target_date}
+                        onSelect={(date) => {
+                          setEditForm({ ...editForm, target_date: date });
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+                className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpdateMilestone}
+                className="bg-zinc-900 text-white hover:bg-zinc-800"
+              >
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -33,6 +33,7 @@ import {
   XCircle,
   Shield,
   UserRoundPen,
+  Receipt, // NEW ICON FOR CASHIER
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useModalStore } from "@/lib/stores";
@@ -142,7 +143,7 @@ export function UserManagementTable({
     }
   };
 
-  // Get role info
+  // Get role info - UPDATED WITH CASHIER
   const getRoleInfo = (role: string) => {
     if (!role)
       return {
@@ -152,7 +153,9 @@ export function UserManagementTable({
         bgColor: "bg-gray-50",
       };
 
-    switch (role.toLowerCase()) {
+    const roleLower = role.toLowerCase();
+
+    switch (roleLower) {
       case "admin":
         return {
           text: "Admin",
@@ -160,12 +163,27 @@ export function UserManagementTable({
           color: "text-purple-600",
           bgColor: "bg-purple-50",
         };
-      default:
+      case "project_manager":
         return {
-          text: role.charAt(0).toUpperCase() + role.slice(1),
+          text: "Project Manager",
           icon: User,
           color: "text-blue-600",
           bgColor: "bg-blue-50",
+        };
+      case "cashier": // NEW CASE
+        return {
+          text: "Cashier",
+          icon: Receipt,
+          color: "text-green-600",
+          bgColor: "bg-green-50",
+        };
+      case "user":
+      default:
+        return {
+          text: "User",
+          icon: User,
+          color: "text-gray-600",
+          bgColor: "bg-gray-50",
         };
     }
   };
