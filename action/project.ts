@@ -3355,3 +3355,66 @@ export async function getCompletedProjects(): Promise<{
     };
   }
 }
+
+// Add this function to your existing project.ts file, near other project functions
+
+// Get project payment summary (for client components)
+export async function getProjectPaymentSummaryAction(
+  projectId: string
+): Promise<{
+  success: boolean;
+  data?: {
+    total_cost: number;
+    total_paid: number;
+    total_pending: number;
+    remaining_balance: number;
+  };
+  error?: string;
+}> {
+  await dbConnect();
+  try {
+    console.log(`🔍 Getting payment summary for project: ${projectId}`);
+
+    // Get project
+    const project = await Project.findOne({ project_id: projectId });
+    if (!project) {
+      console.log(`❌ Project not found: ${projectId}`);
+      return { success: false, error: "Project not found" };
+    }
+
+    // Get all transactions for this project
+    const transactions = await Transaction.find({ project_id: projectId });
+
+    // Calculate totals
+    const total_cost = project.totalCost || 0;
+
+    const paidTransactions = transactions.filter((t) => t.status === "paid");
+    const total_paid = paidTransactions.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0
+    );
+
+    const pendingTransactions = transactions.filter(
+      (t) => t.status === "pending"
+    );
+    const total_pending = pendingTransactions.reduce(
+      (sum, t) => sum + (t.amount || 0),
+      0
+    );
+
+    const remaining_balance = Math.max(0, total_cost - total_paid);
+
+    const summary = {
+      total_cost,
+      total_paid,
+      total_pending,
+      remaining_balance,
+    };
+
+    console.log(`✅ Payment summary for ${projectId}:`, summary);
+    return { success: true, data: summary };
+  } catch (error) {
+    console.error("❌ Error getting payment summary:", error);
+    return { success: false, error: "Failed to get payment summary" };
+  }
+}

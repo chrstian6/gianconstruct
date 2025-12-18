@@ -43,6 +43,7 @@ import {
   XCircle,
   Eye,
   FileText,
+  ArrowLeftRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import ConfirmationModal from "@/components/ConfirmationModal";
@@ -78,11 +79,21 @@ import { format } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+// Import the TransactionsTab component and types
+import TransactionsTab from "@/components/admin/projects/details/inventorytabs/TransactionTab";
+import { ProjectInventoryRecord } from "@/types/project-inventory";
+import { getAllProjectInventory } from "@/action/project-inventory";
+
 type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock";
 type SupplierStatusFilter = "all" | "active" | "inactive" | "pending";
 type CategoryFilter = "all" | string;
 type ViewMode = "table" | "grid";
-type ActiveTab = "analytics" | "materials" | "pdc" | "suppliers";
+type ActiveTab =
+  | "analytics"
+  | "materials"
+  | "pdc"
+  | "suppliers"
+  | "transactions"; // Added "transactions" tab
 type PDCStatusFilter = "all" | "pending" | "issued" | "cancelled";
 
 interface CategoryData {
@@ -108,7 +119,7 @@ export default function MainInventory() {
               </div>
             </div>
             <div className="flex border-b border-gray-200 mt-6">
-              {[...Array(4)].map((_, i) => (
+              {[...Array(5)].map((_, i) => (
                 <div key={i} className="px-4 py-3">
                   <div className="h-4 bg-gray-200 rounded w-16"></div>
                 </div>
@@ -139,6 +150,7 @@ function MainInventoryContent() {
   const [loading, setLoading] = useState(true);
   const [suppliersLoading, setSuppliersLoading] = useState(true);
   const [pdcsLoading, setPdcsLoading] = useState(true);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
   const [pdcSearchTerm, setPdcSearchTerm] = useState("");
@@ -182,6 +194,14 @@ function MainInventoryContent() {
     actions: true,
   });
 
+  // Transaction states
+  const [inventoryTransactions, setInventoryTransactions] = useState<
+    ProjectInventoryRecord[]
+  >([]);
+  const [inventoryItems, setInventoryItems] = useState<Map<string, IInventory>>(
+    new Map()
+  );
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -198,7 +218,10 @@ function MainInventoryContent() {
   // Get active tab from URL or default to "materials"
   const getActiveTabFromURL = (): ActiveTab => {
     const tab = searchParams.get("tab") as ActiveTab;
-    return tab && ["analytics", "materials", "pdc", "suppliers"].includes(tab)
+    return tab &&
+      ["analytics", "materials", "pdc", "suppliers", "transactions"].includes(
+        tab
+      )
       ? tab
       : "materials";
   };
@@ -250,6 +273,15 @@ function MainInventoryContent() {
       try {
         const data = await getInventories();
         setItems(data);
+
+        // Create inventory map for transactions
+        const inventoryMap = new Map<string, IInventory>();
+        data.forEach((item) => {
+          if (item.product_id && item.product_id.trim() !== "") {
+            inventoryMap.set(item.product_id, item);
+          }
+        });
+        setInventoryItems(inventoryMap);
       } catch (error) {
         console.error("Failed to fetch inventory:", error);
         toast.error("Failed to fetch inventory items");
@@ -302,6 +334,31 @@ function MainInventoryContent() {
       }
     };
     fetchPDCs();
+  }, [activeTab]);
+
+  // Fetch inventory transactions when transactions tab is active
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (activeTab === "transactions") {
+        setTransactionsLoading(true);
+        try {
+          const result = await getAllProjectInventory();
+          if (result.success && result.records) {
+            setInventoryTransactions(result.records);
+          } else {
+            console.warn("No transaction records found:", result.error);
+            setInventoryTransactions([]);
+          }
+        } catch (error) {
+          console.error("Failed to fetch inventory transactions:", error);
+          toast.error("Failed to fetch transaction history");
+          setInventoryTransactions([]);
+        } finally {
+          setTransactionsLoading(false);
+        }
+      }
+    };
+    fetchTransactions();
   }, [activeTab]);
 
   // Fetch chart data only once on component mount
@@ -819,6 +876,77 @@ function MainInventoryContent() {
     return { text: "In Stock", variant: "default" as const };
   };
 
+  // Helper functions for TransactionsTab
+  const getActionConfig = (action: string) => {
+    const baseConfig = {
+      checked_out: {
+        label: "Transferred to Project",
+        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        icon: "ArrowDownToLine",
+        color: "text-emerald-600",
+        description: "From main inventory to project",
+      },
+      returned: {
+        label: "Returned to Main",
+        className: "bg-blue-50 text-blue-700 border-blue-200",
+        icon: "ArrowUpFromLine",
+        color: "text-blue-600",
+        description: "From project back to main inventory",
+      },
+      adjusted: {
+        label: "Adjusted",
+        className: "bg-amber-50 text-amber-700 border-amber-200",
+        icon: "Settings",
+        color: "text-amber-600",
+        description: "Quantity adjustment",
+      },
+    };
+
+    return (
+      baseConfig[action as keyof typeof baseConfig] || {
+        label: action,
+        className: "bg-zinc-50 text-zinc-700 border-zinc-200",
+        icon: "Package",
+        color: "text-zinc-600",
+        description: "",
+      }
+    );
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `₱${amount.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const formatDate = (date: string) => {
+    try {
+      return new Date(date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (error) {
+      return "Invalid date";
+    }
+  };
+
+  const formatTime = (date: string) => {
+    try {
+      return new Date(date).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (error) {
+      return "Invalid time";
+    }
+  };
+
   const AnalyticsTab = () => (
     <Card className="w-full rounded-sm shadow-none border">
       <CardHeader>
@@ -924,11 +1052,62 @@ function MainInventoryContent() {
     </Card>
   );
 
+  const TransactionsTabContent = () => {
+    if (transactionsLoading) {
+      return (
+        <Card className="w-full rounded-sm shadow-none border">
+          <CardContent className="p-8">
+            <div className="flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-gray-600">Loading transaction history...</p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <Card className="w-full rounded-sm shadow-none border">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="h-5 w-5 text-zinc-700" />
+                <CardTitle className="text-lg font-semibold text-zinc-900">
+                  Inventory Transaction History
+                </CardTitle>
+                <Badge variant="outline">
+                  {inventoryTransactions.length} total transactions
+                </Badge>
+              </div>
+            </div>
+            <CardDescription>
+              View all inventory transactions across all projects
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TransactionsTab
+              records={inventoryTransactions}
+              inventoryItems={inventoryItems}
+              recentActions={inventoryTransactions.slice(0, 5)} // Show recent 5 actions
+              setViewDetails={() => {}} // Placeholder function since we don't have details modal
+              getActionConfig={getActionConfig}
+              formatCurrency={formatCurrency}
+              formatDate={formatDate}
+              formatTime={formatTime}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   const tabs = [
     { id: "analytics", label: "Analytics" },
     { id: "materials", label: "Materials" },
     { id: "suppliers", label: "Suppliers" },
     { id: "pdc", label: "PDC" },
+    { id: "transactions", label: "Transactions" },
   ];
 
   const renderTabContent = () => {
@@ -1015,6 +1194,8 @@ function MainInventoryContent() {
             setItemsPerPage={setSupplierItemsPerPage}
           />
         );
+      case "transactions":
+        return <TransactionsTabContent />;
       default:
         return (
           <MaterialsView

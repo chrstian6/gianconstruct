@@ -60,6 +60,41 @@ async function generateUserId(): Promise<string> {
   return `GC-${nextNumber.toString().padStart(4, "0")}`;
 }
 
+// Helper function for role validation
+function validateAndCleanRole(roleInput: string | undefined): UserRole {
+  if (!roleInput) {
+    return USER_ROLES.USER;
+  }
+
+  // Convert to lowercase for comparison
+  const lowercaseRole = roleInput.toLowerCase().trim();
+
+  // Map variations to correct enum values
+  const roleMap: Record<string, UserRole> = {
+    user: USER_ROLES.USER,
+    admin: USER_ROLES.ADMIN,
+    project_manager: USER_ROLES.PROJECT_MANAGER,
+    "project manager": USER_ROLES.PROJECT_MANAGER,
+    cashier: USER_ROLES.CASHIER,
+    // Add any other variations if needed
+  };
+
+  // Check if role exists in map
+  if (roleMap[lowercaseRole]) {
+    return roleMap[lowercaseRole];
+  }
+
+  // Check against valid roles directly
+  const validRoles = Object.values(USER_ROLES);
+  if (validRoles.includes(lowercaseRole as UserRole)) {
+    return lowercaseRole as UserRole;
+  }
+
+  // Default to USER if invalid
+  console.warn(`Invalid role provided: ${roleInput}. Defaulting to USER.`);
+  return USER_ROLES.USER;
+}
+
 export async function getUsers() {
   try {
     await dbConnect();
@@ -153,13 +188,15 @@ export async function updateUser(userId: string, userData: UpdateUserData) {
   }
 }
 
-// Helper function to format role for display
+// Helper function to format role for display - UPDATED WITH CASHIER
 export async function formatRoleForDisplay(role: UserRole): Promise<string> {
   switch (role) {
     case USER_ROLES.ADMIN:
       return "Administrator";
     case USER_ROLES.PROJECT_MANAGER:
       return "Project Manager";
+    case USER_ROLES.CASHIER: // NEW CASE
+      return "Cashier";
     case USER_ROLES.USER:
       return "User";
     default:
@@ -175,9 +212,18 @@ export async function createUser(userData: {
   contactNo?: string;
   address: string;
   password: string;
-  role?: UserRole;
+  role?: string; // Changed from UserRole to string to accept any input
 }) {
   try {
+    console.log(
+      "Received role from frontend:",
+      userData.role,
+      "Type:",
+      typeof userData.role,
+      "Valid roles:",
+      Object.values(USER_ROLES)
+    );
+
     await dbConnect();
 
     // Clean the input data
@@ -190,15 +236,20 @@ export async function createUser(userData: {
         : undefined,
       address: cleanAddress(userData.address),
       password: userData.password,
-      role: userData.role || USER_ROLES.USER,
+      // Convert role to lowercase and validate
+      role: validateAndCleanRole(userData.role),
     };
+
+    console.log("Cleaned role:", cleanedData.role);
 
     // Validate role against enum values
     const validRoles = Object.values(USER_ROLES);
-    if (!validRoles.includes(cleanedData.role as UserRole)) {
+    console.log("Available roles in system:", validRoles);
+
+    if (!validRoles.includes(cleanedData.role)) {
       return {
         success: false,
-        error: `Invalid role specified. Must be one of: ${validRoles.join(", ")}`,
+        error: `Invalid role specified. Must be one of: ${validRoles.join(", ")}. Received: ${cleanedData.role}`,
       };
     }
 
@@ -299,7 +350,7 @@ export async function createUser(userData: {
           </div>
           <div class="detail-row">
             <div class="detail-label">Account Type</div>
-            <div class="detail-value">${formatRoleForDisplay(user.role as UserRole)}</div>
+            <div class="detail-value">${await formatRoleForDisplay(user.role as UserRole)}</div>
           </div>
           <div class="detail-row">
             <div class="detail-label">Account Status</div>
@@ -401,6 +452,8 @@ export async function createUser(userData: {
     };
   } catch (error: any) {
     console.error("Error creating user:", error);
+    console.error("Error details:", error.message);
+    console.error("Error stack:", error.stack);
 
     // Handle duplicate key errors
     if (error.code === 11000) {
@@ -416,6 +469,17 @@ export async function createUser(userData: {
       if (error.keyPattern?.user_id) {
         // This should rarely happen with our generation logic, but handle it
         return { success: false, error: "User ID conflict. Please try again." };
+      }
+    }
+
+    // Handle validation errors specifically
+    if (error.name === "ValidationError") {
+      console.error("Validation error details:", error.errors);
+      if (error.errors?.role) {
+        return {
+          success: false,
+          error: `Role validation failed: ${error.errors.role.message}. Valid roles are: ${Object.values(USER_ROLES).join(", ")}`,
+        };
       }
     }
 

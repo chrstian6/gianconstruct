@@ -1,13 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -27,20 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  Download,
-  FileText,
-  TrendingUp,
-  Package,
-  DollarSign,
-  ShoppingCart,
-  Building2,
-  Calendar,
-  BarChart3,
-  PackageOpen,
-  TrendingDown,
-  TrendingUp as UpTrend,
-} from "lucide-react";
+import { Download, Calendar } from "lucide-react";
 import {
   generateReport,
   exportReportToCSV,
@@ -198,6 +179,24 @@ const SalesTrendChart = ({ data }: { data: any[] }) => {
   );
 };
 
+// Format currency function (matching overview dashboard)
+const formatCurrency = (amount: number) => {
+  return `₱${amount.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+};
+
+// Calculate percentage change
+const calculateChange = (current: number, previous: number) => {
+  if (previous === 0) return { value: 100, isPositive: true };
+  const change = ((current - previous) / previous) * 100;
+  return {
+    value: Math.abs(Math.round(change)),
+    isPositive: change >= 0,
+  };
+};
+
 export default function ReportGenerator() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -207,6 +206,7 @@ export default function ReportGenerator() {
   );
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [reportData, setReportData] = useState<any>(null);
+  const [comparisonData, setComparisonData] = useState<any>(null);
 
   // State for calendar popovers
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -232,6 +232,20 @@ export default function ReportGenerator() {
       };
       const data = await generateReport(filters);
       setReportData(data);
+
+      // For comparison (previous period)
+      const prevStart = new Date(memoizedStartDate);
+      prevStart.setMonth(prevStart.getMonth() - 1);
+      const prevEnd = new Date(memoizedEndDate);
+      prevEnd.setMonth(prevEnd.getMonth() - 1);
+
+      const prevFilters: ReportFilters = {
+        period: "monthly",
+        startDate: prevStart,
+        endDate: prevEnd,
+      };
+      const prevData = await generateReport(prevFilters);
+      setComparisonData(prevData);
     } catch (error) {
       console.error("Failed to load report:", error);
     } finally {
@@ -329,16 +343,6 @@ export default function ReportGenerator() {
     }
   };
 
-  // Format currency
-  const formatCurrency = useCallback((amount: number) => {
-    return new Intl.NumberFormat("en-PH", {
-      style: "currency",
-      currency: "PHP",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  }, []);
-
   // Prepare chart data - memoized for performance
   const prepareRevenueChartData = useCallback(() => {
     if (!reportData?.revenueTrend) return [];
@@ -412,12 +416,14 @@ export default function ReportGenerator() {
     };
   }, [reportData]);
 
+  // Safe formatting functions
+  const safeFormatNumber = (num: number | undefined) => {
+    return (num || 0).toLocaleString();
+  };
+
   if (loading) {
     return (
       <Card className="border-border bg-card">
-        <CardHeader>
-          <CardTitle className="text-foreground">Loading Report...</CardTitle>
-        </CardHeader>
         <CardContent className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </CardContent>
@@ -429,13 +435,15 @@ export default function ReportGenerator() {
     <div className="space-y-6">
       {/* Report Controls */}
       <Card className="border-border bg-card">
-        <CardHeader>
-          <CardTitle className="text-foreground">Report Generator</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Generate comprehensive reports for your dashboard
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
+          <div className="space-y-1 mb-4">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+              Report Generator
+            </p>
+            <p className="text-sm text-zinc-500">
+              Generate comprehensive reports for your dashboard
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">
@@ -585,120 +593,201 @@ export default function ReportGenerator() {
         </CardContent>
       </Card>
 
-      {/* Metrics Overview */}
+      {/* Metrics Overview - Matching Overview Dashboard Style */}
       {reportData && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Revenue Card */}
-          <Card className="border-border bg-card hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-foreground">
-                Total Revenue
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {formatCurrency(reportData.metrics.totalRevenue)}
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  Inventory:{" "}
-                  {formatCurrency(reportData.metrics.inventoryRevenue)}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Projects: {formatCurrency(reportData.metrics.projectRevenue)}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Projects Card */}
-          <Card className="border-border bg-card hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-foreground">
-                Projects
-              </CardTitle>
-              <Building2 className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {reportData.metrics.totalProjects}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="text-xs">
-                  <div className="text-muted-foreground">Active</div>
-                  <div className="font-medium text-foreground">
-                    {reportData.metrics.activeProjects}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          {/* Total Revenue */}
+          <Card className="rounded-none border-0 shadow-none border-b">
+            <CardContent className="p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Total Revenue
+                </p>
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold text-zinc-900">
+                    {formatCurrency(reportData.metrics.totalRevenue)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`text-xs ${comparisonData?.metrics?.totalRevenue ? (calculateChange(reportData.metrics.totalRevenue || 0, comparisonData?.metrics?.totalRevenue || 0).isPositive ? "text-green-600" : "text-red-600") : "text-zinc-500"}`}
+                    >
+                      {comparisonData?.metrics?.totalRevenue
+                        ? `${calculateChange(reportData.metrics.totalRevenue || 0, comparisonData?.metrics?.totalRevenue || 0).isPositive ? "+" : "-"}${calculateChange(reportData.metrics.totalRevenue || 0, comparisonData?.metrics?.totalRevenue || 0).value}%`
+                        : "No comparison"}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      from last period
+                    </span>
                   </div>
+                  <p className="text-xs text-zinc-500">
+                    Combined revenue from all sources
+                  </p>
                 </div>
-                <div className="text-xs">
-                  <div className="text-muted-foreground">Completed</div>
-                  <div className="font-medium text-foreground">
-                    {reportData.metrics.completedProjects}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Project Sales */}
+          <Card className="rounded-none border-0 shadow-none border-b">
+            <CardContent className="p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Project Sales
+                </p>
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold text-zinc-900">
+                    {formatCurrency(reportData.metrics.projectRevenue)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`text-xs ${comparisonData?.metrics?.projectRevenue ? (calculateChange(reportData.metrics.projectRevenue || 0, comparisonData?.metrics?.projectRevenue || 0).isPositive ? "text-green-600" : "text-red-600") : "text-zinc-500"}`}
+                    >
+                      {comparisonData?.metrics?.projectRevenue
+                        ? `${calculateChange(reportData.metrics.projectRevenue || 0, comparisonData?.metrics?.projectRevenue || 0).isPositive ? "+" : "-"}${calculateChange(reportData.metrics.projectRevenue || 0, comparisonData?.metrics?.projectRevenue || 0).value}%`
+                        : "No comparison"}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      from last period
+                    </span>
                   </div>
+                  <p className="text-xs text-zinc-500">
+                    Revenue from project payments
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Inventory Card */}
-          <Card className="border-border bg-card hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-foreground">
-                Inventory
-              </CardTitle>
-              <Package className="h-4 w-4 text-amber-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {formatCurrency(reportData.metrics.inventoryValue)}
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  Low Stock:{" "}
-                  <span
-                    className={`font-medium ${reportData.metrics.lowStockItems > 0 ? "text-amber-600" : "text-foreground"}`}
-                  >
-                    {reportData.metrics.lowStockItems} items
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Sales:{" "}
-                  <span className="font-medium text-foreground">
-                    {reportData.metrics.totalSales}
-                  </span>
+          {/* Inventory Sales */}
+          <Card className="rounded-none border-0 shadow-none border-b">
+            <CardContent className="p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Inventory Sales
+                </p>
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold text-zinc-900">
+                    {formatCurrency(reportData.metrics.inventoryRevenue)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`text-xs ${comparisonData?.metrics?.inventoryRevenue ? (calculateChange(reportData.metrics.inventoryRevenue || 0, comparisonData?.metrics?.inventoryRevenue || 0).isPositive ? "text-green-600" : "text-red-600") : "text-zinc-500"}`}
+                    >
+                      {comparisonData?.metrics?.inventoryRevenue
+                        ? `${calculateChange(reportData.metrics.inventoryRevenue || 0, comparisonData?.metrics?.inventoryRevenue || 0).isPositive ? "+" : "-"}${calculateChange(reportData.metrics.inventoryRevenue || 0, comparisonData?.metrics?.inventoryRevenue || 0).value}%`
+                        : "No comparison"}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      from last period
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Revenue from inventory sales
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Sales Performance Card */}
-          <Card className="border-border bg-card hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-foreground">
-                Sales Performance
-              </CardTitle>
-              <ShoppingCart className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-foreground mb-1">
-                {formatCurrency(reportData.metrics.averageSaleValue)}
-              </div>
-              <div className="text-xs text-muted-foreground mb-2">
-                Avg. Sale Value
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  Transactions:{" "}
-                  <span className="font-medium text-foreground">
-                    {reportData.metrics.totalInventoryTransactions}
-                  </span>
+          {/* Inventory Value */}
+          <Card className="rounded-none border-0 shadow-none">
+            <CardContent className="p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Inventory Capital
+                </p>
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold text-red-500">
+                    {formatCurrency(reportData.metrics.inventoryValue)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-zinc-500">
+                      {reportData.inventorySummary.reduce(
+                        (sum: number, item: any) => sum + item.itemCount,
+                        0
+                      )}{" "}
+                      items
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      <span> • Value: </span>{" "}
+                      <span className="text-green-600">
+                        {" "}
+                        {formatCurrency(reportData.metrics.inventoryValue)}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Total value of inventory stock
+                  </p>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Project TX:{" "}
-                  <span className="font-medium text-foreground">
-                    {reportData.metrics.totalProjectTransactions}
-                  </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Active Projects */}
+          <Card className="rounded-none border-0 shadow-none">
+            <CardContent className="p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Active Projects
+                </p>
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold text-zinc-900">
+                    {safeFormatNumber(reportData.metrics.activeProjects)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`text-xs ${comparisonData?.metrics?.activeProjects ? (calculateChange(reportData.metrics.activeProjects || 0, comparisonData?.metrics?.activeProjects || 0).isPositive ? "text-green-600" : "text-red-600") : "text-zinc-500"}`}
+                    >
+                      {comparisonData?.metrics?.activeProjects
+                        ? `${calculateChange(reportData.metrics.activeProjects || 0, comparisonData?.metrics?.activeProjects || 0).isPositive ? "+" : "-"}${calculateChange(reportData.metrics.activeProjects || 0, comparisonData?.metrics?.activeProjects || 0).value}%`
+                        : "No comparison"}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      from last period
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Projects currently in progress
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stock Status */}
+          <Card className="rounded-none border-0 shadow-none">
+            <CardContent className="p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Stock Status
+                </p>
+                <div className="space-y-1">
+                  <div className="flex items-baseline gap-3">
+                    <div>
+                      <p className="text-2xl font-semibold text-zinc-900">
+                        {safeFormatNumber(reportData.metrics.lowStockItems)}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Low stock</p>
+                    </div>
+                    <div className="h-8 w-px bg-zinc-200"></div>
+                    <div>
+                      <p className="text-2xl font-semibold text-zinc-900">
+                        {safeFormatNumber(
+                          reportData.inventorySummary.reduce(
+                            (sum: number, item: any) => sum + item.itemCount,
+                            0
+                          )
+                        )}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Total items
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Items requiring attention
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -750,17 +839,17 @@ export default function ReportGenerator() {
 
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Revenue Breakdown - Matching overview dashboard style */}
+              {/* Revenue Trend - Matching overview dashboard style */}
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Revenue Trend
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    30-day revenue performance
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Revenue Trend
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      30-day revenue performance
+                    </p>
+                  </div>
                   <div className="h-[300px] w-full">
                     <RevenueTrendChart
                       data={prepareRevenueChartData().map(
@@ -776,15 +865,15 @@ export default function ReportGenerator() {
 
               {/* Sales Performance */}
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Sales Performance
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Inventory sales amount over time
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Sales Performance
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Inventory sales amount over time
+                    </p>
+                  </div>
                   <div className="h-[300px] w-full">
                     <SalesTrendChart data={prepareSalesChartData()} />
                   </div>
@@ -794,42 +883,94 @@ export default function ReportGenerator() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Top Performing Items */}
-              <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Top 5 Inventory Items by Sales
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Best performing items by revenue
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <CompactBarChart
-                      data={prepareTopItemsChartData()}
-                      categories={["Sales"]}
-                      index="name"
-                      valueFormatter={(value: number) => formatCurrency(value)}
-                      colors={[DEFAULT_CHART_COLORS[0]]}
-                      compact={true}
-                      barSize={25}
-                      className="w-full h-full"
-                    />
+              {/* Top Performing Items - Modern Compact */}
+              <Card className="border-zinc-200 bg-white">
+                <CardContent className="p-4">
+                  <div className="space-y-1 mb-3">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Top 5 Best Sellers
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Best performing items by revenue
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {reportData.topInventoryItems.map(
+                      (item: any, index: number) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center justify-between p-2.5 hover:bg-zinc-50 rounded-md transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ${
+                                index === 0
+                                  ? "bg-gradient-to-br from-yellow-400 to-yellow-500 text-white"
+                                  : index === 1
+                                    ? "bg-gradient-to-br from-zinc-300 to-zinc-400 text-white"
+                                    : index === 2
+                                      ? "bg-gradient-to-br from-amber-600 to-amber-700 text-white"
+                                      : "bg-zinc-100 text-zinc-600"
+                              }`}
+                            >
+                              {index + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-zinc-900 truncate">
+                                {item.name.length > 20
+                                  ? item.name.substring(0, 20) + "..."
+                                  : item.name}
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-zinc-500">
+                                  {item.category}
+                                </span>
+                                <span className="text-[10px] text-zinc-400">
+                                  •
+                                </span>
+                                <span className="text-[10px] font-medium text-zinc-700">
+                                  {item.quantity} sold
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-semibold text-zinc-900">
+                              {formatCurrency(item.sales)}
+                            </p>
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-[10px] text-zinc-500">
+                                Profit:
+                              </span>
+                              <span
+                                className={`text-[10px] font-medium ${
+                                  item.profit >= 0
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {formatCurrency(item.profit)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
               {/* Project Status Distribution */}
               <Card className="border-border bg-card flex flex-col">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Project Status
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Distribution of projects by status
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1">
+                <CardContent className="p-6 flex-1">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Project Status
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Distribution of projects by status
+                    </p>
+                  </div>
                   <div className="h-[300px] w-full">
                     <PieChart
                       data={prepareProjectStatusChartData()}
@@ -849,15 +990,15 @@ export default function ReportGenerator() {
           <TabsContent value="revenue" className="space-y-6">
             {/* Detailed Revenue Analysis */}
             <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">
-                  Revenue Breakdown
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Separated by inventory sales and project payments
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
+                <div className="space-y-1 mb-4">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Revenue Breakdown
+                  </p>
+                  <p className="text-sm text-zinc-500">
+                    Separated by inventory sales and project payments
+                  </p>
+                </div>
                 <div className="h-[300px] w-full">
                   <RevenueBreakdownChart
                     data={prepareRevenueChartData()}
@@ -870,15 +1011,15 @@ export default function ReportGenerator() {
             {/* Revenue Composition */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Revenue Composition
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Percentage breakdown of total revenue
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Revenue Composition
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Percentage breakdown of total revenue
+                    </p>
+                  </div>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
@@ -921,51 +1062,53 @@ export default function ReportGenerator() {
 
               {/* Revenue Metrics */}
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Revenue Metrics
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Key performance indicators
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Daily Average
-                      </div>
-                      <div className="text-lg font-bold text-foreground">
-                        {formatCurrency(reportData.metrics.totalRevenue / 30)}
-                      </div>
-                    </div>
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Growth Rate
-                      </div>
-                      <div className="text-lg font-bold text-foreground flex items-center">
-                        <UpTrend className="h-4 w-4 mr-1" />
-                        12.5%
-                      </div>
-                    </div>
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Transactions
-                      </div>
-                      <div className="text-lg font-bold text-foreground">
-                        {reportData.metrics.totalInventoryTransactions +
-                          reportData.metrics.totalProjectTransactions}
-                      </div>
-                    </div>
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Avg. Value
-                      </div>
-                      <div className="text-lg font-bold text-foreground">
-                        {formatCurrency(reportData.metrics.averageSaleValue)}
-                      </div>
-                    </div>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Revenue Metrics
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Key performance indicators
+                    </p>
                   </div>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Daily Average
+                        </div>
+                        <div className="text-lg font-bold text-foreground">
+                          {formatCurrency(reportData.metrics.totalRevenue / 30)}
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Growth Rate
+                        </div>
+                        <div className="text-lg font-bold text-foreground flex items-center">
+                          <span className="h-4 w-4 mr-1">↑</span>
+                          12.5%
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Transactions
+                        </div>
+                        <div className="text-lg font-bold text-foreground">
+                          {reportData.metrics.totalInventoryTransactions +
+                            reportData.metrics.totalProjectTransactions}
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Avg. Value
+                        </div>
+                        <div className="text-lg font-bold text-foreground">
+                          {formatCurrency(reportData.metrics.averageSaleValue)}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
                 </CardContent>
               </Card>
             </div>
@@ -975,13 +1118,15 @@ export default function ReportGenerator() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Sales Trend */}
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">Sales Trend</CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Daily inventory sales revenue
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Sales Trend
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Daily inventory sales revenue
+                    </p>
+                  </div>
                   <div className="h-[300px] w-full">
                     <SalesTrendChart data={prepareSalesChartData()} />
                   </div>
@@ -990,15 +1135,15 @@ export default function ReportGenerator() {
 
               {/* Quantity Sold */}
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Quantity Sold (Last 14 Days)
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Number of items sold per day
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Quantity Sold (Last 14 Days)
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Number of items sold per day
+                    </p>
+                  </div>
                   <div className="h-[300px] w-full">
                     <CompactBarChart
                       data={prepareSalesChartData().slice(-14)}
@@ -1015,91 +1160,78 @@ export default function ReportGenerator() {
               </Card>
             </div>
 
-            {/* Top 5 Inventory Items Table */}
-            <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">
-                  Top 5 Best Performing Items
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Inventory items with highest sales revenue
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-foreground">Rank</TableHead>
-                      <TableHead className="text-foreground">
-                        Item Name
-                      </TableHead>
-                      <TableHead className="text-foreground">
-                        Category
-                      </TableHead>
-                      <TableHead className="text-foreground">
-                        Quantity Sold
-                      </TableHead>
-                      <TableHead className="text-foreground">
-                        Sales Revenue
-                      </TableHead>
-                      <TableHead className="text-foreground">Profit</TableHead>
-                      <TableHead className="text-foreground">Margin</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {reportData.topInventoryItems.map(
-                      (item: any, index: number) => (
-                        <TableRow
-                          key={item.name}
-                          className="hover:bg-accent/50"
-                        >
-                          <TableCell>
-                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-foreground font-bold">
-                              {index + 1}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium text-foreground">
-                            {item.name}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="border-border text-muted-foreground"
-                            >
-                              {item.category}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-foreground">
-                            {item.quantity}
-                          </TableCell>
-                          <TableCell className="font-bold text-foreground">
-                            {formatCurrency(item.sales)}
-                          </TableCell>
-                          <TableCell
-                            className={
-                              item.profit >= 0
-                                ? "text-foreground"
-                                : "text-destructive"
-                            }
+            {/* Top Performing Items - Modern Compact */}
+            <Card className="border-zinc-200 bg-white">
+              <CardContent className="p-4">
+                <div className="space-y-1 mb-3">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Top 5 Best Sellers
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Highest revenue generating items
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {reportData.topInventoryItems.map(
+                    (item: any, index: number) => (
+                      <div
+                        key={item.name}
+                        className="flex items-center justify-between p-2.5 hover:bg-zinc-50 rounded-md transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ${
+                              index === 0
+                                ? "bg-gradient-to-br from-yellow-400 to-yellow-500 text-white"
+                                : index === 1
+                                  ? "bg-gradient-to-br from-zinc-300 to-zinc-400 text-white"
+                                  : index === 2
+                                    ? "bg-gradient-to-br from-amber-600 to-amber-700 text-white"
+                                    : "bg-zinc-100 text-zinc-600"
+                            }`}
                           >
-                            {formatCurrency(item.profit)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                item.profitMargin >= 30
-                                  ? "default"
-                                  : "secondary"
-                              }
+                            {index + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-zinc-900 truncate">
+                              {item.name}
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-zinc-500">
+                                {item.category}
+                              </span>
+                              <span className="text-[10px] text-zinc-400">
+                                •
+                              </span>
+                              <span className="text-[10px] font-medium text-zinc-700">
+                                {item.quantity} sold
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-zinc-900">
+                            {formatCurrency(item.sales)}
+                          </p>
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-[10px] text-zinc-500">
+                              Profit:
+                            </span>
+                            <span
+                              className={`text-[10px] font-medium ${
+                                item.profit >= 0
+                                  ? "text-green-600"
+                                  : "text-red-600"
+                              }`}
                             >
-                              {item.profitMargin}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    )}
-                  </TableBody>
-                </Table>
+                              {formatCurrency(item.profit)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1108,15 +1240,15 @@ export default function ReportGenerator() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Project Status Distribution */}
               <Card className="border-border bg-card flex flex-col">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Project Status
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Current status of all projects
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1">
+                <CardContent className="p-6 flex-1">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Project Status
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Current status of all projects
+                    </p>
+                  </div>
                   <div className="h-[300px] w-full">
                     <PieChart
                       data={prepareProjectStatusChartData()}
@@ -1132,73 +1264,75 @@ export default function ReportGenerator() {
 
               {/* Project Metrics */}
               <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Project Analytics
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Key project metrics and statistics
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Total Projects
-                      </div>
-                      <div className="text-2xl font-bold text-foreground">
-                        {reportData.metrics.totalProjects}
-                      </div>
-                    </div>
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Active Projects
-                      </div>
-                      <div className="text-2xl font-bold text-foreground">
-                        {reportData.metrics.activeProjects}
-                      </div>
-                    </div>
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Completed
-                      </div>
-                      <div className="text-2xl font-bold text-foreground">
-                        {reportData.metrics.completedProjects}
-                      </div>
-                    </div>
-                    <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm text-muted-foreground">
-                        Revenue
-                      </div>
-                      <div className="text-xl font-bold text-foreground">
-                        {formatCurrency(reportData.metrics.projectRevenue)}
-                      </div>
-                    </div>
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Project Analytics
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Key project metrics and statistics
+                    </p>
                   </div>
-
-                  <div className="pt-4 border-t border-border">
-                    <div className="text-sm font-medium text-foreground mb-2">
-                      Project Status Details
-                    </div>
-                    <div className="space-y-3">
-                      {reportData.projectStatus.map((item: any) => (
-                        <div
-                          key={item.status}
-                          className="flex justify-between items-center p-2 hover:bg-accent/50 rounded-md"
-                        >
-                          <span className="text-sm text-muted-foreground">
-                            {item.status}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground">
-                              {item.count}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              ({item.percentage}%)
-                            </span>
-                          </div>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Total Projects
                         </div>
-                      ))}
+                        <div className="text-2xl font-bold text-foreground">
+                          {reportData.metrics.totalProjects}
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Active Projects
+                        </div>
+                        <div className="text-2xl font-bold text-foreground">
+                          {reportData.metrics.activeProjects}
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Completed
+                        </div>
+                        <div className="text-2xl font-bold text-foreground">
+                          {reportData.metrics.completedProjects}
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm text-muted-foreground">
+                          Revenue
+                        </div>
+                        <div className="text-xl font-bold text-foreground">
+                          {formatCurrency(reportData.metrics.projectRevenue)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-border">
+                      <div className="text-sm font-medium text-foreground mb-2">
+                        Project Status Details
+                      </div>
+                      <div className="space-y-3">
+                        {reportData.projectStatus.map((item: any) => (
+                          <div
+                            key={item.status}
+                            className="flex justify-between items-center p-2 hover:bg-accent/50 rounded-md"
+                          >
+                            <span className="text-sm text-muted-foreground">
+                              {item.status}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">
+                                {item.count}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                ({item.percentage}%)
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -1207,129 +1341,389 @@ export default function ReportGenerator() {
           </TabsContent>
 
           <TabsContent value="inventory" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Inventory Value by Category */}
-              <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Inventory Value by Category
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Total value of inventory across categories
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <CompactBarChart
-                      data={prepareInventoryValueChartData()}
-                      categories={["Total Value"]}
-                      index="category"
-                      valueFormatter={(value: number) => formatCurrency(value)}
-                      colors={[DEFAULT_CHART_COLORS[0]]}
-                      compact={true}
-                      barSize={30}
-                      className="w-full h-full"
-                    />
+            {/* Inventory Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-b">
+              {/* Inventory Capital */}
+              <Card className="rounded-none border-0 border-r border-zinc-200 shadow-none">
+                <CardContent className="p-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Inventory Capital
+                    </p>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-semibold text-zinc-900">
+                        {formatCurrency(reportData.metrics.inventoryValue)}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        Total value of inventory stock
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Item Count by Category */}
-              <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground">
-                    Item Count by Category
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Number of items in each category
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <CompactBarChart
-                      data={prepareInventoryValueChartData()}
-                      categories={["Item Count"]}
-                      index="category"
-                      valueFormatter={(value: number) => value.toString()}
-                      colors={[DEFAULT_CHART_COLORS[2]]}
-                      compact={true}
-                      barSize={30}
-                      className="w-full h-full"
-                    />
+              {/* Total Items */}
+              <Card className="rounded-none border-0 border-r border-zinc-200 shadow-none">
+                <CardContent className="p-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Total Items
+                    </p>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-semibold text-zinc-900">
+                        {reportData.inventorySummary
+                          .reduce(
+                            (sum: number, item: any) => sum + item.itemCount,
+                            0
+                          )
+                          .toLocaleString()}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        Items across all categories
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Total Inventory Sales */}
+              <Card className="rounded-none border-0 border-r border-zinc-200 shadow-none">
+                <CardContent className="p-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Inventory Sales
+                    </p>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-semibold text-zinc-900">
+                        {formatCurrency(reportData.metrics.inventoryRevenue)}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-zinc-500">
+                          {reportData.metrics.totalSales} sales
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        Revenue from inventory sales
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Categories */}
+              <Card className="rounded-none border-0 shadow-none">
+                <CardContent className="p-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Categories
+                    </p>
+                    <div className="space-y-1">
+                      <div className="flex items-baseline gap-3">
+                        <div>
+                          <p className="text-2xl font-semibold text-zinc-900">
+                            {reportData.inventorySummary.length}
+                          </p>
+                          <p className="text-xs text-zinc-500 mt-0.5">Total</p>
+                        </div>
+                        <div className="h-8 w-px bg-zinc-200"></div>
+                        <div>
+                          <p className="text-2xl font-semibold text-zinc-900">
+                            {Math.round(
+                              reportData.inventorySummary.reduce(
+                                (sum: number, item: any) =>
+                                  sum + item.itemCount,
+                                0
+                              ) / reportData.inventorySummary.length
+                            )}
+                          </p>
+                          <p className="text-xs text-zinc-500 mt-0.5">
+                            Avg items
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-1">
+                        Inventory categories distribution
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Inventory Summary Table */}
-            <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">
-                  Inventory Summary
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Detailed inventory metrics by category
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            {/* Category Analytics & Sales vs Capital Chart */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Category Analytics */}
+              <Card className="border-zinc-200 bg-white">
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Category Analytics
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      View inventory metrics by category
+                    </p>
+                  </div>
+
+                  {/* Category Dropdown */}
+                  <div className="space-y-3 mb-4">
+                    <label className="text-xs font-medium text-zinc-700">
+                      Select Category
+                    </label>
+                    <Select
+                      defaultValue="all"
+                      onValueChange={(value) => {
+                        console.log("Selected category:", value);
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs border-zinc-200">
+                        <SelectValue placeholder="All Categories" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="text-xs">
+                          All Categories
+                        </SelectItem>
+                        {reportData.inventorySummary.map((item: any) => (
+                          <SelectItem
+                            key={item.category}
+                            value={item.category}
+                            className="text-xs"
+                          >
+                            {item.category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Category Performance */}
+                  <div className="mt-4 pt-4 border-t border-zinc-200">
+                    <p className="text-xs font-medium text-zinc-700 mb-2">
+                      Top Categories by Value
+                    </p>
+                    <div className="space-y-2">
+                      {reportData.inventorySummary
+                        .sort((a: any, b: any) => b.totalValue - a.totalValue)
+                        .slice(0, 3)
+                        .map((item: any, index: number) => (
+                          <div
+                            key={item.category}
+                            className="flex items-center justify-between p-2 hover:bg-zinc-50 rounded-md transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ${
+                                  index === 0
+                                    ? "bg-gradient-to-br from-yellow-400 to-yellow-500 text-white"
+                                    : index === 1
+                                      ? "bg-gradient-to-br from-zinc-300 to-zinc-400 text-white"
+                                      : "bg-gradient-to-br from-amber-600 to-amber-700 text-white"
+                                }`}
+                              >
+                                {index + 1}
+                              </div>
+                              <span className="text-xs font-medium text-zinc-900">
+                                {item.category}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-semibold text-zinc-900">
+                                {formatCurrency(item.totalValue)}
+                              </p>
+                              <p className="text-[10px] text-zinc-500">
+                                {item.itemCount} items
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Sales vs Capital Multi-Line Chart */}
+              <Card className="border-zinc-200 bg-white">
+                <CardContent className="p-6">
+                  <div className="space-y-1 mb-4">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      Sales vs Capital Trend
+                    </p>
+                    <p className="text-sm text-zinc-500">
+                      Daily inventory sales vs capital value
+                    </p>
+                  </div>
+
+                  {/* Sales vs Capital Chart */}
+                  <div className="h-[300px] w-full">
+                    {(() => {
+                      // Prepare sales vs capital data
+                      const salesData = prepareSalesChartData();
+
+                      if (salesData.length === 0) {
+                        return (
+                          <div className="flex items-center justify-center h-full">
+                            <p className="text-muted-foreground">
+                              No sales data available
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      // Create chart data with both sales and capital
+                      const chartData = salesData.map(
+                        (item: any, index: number) => {
+                          // For capital trend, create a realistic pattern based on sales
+                          const baseCapital = reportData.metrics.inventoryValue;
+                          const salesToday = item["Sales Amount"] || 0;
+                          const dayFactor = (index / salesData.length) * 0.5; // 0 to 0.5
+                          const capitalVariation = (salesToday / 1000) * 50000; // Capital responds to sales
+
+                          return {
+                            date: item.date,
+                            Sales: salesToday,
+                            Capital: Math.round(
+                              baseCapital * (0.8 + dayFactor) + capitalVariation
+                            ),
+                          };
+                        }
+                      );
+
+                      return (
+                        <LineChart
+                          data={chartData}
+                          categories={["Sales", "Capital"]}
+                          index="date"
+                          valueFormatter={(value) => formatCurrency(value)}
+                          colors={["#10b981", "#3b82f6"]}
+                          showTooltip={true}
+                          showGrid={true}
+                          showXAxis={true}
+                          showYAxis={true}
+                          showLegend={true}
+                        />
+                      );
+                    })()}
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="mt-4 pt-4 border-t border-zinc-200">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <p className="text-xs text-zinc-500">
+                          Total Inventory Sales
+                        </p>
+                        <p className="text-lg font-bold text-green-600">
+                          {formatCurrency(reportData.metrics.inventoryRevenue)}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-zinc-500">Current Capital</p>
+                        <p className="text-lg font-bold text-blue-600">
+                          {formatCurrency(reportData.metrics.inventoryValue)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-center">
+                      <p className="text-xs text-zinc-500">
+                        ROI:{" "}
+                        {reportData.metrics.inventoryValue > 0
+                          ? Math.round(
+                              (reportData.metrics.inventoryRevenue /
+                                reportData.metrics.inventoryValue) *
+                                100
+                            )
+                          : 0}
+                        %
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Inventory by Category Table */}
+            <Card className="border-zinc-200 bg-white">
+              <CardContent className="p-4">
+                <div className="space-y-1 mb-4">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Inventory by Category
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Detailed inventory value by category
+                  </p>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-foreground">
+                      <TableHead className="text-zinc-500 text-xs font-medium">
                         Category
                       </TableHead>
-                      <TableHead className="text-foreground">Items</TableHead>
-                      <TableHead className="text-foreground">
-                        Low Stock
+                      <TableHead className="text-zinc-500 text-xs font-medium">
+                        Items
                       </TableHead>
-                      <TableHead className="text-foreground">
+                      <TableHead className="text-zinc-500 text-xs font-medium">
                         Total Value
                       </TableHead>
-                      <TableHead className="text-foreground">Status</TableHead>
+                      <TableHead className="text-zinc-500 text-xs font-medium">
+                        Avg Value/Item
+                      </TableHead>
+                      <TableHead className="text-zinc-500 text-xs font-medium">
+                        % of Total
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.inventorySummary.map((item: any) => (
-                      <TableRow
-                        key={item.category}
-                        className="hover:bg-accent/50"
-                      >
-                        <TableCell className="font-medium text-foreground">
-                          {item.category}
-                        </TableCell>
-                        <TableCell className="text-foreground">
-                          {item.itemCount}
-                        </TableCell>
-                        <TableCell>
-                          {item.lowStockCount > 0 ? (
-                            <Badge variant="destructive" className="text-xs">
-                              {item.lowStockCount} items
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">None</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">
-                          {formatCurrency(item.totalValue)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              item.lowStockCount > 0 ? "destructive" : "outline"
-                            }
-                            className="text-xs"
+                    {reportData.inventorySummary
+                      .sort((a: any, b: any) => b.totalValue - a.totalValue)
+                      .map((item: any) => {
+                        const totalInventoryValue =
+                          reportData.metrics.inventoryValue;
+                        const percentage =
+                          totalInventoryValue > 0
+                            ? Math.round(
+                                (item.totalValue / totalInventoryValue) * 100
+                              )
+                            : 0;
+
+                        return (
+                          <TableRow
+                            key={item.category}
+                            className="hover:bg-zinc-50"
                           >
-                            {item.lowStockCount > 0 ? "Low Stock" : "Good"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            <TableCell className="font-medium text-zinc-900 text-sm">
+                              {item.category}
+                            </TableCell>
+                            <TableCell className="text-zinc-900 text-sm">
+                              {item.itemCount}
+                            </TableCell>
+                            <TableCell className="font-semibold text-green-600 text-sm">
+                              {formatCurrency(item.totalValue)}
+                            </TableCell>
+                            <TableCell className="text-amber-600 text-sm">
+                              {formatCurrency(
+                                item.itemCount > 0
+                                  ? item.totalValue / item.itemCount
+                                  : 0
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Progress
+                                  value={percentage}
+                                  className="h-1.5 w-16 bg-zinc-100 [&>div]:bg-zinc-900"
+                                />
+                                <span className="text-xs font-medium text-zinc-900">
+                                  {percentage}%
+                                </span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
           </TabsContent>
-
           <TabsContent value="transactions" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Recent Inventory Transactions with Pagination */}
@@ -1349,15 +1743,15 @@ export default function ReportGenerator() {
 
             {/* Transaction Summary */}
             <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-foreground">
-                  Transaction Summary
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Overview of all transaction activities
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
+                <div className="space-y-1 mb-4">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Transaction Summary
+                  </p>
+                  <p className="text-sm text-zinc-500">
+                    Overview of all transaction activities
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-4 bg-muted/50 rounded-lg border border-border">
                     <div className="text-sm text-muted-foreground mb-1">

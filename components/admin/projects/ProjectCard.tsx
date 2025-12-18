@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -23,6 +25,8 @@ import {
   HardHat,
   CheckSquare,
   Target,
+  Wallet,
+  Loader2,
 } from "lucide-react";
 import { Project } from "@/types/project";
 import {
@@ -33,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { getProjectPaymentSummaryAction } from "@/action/project"; // Use the server action
 
 interface ProjectCardProps {
   project: Project;
@@ -45,7 +50,7 @@ interface ProjectCardProps {
   isSelectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
-  milestonesProgress?: number; // Add this prop for milestones progress
+  milestonesProgress?: number;
 }
 
 export default function ProjectCard({
@@ -59,8 +64,16 @@ export default function ProjectCard({
   isSelectMode = false,
   isSelected = false,
   onToggleSelect,
-  milestonesProgress = 0, // Default to 0 if not provided
+  milestonesProgress = 0,
 }: ProjectCardProps) {
+  const [paymentSummary, setPaymentSummary] = useState<{
+    total_cost: number;
+    total_paid: number;
+    total_pending: number;
+    remaining_balance: number;
+  } | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("en-US", {
       month: "short",
@@ -77,7 +90,6 @@ export default function ProjectCard({
     return "bg-red-500";
   };
 
-  // Status configuration with icons and colors - REMOVED "not-started"
   const statusConfig = {
     pending: {
       label: "Pending",
@@ -101,7 +113,6 @@ export default function ProjectCard({
     },
   };
 
-  // Use the location from project if available, otherwise fall back to the prop
   const displayLocation =
     project.location?.fullAddress || location || "Construction Site";
 
@@ -111,7 +122,6 @@ export default function ProjectCard({
     statusConfig[project.status as keyof typeof statusConfig]?.icon || Clock;
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // If in select mode, prevent navigation and handle selection
     if (isSelectMode) {
       e.preventDefault();
       onSelect(project);
@@ -125,6 +135,41 @@ export default function ProjectCard({
     onToggleSelect?.();
   };
 
+  // Fetch payment summary when component mounts
+  useEffect(() => {
+    const fetchPaymentSummary = async () => {
+      // Only fetch for non-pending projects
+      if (project.project_id && project.status !== "pending") {
+        setIsLoadingBalance(true);
+        try {
+          const response = await getProjectPaymentSummaryAction(
+            project.project_id
+          );
+          if (response.success && response.data) {
+            setPaymentSummary(response.data);
+          }
+        } catch (error) {
+          console.error("Failed to fetch payment summary:", error);
+        } finally {
+          setIsLoadingBalance(false);
+        }
+      }
+    };
+
+    fetchPaymentSummary();
+  }, [project.project_id, project.status]);
+
+  const getBalanceBadgeClass = (balance: number) => {
+    if (balance <= 0) return "bg-green-100 text-green-700 border-green-200";
+    if (balance > 0 && balance <= (project.totalCost || 0) * 0.3)
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    return "bg-red-100 text-red-700 border-red-200";
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `₱ ${amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   return (
     <Card
       className={cn(
@@ -135,7 +180,6 @@ export default function ProjectCard({
       )}
       onClick={handleCardClick}
     >
-      {/* Checkbox for multi-select mode */}
       {isSelectMode && (
         <div
           className="absolute top-3 left-3 z-10"
@@ -167,7 +211,6 @@ export default function ProjectCard({
               {statusConfig[project.status as keyof typeof statusConfig]?.label}
             </Badge>
 
-            {/* Dropdown Menu - Only show when not in select mode */}
             {!isSelectMode && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -215,9 +258,7 @@ export default function ProjectCard({
 
       <CardContent className="pb-2 pt-2 flex-1 px-3">
         <div className="space-y-2">
-          {/* Top row - Location and Client */}
           <div className="grid grid-cols-2 gap-2">
-            {/* Location */}
             <div className="flex items-start">
               <MapPin className="h-3 w-3 text-gray-500 mt-0.5 mr-1 flex-shrink-0" />
               <div className="min-w-0">
@@ -230,7 +271,6 @@ export default function ProjectCard({
               </div>
             </div>
 
-            {/* Client information */}
             {userName && (
               <div className="flex items-start">
                 <User className="h-3 w-3 text-gray-500 mt-0.5 mr-1 flex-shrink-0" />
@@ -246,7 +286,6 @@ export default function ProjectCard({
             )}
           </div>
 
-          {/* Middle row - Dates and Total Cost */}
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-start">
               <Calendar className="h-3 w-3 text-gray-500 mt-0.5 mr-1 flex-shrink-0" />
@@ -279,13 +318,71 @@ export default function ProjectCard({
                   Total Cost
                 </div>
                 <div className="text-xs font-bold text-gray-900">
-                  ₱ {(project.totalCost ?? 0).toLocaleString("en-PH")}
+                  {formatCurrency(project.totalCost ?? 0)}
                 </div>
               </div>
             </div>
+
+            {project.status !== "pending" && (
+              <div className="flex items-start">
+                <Wallet className="h-3 w-3 text-gray-500 mt-0.5 mr-1 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-[0.6rem] font-medium text-gray-400 mb-0.5">
+                    Balance
+                  </div>
+                  <div className="text-xs font-medium text-gray-900">
+                    {isLoadingBalance ? (
+                      <span className="text-gray-400 flex items-center">
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Loading...
+                      </span>
+                    ) : paymentSummary ? (
+                      <Badge
+                        variant="outline"
+                        className={`text-[0.6rem] px-1 py-0 ${getBalanceBadgeClass(paymentSummary.remaining_balance)}`}
+                      >
+                        {formatCurrency(paymentSummary.remaining_balance)}
+                      </Badge>
+                    ) : (
+                      <span className="text-gray-400">{formatCurrency(0)}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Milestones Progress section - Show for all project statuses except cancelled */}
+          {project.status !== "pending" && paymentSummary && (
+            <div className="mt-1 pt-1 border-t border-gray-100">
+              <div className="grid grid-cols-3 gap-1 text-[0.55rem] text-gray-500">
+                <div className="text-center">
+                  <div className="font-medium">Paid</div>
+                  <div className="text-green-600 font-bold">
+                    {formatCurrency(paymentSummary.total_paid)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="font-medium">Pending</div>
+                  <div className="text-amber-600 font-bold">
+                    {formatCurrency(paymentSummary.total_pending)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="font-medium">Balance</div>
+                  <div
+                    className={
+                      paymentSummary.remaining_balance === 0
+                        ? "text-green-600 font-bold"
+                        : "text-red-600 font-bold"
+                    }
+                  >
+                    {formatCurrency(paymentSummary.remaining_balance)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {project.status !== "cancelled" && (
             <div className="pt-1">
               <div className="flex justify-between items-center mb-1">
@@ -331,7 +428,6 @@ export default function ProjectCard({
             </div>
           )}
 
-          {/* Special message for pending projects - REMOVED "not-started" condition */}
           {project.status === "pending" && (
             <div className="border border-amber-200 rounded p-2 mt-1 bg-amber-50">
               <div className="flex items-center">
@@ -348,7 +444,6 @@ export default function ProjectCard({
             </div>
           )}
 
-          {/* Special message for cancelled projects */}
           {project.status === "cancelled" && (
             <div className="border border-red-200 rounded p-2 mt-1 bg-red-50">
               <div className="flex items-center">
@@ -368,7 +463,6 @@ export default function ProjectCard({
       </CardContent>
 
       <CardFooter className="pt-0 px-3 pb-3 flex flex-col gap-2">
-        {/* Main Action Button */}
         <Button
           variant="default"
           size="sm"

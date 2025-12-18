@@ -17,9 +17,9 @@ const nextConfig: NextConfig = {
     },
   },
   // ADD THIS SECTION TO IGNORE ESLINT ERRORS DURING BUILD
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // eslint: {
+  //   ignoreDuringBuilds: true,
+  // },
   // Optional: Also ignore TypeScript errors if you have any
   typescript: {
     ignoreBuildErrors: true,
