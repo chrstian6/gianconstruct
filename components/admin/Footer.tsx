@@ -90,8 +90,8 @@ export function Footer() {
               © {currentYear} Dashboard Admin. All rights reserved.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Built with <Heart className="inline-block h-3 w-3 text-red-500" />{" "}
-              by your team
+              Built with Nomka.
+              <Heart className="inline-block h-3 w-3 text-red-500" />{" "}
             </p>
           </div>
 
