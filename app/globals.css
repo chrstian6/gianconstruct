@@ -281,3 +281,67 @@
 .dark .react-datepicker__navigation--next {
   border-left-color: oklch(0.708 0 0);
 }
+
+/* Prevent layout shift during transitions */
+.page-transition-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Optional: Add a subtle background during transition */
+.page-transition-wrapper::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+}
+
+body.transitioning {
+  overflow: hidden;
+}
+
+/* Ensure modals and fixed elements stay above transitions */
+.modal-overlay,
+.fixed-element {
+  z-index: 10000 !important;
+}
+
+.site {
+  overflow-x: hidden;
+}
+
+.full-screen {
+  display: block;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#panels-container {
+  height: 100vh;
+  display: flex;
+  flex-wrap: nowrap;
+  padding: 0;
+  overflow: hidden;
+}
+
+.service-panel {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  text-align: left;
+  flex-shrink: 0;
+}
