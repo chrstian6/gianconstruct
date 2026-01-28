@@ -1,27 +1,27 @@
 // actions/projects.ts - COMPLETE OPTIMIZED VERSION WITH NOTIFICATION INTEGRATION
 "use server";
-import { revalidatePath } from "next/cache";
 import dbConnect from "@/lib/db";
+import { notificationService } from "@/lib/notification-services";
+import { getProjectPaymentSummary } from "@/lib/paymentUtils";
+import { verifySession } from "@/lib/redis";
+import { supabase } from "@/lib/supabase";
 import Project from "@/models/Project";
 import Timeline from "@/models/Timeline";
+import Transaction from "@/models/Transactions";
+import User from "@/models/User";
 import {
+  GalleryResponse,
+  ProjectImage,
+  ProjectPreSaveZodSchema,
   Project as ProjectType,
   ProjectZodSchema,
-  ProjectPreSaveZodSchema,
-  UpdateProjectResponse,
-  ProjectImage,
   TimelineEntry,
   TimelineResponse,
-  GalleryResponse,
+  UpdateProjectResponse,
 } from "@/types/project";
-import { z } from "zod";
-import { supabase } from "@/lib/supabase";
-import { verifySession } from "@/lib/redis";
 import mongoose from "mongoose";
-import { notificationService } from "@/lib/notification-services";
-import User from "@/models/User";
-import Transaction from "@/models/Transactions";
-import { getProjectPaymentSummary } from "@/lib/paymentUtils";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 interface ActionResponse {
   success: boolean;

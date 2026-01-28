@@ -77,6 +77,13 @@
   --sidebar-accent-foreground: oklch(0.325 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* New variables for blob/elastic reveal */
+  --reveal-start-size: 0%;
+  --reveal-end-size: 180%;
+  --reveal-center: 50% 50%;
+  --reveal-softness: 32%;
+  --reveal-edge: 48%;
 }
 
 .dark {
@@ -113,23 +120,155 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* =============================== */
+/* OPTION 2: Minimalist Custom Scrollbar - FIXED VERSION */
+/* =============================== */
+/* Apply to all scrollable elements */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+/* Specifically target body scrollbar */
+body::-webkit-scrollbar {
+  width: 8px;
+}
+body::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+/* For Firefox - apply to all elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+/* Specifically for body in Firefox */
+body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  * {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+  body {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+}
+/* Alternative: Force transparent background on ALL scrollbar tracks */
+::-webkit-scrollbar-track-piece {
+  background: transparent !important;
+}
+/* Ensure the html element also has transparent scrollbar */
+html::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+/* If still showing, try this nuclear option */
+body {
+  overflow: overlay; /* This can help with transparent scrollbar on some browsers */
+}
+/* If using Lenis, also apply to the lenis wrapper */
+.lenis::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+/* For Safari which sometimes shows default track */
+@supports (-webkit-appearance: none) and (not (overflow: overlay)) {
+  body {
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+  }
+  body::-webkit-scrollbar {
+    width: 8px;
+  }
+  body::-webkit-scrollbar-track {
+    background-color: transparent !important;
+  }
+  body::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+}
+
+/* =============================== */
+/* Existing Styles Below */
+/* =============================== */
 @layer base {
   * {
     padding: 0;
     @apply border-border outline-ring/50;
+    /* Improved font smoothing - applied globally */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   body {
     @apply bg-background text-foreground font-sans;
+    /* Extra emphasis on body for crisp text */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
-  .font-geist {
-    background-color: var(--background);
-    font-family:
-      "Poppins",
-      "sans-serif",
-      system-ui,
-      -apple-system,
-      sans-serif;
+  .font-geist,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  li,
+  a {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+}
+
+.font-geist {
+  background-color: var(--background);
+  font-family:
+    "Poppins",
+    "sans-serif",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* React DatePicker Custom Styles */
@@ -144,20 +283,19 @@
   border-radius: 0.5rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   background-color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-
 .react-datepicker__header {
   background-color: white;
   border-bottom: 1px solid #e5e7eb;
   border-radius: 0.5rem 0.5rem 0 0;
 }
-
 .react-datepicker__current-month {
   font-weight: 500;
   color: #374151;
   font-size: 0.875rem;
 }
-
 .react-datepicker__day-name {
   color: #6b7280;
   font-weight: 500;
@@ -165,7 +303,6 @@
   width: 2rem;
   line-height: 2rem;
 }
-
 .react-datepicker__day {
   color: #374151;
   font-size: 0.875rem;
@@ -174,61 +311,49 @@
   line-height: 2rem;
   margin: 0.1rem;
 }
-
 .react-datepicker__day:hover {
   background-color: #f3f4f6;
   border-radius: 0.25rem;
 }
-
 .react-datepicker__day--selected {
   background-color: #111827;
   color: white;
   border-radius: 0.25rem;
 }
-
 .react-datepicker__day--selected:hover {
   background-color: #1f2937;
 }
-
 .react-datepicker__day--disabled {
   color: #d1d5db;
   cursor: not-allowed;
 }
-
 .react-datepicker__day--keyboard-selected {
   background-color: #e5e7eb;
   color: #374151;
   border-radius: 0.25rem;
 }
-
 .react-datepicker__navigation {
   top: 8px;
   width: 2rem;
   height: 2rem;
 }
-
 .react-datepicker__navigation--previous {
   border-right-color: #6b7280;
   left: 8px;
 }
-
 .react-datepicker__navigation--next {
   border-left-color: #6b7280;
   right: 8px;
 }
-
 .react-datepicker-popper {
   z-index: 1000 !important;
 }
-
 .react-datepicker__triangle {
   display: none;
 }
-
 .react-datepicker__month {
   margin: 0.5rem;
 }
-
 .react-datepicker__week {
   display: flex;
   justify-content: space-between;
@@ -239,45 +364,35 @@
   background-color: oklch(0.205 0 0);
   border-color: oklch(1 0 0 / 10%);
 }
-
 .dark .react-datepicker__header {
   background-color: oklch(0.269 0 0);
   border-bottom-color: oklch(1 0 0 / 10%);
 }
-
 .dark .react-datepicker__current-month {
   color: oklch(0.9992 0.0039 106.47);
 }
-
 .dark .react-datepicker__day-name {
   color: oklch(0.708 0 0);
 }
-
 .dark .react-datepicker__day {
   color: oklch(0.9992 0.0039 106.47);
 }
-
 .dark .react-datepicker__day:hover {
   background-color: oklch(0.269 0 0);
 }
-
 .dark .react-datepicker__day--selected {
   background-color: oklch(0.488 0.243 264.376);
 }
-
 .dark .react-datepicker__day--disabled {
   color: oklch(0.556 0 0);
 }
-
 .dark .react-datepicker__day--keyboard-selected {
   background-color: oklch(0.269 0 0);
   color: oklch(0.9992 0.0039 106.47);
 }
-
 .dark .react-datepicker__navigation--previous {
   border-right-color: oklch(0.708 0 0);
 }
-
 .dark .react-datepicker__navigation--next {
   border-left-color: oklch(0.708 0 0);
 }
@@ -306,7 +421,6 @@ html {
   z-index: -1;
   transition: opacity 0.3s ease;
 }
-
 body.transitioning {
   overflow: hidden;
 }
@@ -344,4 +458,80 @@ body.transitioning {
   display: flex;
   text-align: left;
   flex-shrink: 0;
+}
+
+/* Improve text rendering for smooth animations */
+.text-animate {
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure horizontal scroll sections don't show vertical scrollbar */
+.horizontal-scroll-section {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Better touch scrolling on mobile */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .react-datepicker {
+    font-size: 0.875rem;
+  }
+  .react-datepicker__day {
+    width: 1.75rem;
+    height: 1.75rem;
+    line-height: 1.75rem;
+    font-size: 0.75rem;
+  }
+  .react-datepicker__day-name {
+    width: 1.75rem;
+    line-height: 1.75rem;
+    font-size: 0.7rem;
+  }
+}
+
+/* ============================================================================= */
+/* Service Card Reveal Transition - Blob / Rounded Elastic Center Reveal     */
+/* ============================================================================= */
+
+@layer utilities {
+  .service-reveal-layer {
+    transition-property: mask-size, opacity;
+    transition-timing-function: cubic-bezier(
+      0.34,
+      1.56,
+      0.64,
+      1
+    ); /* elastic bounce */
+    transition-duration: 1600ms;
+    will-change: mask-size, opacity;
+    transform: translateZ(0);
+  }
+
+  .group:hover .service-reveal-layer {
+    mask-size:
+      100% 100%,
+      var(--reveal-end-size) var(--reveal-end-size) !important;
+  }
+}
+
+/* Default reveal variables (can be overridden per card in style={}) */
+:root {
+  --reveal-start-size: 0%;
+  --reveal-end-size: 180%;
+  --reveal-center: 50% 50%;
+  --reveal-softness: 32%;
+  --reveal-edge: 48%;
+  --reveal-duration: 1600ms;
+  --reveal-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Optional: more dramatic bounce */
+.service-reveal-bouncy {
+  transition-timing-function: cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
 }

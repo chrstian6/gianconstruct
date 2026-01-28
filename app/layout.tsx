@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "sonner";
 
+// Existing fonts
 const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -11,6 +13,25 @@ const inter = Inter({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Define Graphik font - START WITH JUST ONE WEIGHT
+const graphikRegular = localFont({
+  src: "../public/fonts/Graphik-Regular-Trial.otf",
+  variable: "--font-graphik-regular",
+  weight: "400",
+});
+
+const graphikMedium = localFont({
+  src: "../public/fonts/Graphik-Medium-Trial.otf",
+  variable: "--font-graphik-medium",
+  weight: "500",
+});
+
+const graphikBold = localFont({
+  src: "../public/fonts/Graphik-Bold-Trial.otf",
+  variable: "--font-graphik-bold",
+  weight: "700",
 });
 
 export const metadata: Metadata = {
@@ -29,7 +50,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col bg-white`}
+        className={`${inter.variable} ${geistMono.variable} ${graphikRegular.variable} ${graphikMedium.variable} ${graphikBold.variable} antialiased min-h-screen flex flex-col bg-white`}
       >
         <Toaster />
         {children}
